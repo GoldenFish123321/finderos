@@ -161,9 +161,9 @@
     <div class="category-tabs">
         <a href="/admin/model" class="{{ 'active-tab' if not category else '' }}">全部</a>
         {% for c in categories %}
-        <a href="/admin/model?category={{ c }}"
-           class="{{ 'active-tab' if category == c else '' }}">
-            {{ c }}
+        <a href="/admin/model?category={{ c['value'] }}"
+           class="{{ 'active-tab' if category == c['value'] else '' }}">
+            {{ c['name'] }}
         </a>
         {% end %}
         <a href="/admin/model/add" class="btn-add">
