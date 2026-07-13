@@ -26,7 +26,7 @@ from app.controllers.admin_role import (
 from app.controllers.admin_function import (
     FunctionListHandler, FunctionFormHandler, FunctionDeleteHandler, FunctionToggleHandler,
 )
-from app.controllers.admin_menu import MenuHandler
+from app.controllers.admin_menu import MenuHandler, MenuSortHandler
 from app.controllers.admin_watch import WatchHandler, WatchSaveHandler
 from app.controllers.admin_watch_source import (
     WatchSourceListHandler, WatchSourceFormHandler,
@@ -97,6 +97,7 @@ def make_app() -> tornado.web.Application:
 
             # 管理后台 — 菜单管理
             (r"/admin/menu", MenuHandler),
+            (r"/admin/menu/sort", MenuSortHandler),
 
             # ========== Day6-2 新增模块 ==========
             # 瞭望采集

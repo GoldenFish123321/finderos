@@ -175,3 +175,27 @@ class FunctionRepository:
         """Get total function count."""
         with get_db() as conn:
             return conn.execute("SELECT COUNT(*) as cnt FROM functions").fetchone()["cnt"]
+
+    @staticmethod
+    def get_siblings(parent_id: int | None) -> list:
+        """获取同级兄弟节点，按 sort_order 排序。"""
+        with get_db() as conn:
+            if parent_id is None:
+                return conn.execute(
+                    "SELECT id, name, sort_order FROM functions "
+                    "WHERE parent_id IS NULL ORDER BY sort_order ASC, id ASC"
+                ).fetchall()
+            else:
+                return conn.execute(
+                    "SELECT id, name, sort_order FROM functions "
+                    "WHERE parent_id = ? ORDER BY sort_order ASC, id ASC",
+                    (parent_id,),
+                ).fetchall()
+
+    @staticmethod
+    def swap_sort(id_a: int, id_b: int, sort_a: int, sort_b: int):
+        """交换两个功能的 sort_order 值。"""
+        with get_db() as conn:
+            conn.execute("UPDATE functions SET sort_order = ? WHERE id = ?", (sort_b, id_a))
+            conn.execute("UPDATE functions SET sort_order = ? WHERE id = ?", (sort_a, id_b))
+            conn.commit()

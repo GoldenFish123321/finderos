@@ -3,8 +3,11 @@ admin_menu.py — 菜单管理控制器
 
 菜单管理允许预览和排序角色关联的功能形成的左侧菜单。
 数据来源：角色+功能的映射表。
+
+v0.2.12: 新增菜单排序（上移/下移）功能，借鉴冯凯乐项目的拖拽排序思路。
 """
 
+import json
 import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
 from app.models.role import RoleRepository
@@ -71,3 +74,51 @@ class MenuHandler(AdminBaseHandler):
             selected_role_id=role_id,
             menu_tree=menu_tree,
         )
+
+
+class MenuSortHandler(AdminBaseHandler):
+    """菜单排序处理器（上移/下移），借鉴冯凯乐项目的菜单排序设计"""
+
+    @tornado.web.authenticated
+    def post(self):
+        func_id = int(self.get_body_argument("id", 0))
+        direction = self.get_body_argument("direction", "up")  # "up" or "down"
+
+        if not func_id:
+            self.write({"code": 1, "msg": "参数错误"})
+            return
+
+        # 获取当前功能
+        current = FunctionRepository.get_by_id(func_id)
+        if not current:
+            self.write({"code": 1, "msg": "功能不存在"})
+            return
+
+        parent_id = current["parent_id"]
+        current_sort = current["sort_order"]
+
+        # 获取同级兄弟节点
+        siblings = FunctionRepository.get_siblings(parent_id)
+
+        if direction == "up":
+            # 找到比当前 sort_order 小的最大者
+            target = None
+            for s in siblings:
+                if s["sort_order"] < current_sort:
+                    if target is None or s["sort_order"] > target["sort_order"]:
+                        target = s
+        else:  # down
+            # 找到比当前 sort_order 大的最小者
+            target = None
+            for s in siblings:
+                if s["sort_order"] > current_sort:
+                    if target is None or s["sort_order"] < target["sort_order"]:
+                        target = s
+
+        if not target:
+            self.write({"code": 1, "msg": "已到边界，无法继续移动"})
+            return
+
+        # 交换 sort_order
+        FunctionRepository.swap_sort(func_id, target["id"], current_sort, target["sort_order"])
+        self.write({"code": 0, "msg": f"已{'上移' if direction == 'up' else '下移'}"})
