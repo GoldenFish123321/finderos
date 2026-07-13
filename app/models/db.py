@@ -145,6 +145,25 @@ def init_db():
         except Exception:
             pass  # 列已存在
 
+        # 独立数据仓库表（v0.2.13 新增，借鉴郭家琪项目的独立设计）
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS data_warehouse (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                result_id           INTEGER DEFAULT NULL,
+                title               TEXT DEFAULT '',
+                link                TEXT DEFAULT '',
+                summary             TEXT DEFAULT '',
+                source_name         TEXT DEFAULT '',
+                raw_data            TEXT DEFAULT '',
+                is_deep_collected   INTEGER DEFAULT 0,
+                deep_collected_at   TIMESTAMP DEFAULT NULL,
+                created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (result_id) REFERENCES watch_results(id) ON DELETE SET NULL
+            )
+        """)
+        # link 唯一索引用于去重
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_dw_link ON data_warehouse(link) WHERE link != ''")
+
         # 审计日志表
         conn.execute("""
             CREATE TABLE IF NOT EXISTS audit_logs (

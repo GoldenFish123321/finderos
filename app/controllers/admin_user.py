@@ -29,6 +29,7 @@ class UserListHandler(AdminBaseHandler):
             total=total,
             total_pages=total_pages,
             keyword=keyword,
+            xsrf_token=self.xsrf_token.decode() if isinstance(self.xsrf_token, bytes) else self.xsrf_token,
         )
 
 
