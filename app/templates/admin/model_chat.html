@@ -137,10 +137,24 @@ function sendMessage() {
     var lastContent = '';
     var tokenCount = 0;
     var buffer = '';
+    var pendingLine = '';
 
     xhr.onprogress = function() {
-        var newData = xhr.responseText.substring(buffer.length);
+        var newData = pendingLine + xhr.responseText.substring(buffer.length);
         buffer = xhr.responseText;
+        pendingLine = '';
+
+        // 处理跨 onprogress 事件被截断的行：保留末尾不完整行到下次
+        if (newData.length > 0 && newData.charAt(newData.length - 1) !== '\n') {
+            var lastNewline = newData.lastIndexOf('\n');
+            if (lastNewline >= 0) {
+                pendingLine = newData.substring(lastNewline + 1);
+                newData = newData.substring(0, lastNewline + 1);
+            } else {
+                pendingLine = newData;
+                return;
+            }
+        }
 
         var lines = newData.split('\n');
         var expectStats = false;
