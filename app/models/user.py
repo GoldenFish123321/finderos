@@ -131,7 +131,8 @@ class UserRepository:
                         (username.strip(), role_id, user_id),
                     )
                 conn.commit()
-            return conn.total_changes > 0
+                result = conn.total_changes > 0
+            return result
         except sqlite3.IntegrityError:
             return False
 
