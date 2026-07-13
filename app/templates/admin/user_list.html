@@ -15,6 +15,9 @@
             <button class="layui-btn layui-btn-normal layui-btn-sm" id="btn-search"><i class="layui-icon layui-icon-search"></i> 搜索</button>
             <button class="layui-btn layui-btn-primary layui-btn-sm" id="btn-reset">重置</button>
             <div style="flex:1;"></div>
+            <button class="layui-btn layui-btn-sm layui-btn-danger" id="btn-batch-delete" style="display:none;"><i class="layui-icon layui-icon-delete"></i> 批量删除</button>
+            <button class="layui-btn layui-btn-sm layui-btn-warm" id="btn-batch-enable" style="display:none;">批量启用</button>
+            <button class="layui-btn layui-btn-sm layui-btn-primary" id="btn-batch-disable" style="display:none;">批量禁用</button>
             <a href="/admin/user/add" class="layui-btn layui-btn-sm"><i class="layui-icon layui-icon-add-1"></i> 新增用户</a>
         </div>
 
@@ -30,6 +33,7 @@
             </colgroup>
             <thead>
                 <tr>
+                    <th style="width:40px;"><input type="checkbox" id="check-all" lay-skin="primary" title=""></th>
                     <th style="width:60px;">ID</th>
                     <th>用户名</th>
                     <th>角色</th>
@@ -41,6 +45,7 @@
             <tbody>
                 {% for u in users %}
                 <tr>
+                    <td><input type="checkbox" class="check-item" value="{{ u['id'] }}" data-name="{{ u['username'] }}" lay-skin="primary" title=""></td>
                     <td>{{ u["id"] }}</td>
                     <td>{{ u["username"] }}</td>
                     <td>
@@ -89,19 +94,123 @@
     </div>
 </div>
 
-<!-- 隐藏的 XSRF 表单 -->
-<form id="form-toggle" method="post" action="/admin/user/toggle" style="display:none;">
+<!-- 隐藏的批量操作表单 -->
+<form id="form-batch-delete" method="post" action="/admin/user/batch-delete" style="display:none;">
     {% module xsrf_form_html() %}
-    <input type="hidden" name="id" id="toggle-id">
+    <input type="hidden" name="ids" id="batch-delete-ids">
 </form>
-<form id="form-delete" method="post" action="/admin/user/delete" style="display:none;">
+<form id="form-batch-toggle" method="post" action="/admin/user/batch-toggle" style="display:none;">
     {% module xsrf_form_html() %}
-    <input type="hidden" name="id" id="delete-id">
+    <input type="hidden" name="ids" id="batch-toggle-ids">
+    <input type="hidden" name="enable" id="batch-toggle-enable">
 </form>
 {% end %}
 
 {% block admin_scripts %}
 <script>
+// 批量操作逻辑
+(function() {
+    var $ = layui.$;
+    var checkAll = document.getElementById('check-all');
+    var checkItems = document.querySelectorAll('.check-item');
+    var btnBatchDel = document.getElementById('btn-batch-delete');
+    var btnBatchEnable = document.getElementById('btn-batch-enable');
+    var btnBatchDisable = document.getElementById('btn-batch-disable');
+
+    function getCheckedIds() {
+        var ids = [];
+        checkItems.forEach(function(cb) { if (cb.checked) ids.push(cb.value); });
+        return ids;
+    }
+
+    function toggleBatchBtns() {
+        var count = getCheckedIds().length;
+        var show = count > 0;
+        btnBatchDel.style.display = show ? '' : 'none';
+        btnBatchEnable.style.display = show ? '' : 'none';
+        btnBatchDisable.style.display = show ? '' : 'none';
+    }
+
+    if (checkAll) {
+        checkAll.addEventListener('change', function() {
+            checkItems.forEach(function(cb) { cb.checked = checkAll.checked; });
+            toggleBatchBtns();
+        });
+    }
+
+    checkItems.forEach(function(cb) {
+        cb.addEventListener('change', toggleBatchBtns);
+    });
+
+    function doBatchAction(url, ids, extraData) {
+        var form = document.createElement('form');
+        form.method = 'post';
+        form.action = url;
+        form.style.display = 'none';
+        var xsrf = document.createElement('input');
+        xsrf.type = 'hidden';
+        xsrf.name = '_xsrf';
+        xsrf.value = '{{ xsrf_token }}';
+        form.appendChild(xsrf);
+        var idsInput = document.createElement('input');
+        idsInput.type = 'hidden';
+        idsInput.name = 'ids';
+        idsInput.value = ids.join(',');
+        form.appendChild(idsInput);
+        if (extraData) {
+            for (var k in extraData) {
+                var inp = document.createElement('input');
+                inp.type = 'hidden';
+                inp.name = k;
+                inp.value = extraData[k];
+                form.appendChild(inp);
+            }
+        }
+        document.body.appendChild(form);
+        // 使用 fetch 提交以获取 JSON 响应
+        var fd = new FormData(form);
+        fetch(url, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.code === 0) {
+                    layer.msg(data.msg, {icon: 1}, function() { location.reload(); });
+                } else {
+                    layer.msg(data.msg, {icon: 2});
+                }
+            })
+            .catch(function() { location.reload(); });
+        document.body.removeChild(form);
+    }
+
+    btnBatchDel.addEventListener('click', function() {
+        var ids = getCheckedIds();
+        if (ids.length === 0) return;
+        layer.confirm('确定删除选中的 ' + ids.length + ' 个用户吗？（admin 除外）', {
+            icon: 3, title: '批量删除'
+        }, function(idx) {
+            layer.close(idx);
+            doBatchAction('/admin/user/batch-delete', ids);
+        });
+    });
+
+    btnBatchEnable.addEventListener('click', function() {
+        var ids = getCheckedIds();
+        if (ids.length === 0) return;
+        doBatchAction('/admin/user/batch-toggle', ids, {enable: '1'});
+    });
+
+    btnBatchDisable.addEventListener('click', function() {
+        var ids = getCheckedIds();
+        if (ids.length === 0) return;
+        layer.confirm('确定禁用选中的 ' + ids.length + ' 个用户吗？（admin 除外）', {
+            icon: 3, title: '批量禁用'
+        }, function(idx) {
+            layer.close(idx);
+            doBatchAction('/admin/user/batch-toggle', ids, {enable: '0'});
+        });
+    });
+})();
+
 initListPage({
     url: '/admin/user',
     hasSearch: true,
