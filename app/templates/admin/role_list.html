@@ -1,0 +1,87 @@
+{% extends "base_layout.html" %}
+
+{% block title %}{{ title }}{% end %}
+
+{% block admin_content %}
+<div class="layui-card">
+    <div class="layui-card-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <span><i class="layui-icon layui-icon-group"></i> 角色管理</span>
+        <span id="msg-tip" style="color:#5FB878;"></span>
+    </div>
+    <div class="layui-card-body">
+        <div class="search-bar">
+            <div style="flex:1;">系统包含默认角色（系统管理员/普通用户），您可以新增自定义角色并分配功能权限。</div>
+            <a href="/admin/role/add" class="layui-btn layui-btn-sm"><i class="layui-icon layui-icon-add-1"></i> 新增角色</a>
+        </div>
+
+        <table class="layui-table" lay-skin="line">
+            <thead>
+                <tr>
+                    <th style="width:60px;">ID</th>
+                    <th>角色名称</th>
+                    <th>描述</th>
+                    <th style="width:90px;">类型</th>
+                    <th>创建时间</th>
+                    <th style="width:150px;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in roles %}
+                <tr>
+                    <td>{{ r["id"] }}</td>
+                    <td>{{ r["name"] }}</td>
+                    <td>{{ r["description"] or "—" }}</td>
+                    <td>
+                        {% if r["is_system"] %}
+                        <span class="layui-badge layui-bg-blue">系统角色</span>
+                        {% else %}
+                        <span class="layui-badge">自定义</span>
+                        {% end %}
+                    </td>
+                    <td>{{ r["created_at"] }}</td>
+                    <td>
+                        {% if r["is_system"] == 0 %}
+                        <div class="layui-btn-group">
+                            <a href="/admin/role/edit?id={{ r['id'] }}" class="layui-btn layui-btn-xs layui-btn-normal"><i class="layui-icon layui-icon-edit"></i></a>
+                            <button class="layui-btn layui-btn-xs layui-btn-danger btn-delete" data-id="{{ r['id'] }}" data-name="{{ r['name'] }}">
+                                <i class="layui-icon layui-icon-delete"></i>
+                            </button>
+                        </div>
+                        {% else %}
+                        <span class="layui-badge layui-bg-orange">内置</span>
+                        {% end %}
+                    </td>
+                </tr>
+                {% end %}
+            </tbody>
+        </table>
+        {% if not roles %}
+        <div class="empty-state">
+            <i class="layui-icon layui-icon-face-cry"></i>
+            <p style="margin-top:10px;">暂无角色数据</p>
+        </div>
+        {% end %}
+
+        <div style="text-align:center;"><div id="pagination"></div></div>
+    </div>
+</div>
+
+<form id="form-delete" method="post" action="/admin/role/delete" style="display:none;">
+    {% module xsrf_form_html() %}
+    <input type="hidden" name="id" id="delete-id">
+</form>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+initListPage({
+    url: '/admin/role',
+    hasSearch: false,
+    hasToggle: false,
+    hasDelete: true,
+    deleteConfirmText: '确定删除角色 <b>{name}</b> 吗？',
+    total: {{ total }},
+    page: {{ page }}
+});
+</script>
+{% end %}

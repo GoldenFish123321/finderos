@@ -1,0 +1,265 @@
+{% extends "base_layout.html" %}
+
+{% block admin_content %}
+<style>
+.chat-container { display: flex; height: calc(100vh - 140px); gap: 15px; }
+.chat-sidebar { width: 260px; flex-shrink: 0; }
+.chat-main { flex: 1; display: flex; flex-direction: column; }
+.chat-messages { flex: 1; overflow-y: auto; background: #f7f8fa; border-radius: 6px; padding: 15px; margin-bottom: 10px; }
+.chat-msg { margin-bottom: 12px; display: flex; gap: 8px; }
+.chat-msg.user { justify-content: flex-end; }
+.chat-msg.assistant { justify-content: flex-start; }
+.chat-msg .avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+.chat-msg.user .avatar { background: #1E9FFF; color: #fff; }
+.chat-msg.assistant .avatar { background: #5FB878; color: #fff; }
+.chat-msg .bubble { max-width: 75%; padding: 10px 14px; border-radius: 8px; font-size: 14px; line-height: 1.6; word-break: break-word; }
+.chat-msg.user .bubble { background: #1E9FFF; color: #fff; border-bottom-right-radius: 2px; }
+.chat-msg.assistant .bubble { background: #fff; color: #333; border: 1px solid #e8e8e8; border-bottom-left-radius: 2px; }
+.chat-msg .token-info { font-size: 11px; color: #999; margin-top: 2px; }
+.chat-input-area { display: flex; gap: 10px; }
+.chat-input-area textarea { flex: 1; resize: none; height: 60px; border-radius: 6px; }
+.chat-input-area button { width: 80px; flex-shrink: 0; }
+.model-select-item { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; transition: background 0.2s; }
+.model-select-item:hover { background: #f0f4ff; }
+.model-select-item.active { background: #e6f7ff; border-left: 3px solid #1E9FFF; }
+.model-select-item .m-name { font-size: 14px; font-weight: 500; }
+.model-select-item .m-info { font-size: 11px; color: #999; }
+.typing-indicator { display: none; padding: 10px 14px; }
+.typing-indicator span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #999; margin: 0 2px; animation: blink 1.4s infinite both; }
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 0%,80%,100% { opacity: 0.2; } 40% { opacity: 1; } }
+.empty-chat { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #bbb; }
+.empty-chat .layui-icon { font-size: 64px; margin-bottom: 15px; }
+</style>
+
+<div class="chat-container">
+    <!-- 模型选择侧边栏 -->
+    <div class="chat-sidebar">
+        <div class="layui-card" style="height:100%;">
+            <div class="layui-card-header"><i class="layui-icon layui-icon-util"></i> 选择模型</div>
+            <div class="layui-card-body" style="padding:0;overflow-y:auto;">
+                {% for m in models %}
+                {% if m['is_enabled'] == 1 %}
+                <div class="model-select-item {% if selected and selected['id'] == m['id'] %}active{% end %}"
+                     data-mid="{{ m['id'] }}" onclick="selectModel({{ m['id'] }}, {% raw json_encode(m['name']) %})">
+                    <div class="m-name">
+                        {% if m['is_default'] == 1 %}⭐{% end %} {{ m['name'] }}
+                    </div>
+                    <div class="m-info">{{ m['provider'] }} · {{ m['model_name'] }} · {{ m['category'] }}</div>
+                </div>
+                {% end %}
+                {% end %}
+                {% if not models or not any(m['is_enabled'] == 1 for m in models) %}
+                <div class="empty-state">
+                    <p style="font-size:12px;">暂无可用模型</p>
+                    <a href="/admin/model/add" class="layui-btn layui-btn-xs">添加模型</a>
+                </div>
+                {% end %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 对话主区域 -->
+    <div class="chat-main">
+        <div class="layui-card" style="flex:1;display:flex;flex-direction:column;">
+            <div class="layui-card-header">
+                <span id="current-model-name">
+                    {% if selected %}{{ selected['name'] }}{% else %}请选择模型{% end %}
+                </span>
+                <span id="token-stats" style="float:right;font-size:12px;color:#999;"></span>
+            </div>
+            <div class="layui-card-body" style="flex:1;display:flex;flex-direction:column;padding:15px;">
+                <div class="chat-messages" id="chat-messages">
+                    {% if not selected %}
+                    <div class="empty-chat">
+                        <i class="layui-icon layui-icon-dialogue"></i>
+                        <p>请在左侧选择一个模型开始对话</p>
+                    </div>
+                    {% end %}
+                </div>
+                <div class="chat-input-area">
+                    <textarea id="chat-input" class="layui-textarea" placeholder="输入消息，按 Enter 发送..."
+                              {% if not selected %}disabled{% end %}
+                              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
+                    <button class="layui-btn layui-btn-normal" id="btn-send"
+                            {% if not selected %}disabled{% end %}
+                            onclick="sendMessage()">
+                        <i class="layui-icon layui-icon-send"></i> 发送
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+var currentModelId = {{ selected['id'] if selected else 0 }};
+var currentModelName = {% raw json_encode(selected['name']) if selected else "''" %};
+var xsrf = '{% raw xsrf_token %}';
+
+function selectModel(mid, name) {
+    location.href = '/admin/model/chat?model_id=' + mid;
+}
+
+function sendMessage() {
+    var input = document.getElementById('chat-input');
+    var msg = input.value.trim();
+    if (!msg || !currentModelId) return;
+
+    // 添加用户消息
+    var container = document.getElementById('chat-messages');
+    // 清除空状态
+    var emptyEl = container.querySelector('.empty-chat');
+    if (emptyEl) emptyEl.remove();
+
+    container.insertAdjacentHTML('beforeend', '<div class="chat-msg user"><div class="bubble">' + escapeHtml(msg) + '</div><div class="avatar">👤</div></div>');
+    input.value = '';
+    input.disabled = true;
+    document.getElementById('btn-send').disabled = true;
+
+    // 添加加载状态
+    var loadingDiv = document.createElement('div');
+    loadingDiv.className = 'chat-msg assistant';
+    loadingDiv.innerHTML = '<div class="avatar">🤖</div><div class="bubble"><div class="typing-indicator" style="display:block;"><span></span><span></span><span></span></div></div>';
+    container.appendChild(loadingDiv);
+    container.scrollTop = container.scrollHeight;
+
+    // 发送 SSE 请求
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/admin/model/chat/stream', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+
+    var lastContent = '';
+    var tokenCount = 0;
+    var buffer = '';
+
+    xhr.onprogress = function() {
+        var newData = xhr.responseText.substring(buffer.length);
+        buffer = xhr.responseText;
+
+        var lines = newData.split('\n');
+        var expectStats = false;
+        var isDone = false;
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i].trim();
+            if (line.startsWith('event: stats')) {
+                expectStats = true;
+                continue;
+            }
+            if (line.startsWith('data: ')) {
+                var dataStr = line.substring(6);
+                if (expectStats) {
+                    expectStats = false;
+                    try {
+                        var stats = JSON.parse(dataStr);
+                        tokenCount = stats.tokens || 0;
+                        document.getElementById('token-stats').innerText = 'Tokens: ' + tokenCount;
+                    } catch(e) {}
+                    continue;
+                }
+                if (dataStr === '[DONE]') {
+                    isDone = true;
+                    continue;
+                }
+                try {
+                    var chunk = JSON.parse(dataStr);
+                    if (chunk.error) {
+                        loadingDiv.querySelector('.bubble').innerHTML = '<span style="color:#FF5722;">❌ ' + chunk.error + '</span>';
+                        input.disabled = false;
+                        document.getElementById('btn-send').disabled = false;
+                        return;
+                    }
+                    lastContent += (chunk.content || '');
+                    loadingDiv.querySelector('.bubble').innerHTML = marked.parse(lastContent) || lastContent || '<div class="typing-indicator" style="display:block;"><span></span><span></span><span></span></div>';
+                } catch(e) {}
+            }
+        }
+        if (isDone) {
+            // 最终渲染
+            loadingDiv.querySelector('.bubble').innerHTML = marked.parse(lastContent) || lastContent;
+            input.disabled = false;
+            document.getElementById('btn-send').disabled = false;
+        }
+        container.scrollTop = container.scrollHeight;
+    };
+
+    xhr.onloadend = function() {
+        input.disabled = false;
+        document.getElementById('btn-send').disabled = false;
+    };
+
+    xhr.send('model_id=' + currentModelId + '&message=' + encodeURIComponent(msg) + '&_xsrf=' + xsrf);
+}
+
+function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Markdown 解析器 — 支持代码块/标题/列表/链接/表格/粗斜体/行内代码
+var marked = {
+    parse: function(text) {
+        if (!text) return '';
+        var html = text;
+        // 0. 转义 HTML
+        html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        // 1. 代码块（```...```），用占位符保护
+        var codeBlocks = [];
+        html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, function(m, lang, code) {
+            var idx = codeBlocks.length;
+            codeBlocks.push('<pre style="background:#1e1e2e;color:#cdd6f4;padding:12px;border-radius:6px;overflow-x:auto;font-size:13px;line-height:1.5;"><code>' + code.trim() + '</code></pre>');
+            return '%%CODEBLOCK_' + idx + '%%';
+        });
+        // 2. 表格
+        html = html.replace(/^\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/gm, function(m, header, body) {
+            var hcols = header.split('|').map(function(c){return '<th style="border:1px solid #ddd;padding:6px 12px;text-align:left;">'+c.trim()+'</th>';}).join('');
+            var thead = '<thead><tr>'+hcols+'</tr></thead>';
+            var rows = body.trim().split('\n').map(function(row){
+                var cols = row.split('|').filter(function(c){return c.trim();}).map(function(c){
+                    return '<td style="border:1px solid #ddd;padding:6px 12px;">'+c.trim()+'</td>';
+                }).join('');
+                return '<tr>'+cols+'</tr>';
+            }).join('');
+            return '<table style="border-collapse:collapse;margin:8px 0;width:100%;"><tbody>' + thead + rows + '</tbody></table>';
+        });
+        // 3. 标题
+        html = html.replace(/^#{6}\s+(.+)$/gm, '<h6>$1</h6>');
+        html = html.replace(/^#{5}\s+(.+)$/gm, '<h5>$1</h5>');
+        html = html.replace(/^#{4}\s+(.+)$/gm, '<h4>$1</h4>');
+        html = html.replace(/^#{3}\s+(.+)$/gm, '<h3>$1</h3>');
+        html = html.replace(/^#{2}\s+(.+)$/gm, '<h2>$1</h2>');
+        html = html.replace(/^#{1}\s+(.+)$/gm, '<h1>$1</h1>');
+        // 4. 无序列表
+        html = html.replace(/^[\*\-]\s+(.+)$/gm, '<li style="margin-left:20px;">$1</li>');
+        // 5. 有序列表
+        html = html.replace(/^\d+\.\s+(.+)$/gm, '<li style="margin-left:20px;">$1</li>');
+        // 6. 水平线
+        html = html.replace(/^(---|\*\*\*|___)$/gm, '<hr style="border:none;border-top:1px solid #ddd;margin:12px 0;">');
+        // 7. 粗体 + 斜体
+        html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        // 8. 行内代码
+        html = html.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.06);padding:2px 5px;border-radius:3px;font-family:monospace;font-size:13px;">$1</code>');
+        // 9. 链接 [text](url)
+        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" style="color:#1E9FFF;">$1</a>');
+        // 10. 图片 ![alt](url)
+        html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;border-radius:4px;">');
+        // 11. 引用
+        html = html.replace(/^&gt;\s?(.+)$/gm, '<blockquote style="border-left:3px solid #1E9FFF;padding:4px 12px;margin:8px 0;color:#666;background:rgba(30,159,255,0.05);">$1</blockquote>');
+        // 12. 换行
+        html = html.replace(/\n\n/g, '<br><br>');
+        html = html.replace(/\n/g, '<br>');
+        // 13. 恢复代码块
+        html = html.replace(/%%CODEBLOCK_(\d+)%%/g, function(m, idx) {
+            return codeBlocks[parseInt(idx)];
+        });
+        return html;
+    }
+};
+</script>
+{% end %}

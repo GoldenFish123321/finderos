@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% end %}
+
+{% block content %}
+<style>
+    body {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 0;
+    }
+    .login-container {
+        width: 400px;
+        padding: 40px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+    .login-container h2 {
+        text-align: center;
+        margin-bottom: 30px;
+        color: #333;
+        font-size: 24px;
+    }
+    .login-container .layui-form-item {
+        margin-bottom: 20px;
+    }
+    .login-container .layui-btn-fluid {
+        width: 100%;
+    }
+    .login-footer {
+        text-align: center;
+        margin-top: 20px;
+        color: #999;
+        font-size: 12px;
+    }
+    .error-msg {
+        background: #fff5f5;
+        border: 1px solid #ffccc7;
+        color: #cf1322;
+        padding: 10px 15px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+        font-size: 14px;
+        text-align: center;
+    }
+</style>
+
+<div class="login-container">
+    <h2>{{ title }}</h2>
+
+    {% if error %}
+    <div class="error-msg">{{ error }}</div>
+    {% end %}
+
+    <form class="layui-form" method="post" action="/" id="login-form">
+        {% module xsrf_form_html() %}
+        <div class="layui-form-item">
+            <input type="text" name="username" lay-verify="required" placeholder="请输入用户名"
+                   autocomplete="off" class="layui-input" required>
+        </div>
+        <div class="layui-form-item">
+            <input type="password" name="password" lay-verify="required" placeholder="请输入密码"
+                   autocomplete="off" class="layui-input" id="password-input" required>
+        </div>
+        <div class="layui-form-item">
+            <button type="submit" class="layui-btn layui-btn-fluid layui-btn-normal" lay-submit lay-filter="login">
+                登 录
+            </button>
+        </div>
+    </form>
+
+    <div class="login-footer">
+        <p>瞭望与问数系统 v0.2 · DataFinderAgentOS</p>
+    </div>
+</div>
+{% end %}
+

@@ -1,0 +1,91 @@
+{% extends "base_layout.html" %}
+
+{% block title %}{{ title }}{% end %}
+
+{% block admin_content %}
+<div class="layui-card">
+    <div class="layui-card-header">{{ "编辑角色" if role else "新增角色" }}</div>
+    <div class="layui-card-body">
+        <form class="layui-form" method="post" action="/admin/role/edit" id="role-form">
+            {% module xsrf_form_html() %}
+            {% if role %}
+            <input type="hidden" name="id" value="{{ role['id'] }}">
+            {% end %}
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">角色名称</label>
+                <div class="layui-input-block" style="max-width:400px;">
+                    <input type="text" name="name" value="{{ role['name'] if role else '' }}" 
+                           required lay-verify="required" placeholder="请输入角色名称" class="layui-input">
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">描述</label>
+                <div class="layui-input-block" style="max-width:400px;">
+                    <input type="text" name="description" value="{{ role['description'] if role else '' }}" 
+                           placeholder="角色描述" class="layui-input">
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">功能权限</label>
+                <div class="layui-input-block">
+                    <div id="func-tree" class="layui-tree" style="max-width:500px;border:1px solid #e6e6e6;padding:10px;border-radius:4px;"></div>
+                    <div id="selected-ids" style="display:none;"></div>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <div class="layui-input-block">
+                    <button type="submit" class="layui-btn" lay-submit lay-filter="save">保存</button>
+                    <a href="/admin/role" class="layui-btn layui-btn-primary">返回</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+var funcTreeData = {% raw json_encode(func_tree) %};
+
+layui.use(['tree', 'form'], function(){
+    var tree = layui.tree;
+    var form = layui.form;
+    var $ = layui.$;
+
+    var treeInst = tree.render({
+        elem: '#func-tree',
+        data: funcTreeData,
+        showCheckbox: true,
+        id: 'funcTree',
+        oncheck: function(obj){
+            // 父节点选中/取消时联动子节点
+        }
+    });
+
+    // 提交前收集选中的功能 ID
+    $('#role-form').on('submit', function(){
+        var checkedData = tree.getChecked('funcTree');
+        var ids = [];
+        function collect(arr){
+            arr.forEach(function(node){
+                ids.push(node.id);
+                if(node.children){
+                    collect(node.children);
+                }
+            });
+        }
+        collect(checkedData);
+
+        // 移除旧的隐藏 input，添加新的
+        $('#role-form input[name="function_ids"]').remove();
+        ids.forEach(function(id){
+            $('#role-form').append('<input type="hidden" name="function_ids" value="' + id + '">');
+        });
+    });
+});
+</script>
+{% end %}

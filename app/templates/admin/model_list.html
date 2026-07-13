@@ -1,0 +1,282 @@
+{% extends "base_layout.html" %}
+
+{% block admin_content %}
+<style>
+/* ===== 模型引擎 — 沉浸式橱窗设计 ===== */
+.model-page {
+    background: linear-gradient(135deg, #0f0c29 0%, #1a1a3e 40%, #24243e 100%);
+    border-radius: 12px;
+    padding: 20px;
+    min-height: calc(100vh - 140px);
+    color: #e0e0e0;
+}
+
+/* 头部统计 */
+.model-stats {
+    display: flex; gap: 24px; margin-bottom: 20px;
+    font-size: 14px; color: #b0b0d0;
+}
+.model-stats b { font-size: 20px; margin: 0 4px; }
+.model-stats .stat-total b { color: #5ea3ff; }
+.model-stats .stat-enabled b { color: #5FB878; }
+.model-stats .stat-default b { color: #FFB800; }
+
+/* 分类标签 — 沉浸式风格 */
+.category-tabs {
+    display: flex; gap: 8px; align-items: center;
+    margin-bottom: 24px; flex-wrap: wrap;
+}
+.category-tabs a {
+    display: inline-block; padding: 6px 16px;
+    border-radius: 20px; font-size: 13px; color: #a0a0c0;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    text-decoration: none; transition: all 0.3s;
+}
+.category-tabs a:hover {
+    background: rgba(94, 163, 255, 0.15); color: #5ea3ff;
+    border-color: rgba(94, 163, 255, 0.3);
+}
+.category-tabs a.active-tab {
+    background: linear-gradient(135deg, rgba(94,163,255,0.3), rgba(95,184,120,0.2));
+    color: #fff; border-color: rgba(94,163,255,0.5);
+    box-shadow: 0 0 15px rgba(94,163,255,0.2);
+}
+.category-tabs .btn-add {
+    margin-left: auto;
+    background: linear-gradient(135deg, rgba(255,152,0,0.3), rgba(255,87,34,0.2));
+    color: #ffb74d; border-color: rgba(255,152,0,0.4);
+}
+
+/* 模型卡片网格 — 一行两列 */
+.model-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;
+}
+
+/* 模型卡片 — 橱窗式/沉浸式 */
+.model-card {
+    position: relative;
+    background: linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 20px;
+    backdrop-filter: blur(10px);
+    transition: all 0.35s ease;
+    overflow: hidden;
+}
+.model-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(94,163,255,0.5), transparent);
+    opacity: 0; transition: opacity 0.3s;
+}
+.model-card:hover {
+    border-color: rgba(94,163,255,0.3);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 60px rgba(94,163,255,0.08);
+    transform: translateY(-2px);
+}
+.model-card:hover::before { opacity: 1; }
+.model-card.default-card {
+    border-color: rgba(94,163,255,0.4);
+    box-shadow: 0 0 30px rgba(94,163,255,0.1);
+}
+
+.model-card .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px;
+}
+.model-card .model-name {
+    font-size: 17px; font-weight: 700; color: #e8e8f0;
+}
+.model-card .model-provider {
+    font-size: 11px; color: #888; margin-left: 8px;
+    padding: 2px 8px; background: rgba(255,255,255,0.06);
+    border-radius: 10px;
+}
+.model-card .default-badge {
+    font-size: 11px; padding: 2px 10px; border-radius: 10px;
+    background: linear-gradient(135deg, #5ea3ff, #3d7dd8);
+    color: #fff;
+}
+
+.model-card .card-badges { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.model-card .card-badges .badge-item {
+    font-size: 11px; padding: 2px 10px; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.12);
+}
+.badge-enabled { background: rgba(95,184,120,0.15); color: #5FB878; border-color: rgba(95,184,120,0.3) !important; }
+.badge-disabled { background: rgba(255,87,34,0.1); color: #FF5722; border-color: rgba(255,87,34,0.2) !important; }
+.badge-category { background: rgba(0,192,255,0.1); color: #00c0ff; }
+.badge-model { background: rgba(255,255,255,0.05); color: #aaa; }
+
+.model-card .card-params {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 12px;
+    font-size: 12px; color: #999; margin-bottom: 12px;
+}
+.model-card .card-params span { white-space: nowrap; }
+
+.model-card .card-actions {
+    display: flex; gap: 6px; flex-wrap: wrap; padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+}
+.model-card .card-actions .layui-btn-xs {
+    height: 26px; line-height: 26px; padding: 0 10px;
+    font-size: 12px; border-radius: 6px;
+}
+.model-card .card-actions .btn-test {
+    background: linear-gradient(135deg, #5FB878, #45a063) !important;
+    color: #fff !important; border: none !important;
+}
+.model-card .card-actions .btn-edit {
+    background: rgba(94,163,255,0.2) !important; color: #5ea3ff !important;
+    border: 1px solid rgba(94,163,255,0.3) !important;
+}
+.model-card .card-actions .btn-default {
+    background: rgba(255,184,0,0.15) !important; color: #FFB800 !important;
+    border: 1px solid rgba(255,184,0,0.3) !important;
+}
+
+/* 消息提示 */
+.msg-tip { color: #5FB878; font-size: 13px; }
+
+/* 空状态 */
+.model-empty {
+    grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: #666;
+}
+.model-empty .layui-icon { font-size: 64px; opacity: 0.3; }
+.model-empty p { margin-top: 12px; font-size: 15px; }
+
+/* 分页 */
+.model-pagination-wrap { text-align: center; margin-top: 20px; }
+</style>
+
+<div class="model-page">
+    <!-- 统计 -->
+    <div class="model-stats">
+        <span class="stat-total">总数：<b>{{ stats['total'] }}</b></span>
+        <span class="stat-enabled">已启用：<b>{{ stats['enabled'] }}</b></span>
+        <span class="stat-default">默认模型：<b>{{ '⭐' if stats['has_default'] > 0 else '—' }}</b></span>
+    </div>
+
+    <!-- 分类标签 -->
+    <div class="category-tabs">
+        <a href="/admin/model" class="{{ 'active-tab' if not category else '' }}">全部</a>
+        {% for c in categories %}
+        <a href="/admin/model?category={{ c }}"
+           class="{{ 'active-tab' if category == c else '' }}">
+            {{ c }}
+        </a>
+        {% end %}
+        <a href="/admin/model/add" class="btn-add">
+            <i class="layui-icon layui-icon-add-1"></i> 新增模型
+        </a>
+    </div>
+
+    <span class="msg-tip">{{ handler.get_query_argument('msg', '') }}</span>
+
+    <!-- 模型卡片列表 -->
+    <div class="model-grid">
+        {% if models %}
+        {% for m in models %}
+        <div class="model-card {{ 'default-card' if m['is_default'] == 1 else '' }}">
+            <!-- 卡片头部 -->
+            <div class="card-header">
+                <div>
+                    <span class="model-name">{{ m['name'] }}</span>
+                    <span class="model-provider">{{ m['provider'] }}</span>
+                </div>
+                {% if m['is_default'] == 1 %}
+                <span class="default-badge">⭐ 默认</span>
+                {% end %}
+            </div>
+
+            <!-- 状态标签 -->
+            <div class="card-badges">
+                <span class="badge-item {{ 'badge-enabled' if m['is_enabled'] == 1 else 'badge-disabled' }}">
+                    {{ '已启用' if m['is_enabled'] == 1 else '已禁用' }}
+                </span>
+                <span class="badge-item badge-category">{{ m['category'] }}</span>
+                {% if m['model_name'] %}
+                <span class="badge-item badge-model">{{ m['model_name'] }}</span>
+                {% end %}
+            </div>
+
+            <!-- 参数展示 -->
+            <div class="card-params">
+                <span>🌡 Temp: {{ m['temperature'] }}</span>
+                <span>📊 TopP: {{ m['top_p'] }}</span>
+                <span>📐 MaxT: {{ m['max_tokens'] }}</span>
+                <span>📋 Context: {{ m['context_size'] }}</span>
+                <span>🔝 TopK: {{ m['top_k'] }}</span>
+                <span>💬 流式</span>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="card-actions">
+                <a href="/admin/model/edit?id={{ m['id'] }}" class="layui-btn layui-btn-xs btn-edit">
+                    <i class="layui-icon layui-icon-edit"></i> 编辑
+                </a>
+                <a href="/admin/model/chat?model_id={{ m['id'] }}" class="layui-btn layui-btn-xs btn-test">
+                    <i class="layui-icon layui-icon-dialogue"></i> 测试对话
+                </a>
+                {% if m['is_default'] == 0 %}
+                <form action="/admin/model/default" method="post" style="display:inline;">
+                    {% module xsrf_form_html() %}
+                    <input type="hidden" name="id" value="{{ m['id'] }}">
+                    <button type="submit" class="layui-btn layui-btn-xs btn-default">默认</button>
+                </form>
+                {% end %}
+                <form action="/admin/model/toggle" method="post" style="display:inline;">
+                    {% module xsrf_form_html() %}
+                    <input type="hidden" name="id" value="{{ m['id'] }}">
+                    <button type="submit" class="layui-btn layui-btn-xs badge-disabled" style="background:rgba(255,255,255,0.05)!important;color:#999!important;border:1px solid rgba(255,255,255,0.1)!important;">
+                        {{ '禁用' if m['is_enabled'] == 1 else '启用' }}
+                    </button>
+                </form>
+                <form action="/admin/model/delete" method="post" style="display:inline;">
+                    {% module xsrf_form_html() %}
+                    <input type="hidden" name="id" value="{{ m['id'] }}">
+                    <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger"
+                            onclick="return confirm('确定删除模型「{{ m['name'] }}」吗？')">
+                        <i class="layui-icon layui-icon-delete"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% end %}
+        {% else %}
+        <div class="model-empty">
+            <i class="layui-icon layui-icon-face-surprised"></i>
+            <p>暂无模型配置</p>
+            <a href="/admin/model/add" class="layui-btn layui-btn-normal" style="margin-top:12px;">添加第一个模型</a>
+        </div>
+        {% end %}
+    </div>
+
+    {% if total_pages > 1 %}
+    <div class="model-pagination-wrap"><div id="model-pagination"></div></div>
+    {% end %}
+</div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+layui.use(['laypage', 'jquery'], function(){
+    var laypage = layui.laypage, $ = layui.$;
+    {% if total_pages > 1 %}
+    laypage.render({
+        elem: 'model-pagination', count: {{ total }}, limit: 6, curr: {{ page }},
+        layout: ['prev', 'page', 'next', 'count'],
+        jump: function(obj, first){
+            if (!first) {
+                var url = '/admin/model?page=' + obj.curr;
+                {% if category %}
+                url += '&category={{ category }}';
+                {% end %}
+                location.href = url;
+            }
+        }
+    });
+    {% end %}
+});
+</script>
+{% end %}

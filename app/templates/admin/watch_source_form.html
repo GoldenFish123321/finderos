@@ -1,0 +1,73 @@
+{% extends "base_layout.html" %}
+
+{% block admin_content %}
+<div class="layui-card">
+    <div class="layui-card-header">
+        <i class="layui-icon layui-icon-read"></i> {{ '编辑瞭望源' if source else '新增瞭望源' }}
+    </div>
+    <div class="layui-card-body">
+        <form class="layui-form" action="/admin/watch/source/{{ 'edit' if source else 'add' }}" method="post"
+              style="max-width:700px;">
+            {% module xsrf_form_html() %}
+            {% if source %}
+            <input type="hidden" name="id" value="{{ source['id'] }}">
+            {% end %}
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">名称</label>
+                <div class="layui-input-block">
+                    <input type="text" name="name" class="layui-input" required
+                           value="{{ source['name'] if source else '' }}" placeholder="瞭望源名称">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">描述</label>
+                <div class="layui-input-block">
+                    <input type="text" name="description" class="layui-input"
+                           value="{{ source['description'] if source else '' }}" placeholder="瞭望源描述">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">URL 模板</label>
+                <div class="layui-input-block">
+                    <input type="text" name="url_template" class="layui-input" required
+                           value="{{ source['url_template'] if source else '' }}"
+                           placeholder="https://www.example.com/s?word={keyword}&pn={page}">
+                    <div class="layui-form-mid layui-word-aux">
+                        占位符：<code>{keyword}</code> = 关键词, <code>{page}</code> = 分页步长
+                    </div>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">请求头 (JSON)</label>
+                <div class="layui-input-block">
+                    <textarea name="request_headers" class="layui-textarea" rows="8"
+                              placeholder='{"Accept": "...", "User-Agent": "..."}'>{{ source['request_headers'] if source else '{}' }}</textarea>
+                    <div class="layui-form-mid layui-word-aux">JSON 格式的 HTTP 请求头（Cookie、UA等）</div>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">排序</label>
+                <div class="layui-input-block">
+                    <input type="number" name="sort_order" class="layui-input" style="width:100px;"
+                           value="{{ source['sort_order'] if source else '0' }}">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <div class="layui-input-block">
+                    <button type="submit" class="layui-btn layui-btn-normal">
+                        <i class="layui-icon layui-icon-ok"></i> 保存
+                    </button>
+                    <a href="/admin/watch/source" class="layui-btn layui-btn-primary">返回</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+layui.use('form', function(){});
+</script>
+{% end %}

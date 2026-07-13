@@ -1,0 +1,115 @@
+{% extends "base_layout.html" %}
+
+{% block title %}{{ title }}{% end %}
+
+{% block admin_content %}
+<div class="layui-card">
+    <div class="layui-card-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <span><i class="layui-icon layui-icon-user"></i> 用户管理</span>
+        <span id="msg-tip" style="color:#5FB878;"></span>
+    </div>
+    <div class="layui-card-body">
+        <!-- 搜索区 -->
+        <div class="search-bar">
+            <input type="text" id="search-keyword" value="{{ keyword }}" placeholder="搜索用户名" class="layui-input">
+            <button class="layui-btn layui-btn-normal layui-btn-sm" id="btn-search"><i class="layui-icon layui-icon-search"></i> 搜索</button>
+            <button class="layui-btn layui-btn-primary layui-btn-sm" id="btn-reset">重置</button>
+            <div style="flex:1;"></div>
+            <a href="/admin/user/add" class="layui-btn layui-btn-sm"><i class="layui-icon layui-icon-add-1"></i> 新增用户</a>
+        </div>
+
+        <!-- 列表区 -->
+        <table class="layui-table" lay-skin="line">
+            <colgroup>
+                <col style="width:50px;">
+                <col style="width:130px;">
+                <col style="width:100px;">
+                <col style="width:70px;">
+                <col>
+                <col style="width:140px;">
+            </colgroup>
+            <thead>
+                <tr>
+                    <th style="width:60px;">ID</th>
+                    <th>用户名</th>
+                    <th>角色</th>
+                    <th style="width:80px;">状态</th>
+                    <th>创建时间</th>
+                    <th style="width:200px;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td>{{ u["id"] }}</td>
+                    <td>{{ u["username"] }}</td>
+                    <td>
+                        {% if u["role_name"] %}
+                        <span class="layui-badge layui-bg-blue">{{ u["role_name"] }}</span>
+                        {% else %}
+                        <span class="layui-badge">未分配</span>
+                        {% end %}
+                    </td>
+                    <td>
+                        {% if u["is_enabled"] %}
+                        <span class="layui-badge layui-bg-green">启用</span>
+                        {% else %}
+                        <span class="layui-badge">禁用</span>
+                        {% end %}
+                    </td>
+                    <td>{{ u["created_at"] }}</td>
+                    <td>
+                        <div class="layui-btn-group">
+                            <a href="/admin/user/edit?id={{ u['id'] }}" class="layui-btn layui-btn-xs layui-btn-normal"><i class="layui-icon layui-icon-edit"></i></a>
+                            {% if u["username"] != "admin" %}
+                            <button class="layui-btn layui-btn-xs {% if u['is_enabled'] %}layui-btn-warm{% else %}layui-btn-normal{% end %} btn-toggle" data-id="{{ u['id'] }}" title="{{ '禁用' if u['is_enabled'] else '启用' }}">
+                                <i class="layui-icon {% if u['is_enabled'] %}layui-icon-pause{% else %}layui-icon-play{% end %}"></i>
+                            </button>
+                            <button class="layui-btn layui-btn-xs layui-btn-danger btn-delete" data-id="{{ u['id'] }}" data-name="{{ u['username'] }}">
+                                <i class="layui-icon layui-icon-delete"></i>
+                            </button>
+                            {% else %}
+                            <span class="layui-badge layui-bg-orange">内置</span>
+                            {% end %}
+                        </div>
+                    </td>
+                </tr>
+                {% end %}
+            </tbody>
+        </table>
+        {% if not users %}
+        <div class="empty-state">
+            <i class="layui-icon layui-icon-face-cry"></i>
+            <p style="margin-top:10px;">暂无用户数据</p>
+        </div>
+        {% end %}
+
+        <!-- 分页区 -->
+        <div style="text-align:center;"><div id="pagination"></div></div>
+    </div>
+</div>
+
+<!-- 隐藏的 XSRF 表单 -->
+<form id="form-toggle" method="post" action="/admin/user/toggle" style="display:none;">
+    {% module xsrf_form_html() %}
+    <input type="hidden" name="id" id="toggle-id">
+</form>
+<form id="form-delete" method="post" action="/admin/user/delete" style="display:none;">
+    {% module xsrf_form_html() %}
+    <input type="hidden" name="id" id="delete-id">
+</form>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+initListPage({
+    url: '/admin/user',
+    hasSearch: true,
+    hasToggle: true,
+    hasDelete: true,
+    deleteConfirmText: '确定删除用户 <b>{name}</b> 吗？',
+    total: {{ total }},
+    page: {{ page }}
+});
+</script>
+{% end %}
