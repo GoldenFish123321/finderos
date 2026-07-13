@@ -327,4 +327,4 @@ def fetch_and_parse(
         logger.warning(f"解析器 {parser} 失败: {e}")
         news = []
 
-    return status, size, text, news
+    return status, size, safe_text, news
