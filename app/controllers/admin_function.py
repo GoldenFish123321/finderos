@@ -59,8 +59,12 @@ class FunctionFormHandler(AdminBaseHandler):
         icon = self.get_body_argument("icon", "").strip()
         route_path = self.get_body_argument("route_path", "").strip()
         parent_id_raw = self.get_body_argument("parent_id", "").strip()
-        parent_id = int(parent_id_raw) if parent_id_raw else None
-        sort_order = int(self.get_body_argument("sort_order", 0))
+        try:
+            parent_id = int(parent_id_raw) if parent_id_raw else None
+            sort_order = int(self.get_body_argument("sort_order", 0))
+        except (ValueError, TypeError):
+            self.write('<script>alert("参数格式不正确");window.history.back();</script>')
+            return
 
         if not name:
             self.write('<script>alert("功能名称不能为空");window.history.back();</script>')

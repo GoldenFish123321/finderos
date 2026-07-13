@@ -60,7 +60,11 @@ class WatchSourceFormHandler(AdminBaseHandler):
         description = self.get_body_argument("description", "").strip()
         url_template = self.get_body_argument("url_template", "").strip()
         request_headers = self.get_body_argument("request_headers", "{}").strip()
-        sort_order = int(self.get_body_argument("sort_order", 0))
+        try:
+            sort_order = int(self.get_body_argument("sort_order", 0))
+        except (ValueError, TypeError):
+            self.write('<script>alert("排序号格式不正确");window.history.back();</script>')
+            return
 
         if not name or not url_template:
             self.write('<script>alert("名称和URL模板不能为空");window.history.back();</script>')
@@ -97,6 +101,9 @@ class WatchSourceToggleHandler(AdminBaseHandler):
     def post(self):
         source_id = int(self.get_body_argument("id", 0))
         status = WatchSourceRepository.toggle_enabled(source_id)
-        self.redirect(
-            f"/admin/watch/source?msg={'已启用' if status == 1 else '已禁用'}"
-        )
+        if status == -1:
+            self.write('<script>alert("瞭望源不存在");window.history.back();</script>')
+        else:
+            self.redirect(
+                f"/admin/watch/source?msg={'已启用' if status == 1 else '已禁用'}"
+            )
