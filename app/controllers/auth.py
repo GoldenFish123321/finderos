@@ -11,6 +11,7 @@ import tornado.web
 from app.config.settings import settings
 from app.controllers.base import BaseHandler
 from app.models.user import UserRepository
+from app.models.role import RoleRepository
 from app.utils.security import write_audit_log
 
 
@@ -121,9 +122,13 @@ class LoginHandler(BaseHandler):
                 error="用户名或密码错误",
             )
 
-        # 登录成功：清除限速记录，设置安全 Cookie
+        # 登录成功：清除限速记录，设置安全 Cookie（含 Secure/SameSite 属性）
         login_limiter.clear(client_ip, username)
-        self.set_secure_cookie("username", username)
+        self.set_secure_cookie(
+            "username", username,
+            httponly=True,
+            samesite="Lax",
+        )
         write_audit_log("LOGIN_SUCCESS", username, "", "登录成功", client_ip)
         self._redirect_by_role(username)
 
@@ -205,8 +210,10 @@ class RegisterHandler(BaseHandler):
                 error="该用户名已被注册",
             )
 
-        # 创建用户（默认角色：普通用户 id=2）
-        success = UserRepository.create_user(username, password, role_id=2)
+        # 创建用户（默认角色：动态查找"普通用户"角色，而非硬编码 role_id）
+        default_role = RoleRepository.get_by_name("普通用户")
+        role_id = default_role["id"] if default_role else 2
+        success = UserRepository.create_user(username, password, role_id=role_id)
         if not success:
             return self.render(
                 "register.html",
@@ -218,5 +225,9 @@ class RegisterHandler(BaseHandler):
         write_audit_log("REGISTER", username, "", "用户自助注册成功", client_ip)
 
         # 注册成功后自动登录
-        self.set_secure_cookie("username", username)
+        self.set_secure_cookie(
+            "username", username,
+            httponly=True,
+            samesite="Lax",
+        )
         self.redirect("/index?msg=注册成功，欢迎使用瞭望与问数系统！")

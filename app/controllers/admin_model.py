@@ -206,6 +206,17 @@ class ModelChatHandler(AdminBaseHandler):
 
         # 尝试真实 API 调用（在线程池中执行，避免阻塞 Tornado 事件循环）
         if api_key:
+            # SSRF 防护：校验 API Base URL 安全性
+            from app.utils.security import validate_url_safe
+            safe, reason = validate_url_safe(api_base)
+            if not safe:
+                logger.warning(f"SSRF 拦截: api_base={api_base}, reason={reason}")
+                self.write(f"data: {json.dumps({'error': f'API Base URL 不安全: {reason}'})}\n\n")
+                await self.flush()
+                self.write(f"event: stats\ndata: {json.dumps({'tokens': 0, 'mock': True})}\n\n")
+                await self.flush()
+                return
+
             payload = json.dumps({
                 "model": model_name,
                 "messages": messages,

@@ -43,7 +43,7 @@
                 <label class="layui-form-label">API Key</label>
                 <div class="layui-input-block">
                     <input type="password" name="api_key" class="layui-input"
-                           value="{{ model['api_key'] if model else '' }}" placeholder="sk-...">
+                           value="" placeholder="{{ '留空则不修改' if model else 'sk-...' }}">
                 </div>
             </div>
             <div class="layui-form-item">
