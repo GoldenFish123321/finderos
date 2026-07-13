@@ -29,10 +29,11 @@ def get_connection() -> sqlite3.Connection:
 
 @contextmanager
 def get_db():
-    """Context manager for database connections. Auto-closes on exit."""
+    """Context manager for database connections. Auto-commits and closes on exit."""
     conn = get_connection()
     try:
         yield conn
+        conn.commit()
     finally:
         conn.close()
 
@@ -161,13 +162,13 @@ def seed_default_data():
         if existing["cnt"] == 0:
             conn.execute(
                 "INSERT INTO roles (id, name, description, is_system) VALUES (?, ?, ?, ?)",
-                (1, "System Admin", "System administrator role with full backend access", 1),
+                (1, "系统管理员", "系统管理员角色，可访问后台管理系统所有功能", 1),
             )
             conn.execute(
                 "INSERT INTO roles (id, name, description, is_system) VALUES (?, ?, ?, ?)",
-                (2, "Normal User", "Regular user role, frontend access only", 1),
+                (2, "普通用户", "普通用户角色，仅可登录前台用户侧", 1),
             )
-            print("[Seed] Default roles created")
+            print("[种子] 默认角色已创建")
 
         existing_admin = conn.execute(
             "SELECT COUNT(*) as cnt FROM users WHERE username = ?", ("admin",)
@@ -179,29 +180,29 @@ def seed_default_data():
                 "INSERT INTO users (username, password_hash, salt, role_id, is_enabled) VALUES (?, ?, ?, ?, ?)",
                 ("admin", dk.hex(), salt.hex(), 1, 1),
             )
-            print("[Seed] Default admin created (password: admin888)")
+            print("[种子] 默认管理员 admin 已创建 (密码: admin888)")
 
         existing_funcs = conn.execute("SELECT COUNT(*) as cnt FROM functions").fetchone()
         if existing_funcs["cnt"] == 0:
             functions = [
-                (1, "Console", "layui-icon-console", "/admin", None, 1, 1),
-                (2, "Permissions", "layui-icon-vercode", "", None, 2, 1),
-                (3, "Settings", "layui-icon-set", "", None, 3, 1),
-                (4, "Users", "layui-icon-user", "/admin/user", 2, 1, 1),
-                (5, "Roles", "layui-icon-group", "/admin/role", 2, 2, 1),
-                (6, "Functions", "layui-icon-template-1", "/admin/function", 2, 3, 1),
-                (7, "Menu", "layui-icon-list", "/admin/menu", 2, 4, 1),
-                (8, "Watch", "layui-icon-search", "/admin/watch", None, 4, 1),
-                (9, "Sources", "layui-icon-read", "/admin/watch/source", None, 5, 1),
-                (10, "Warehouse", "layui-icon-component", "/admin/warehouse", None, 6, 1),
-                (11, "Models", "layui-icon-util", "/admin/model", None, 7, 1),
+                (1, "控制台", "layui-icon-console", "/admin", None, 1, 1),
+                (2, "权限管理", "layui-icon-vercode", "", None, 2, 1),
+                (3, "系统设置", "layui-icon-set", "", None, 3, 1),
+                (4, "用户管理", "layui-icon-user", "/admin/user", 2, 1, 1),
+                (5, "角色管理", "layui-icon-group", "/admin/role", 2, 2, 1),
+                (6, "功能管理", "layui-icon-template-1", "/admin/function", 2, 3, 1),
+                (7, "菜单管理", "layui-icon-list", "/admin/menu", 2, 4, 1),
+                (8, "瞭望采集", "layui-icon-search", "/admin/watch", None, 4, 1),
+                (9, "瞭源管理", "layui-icon-read", "/admin/watch/source", None, 5, 1),
+                (10, "数据仓库", "layui-icon-component", "/admin/warehouse", None, 6, 1),
+                (11, "模型引擎", "layui-icon-util", "/admin/model", None, 7, 1),
             ]
             conn.executemany(
                 "INSERT INTO functions (id, name, icon, route_path, parent_id, sort_order, is_enabled) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 functions,
             )
-            print("[Seed] Default functions created")
+            print("[种子] 默认功能模块已创建")
 
         existing_rf = conn.execute("SELECT COUNT(*) as cnt FROM role_functions").fetchone()
         if existing_rf["cnt"] == 0:
@@ -210,7 +211,7 @@ def seed_default_data():
                 "INSERT INTO role_functions (role_id, function_id) VALUES (?, ?)",
                 [(1, row["id"]) for row in func_ids],
             )
-            print("[Seed] Admin role-function associations created")
+            print("[种子] 管理员角色功能关联已创建")
 
         conn.commit()
         conn.execute("PRAGMA foreign_keys=ON")
@@ -220,7 +221,7 @@ def seed_default_data():
 
 
 def _seed_default_sources():
-    """Seed default watch source (Baidu News)."""
+    """种子：默认瞭望源（百度新闻采集规则）。"""
     import json
     with get_db() as conn:
         existing = conn.execute("SELECT COUNT(*) as cnt FROM watch_sources").fetchone()
@@ -242,19 +243,19 @@ def _seed_default_sources():
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     1,
-                    "Baidu News",
-                    "Baidu news search source with keyword and paging support",
+                    "百度新闻",
+                    "百度新闻搜索采集源，支持关键词和分页参数",
                     "https://www.baidu.com/s?rtt=1&bsst=1&cl=2&tn=news&rsv_dl=ns_pc&word={keyword}&pn={page}",
                     json.dumps(headers, ensure_ascii=False),
                     1,
                     1,
                 ),
             )
-            print("[Seed] Default watch source created (Baidu News)")
+            print("[种子] 默认瞭望源已创建（百度新闻）")
 
 
 def _seed_default_models():
-    """Seed default AI models (GPT-4o-mini + DeepSeek-V3)."""
+    """种子：默认AI模型（GPT-4o-mini + DeepSeek-V3）。"""
     with get_db() as conn:
         existing = conn.execute("SELECT COUNT(*) as cnt FROM ai_models").fetchone()
         if existing["cnt"] == 0:
@@ -263,13 +264,14 @@ def _seed_default_models():
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (1, "GPT-4o-mini", "openai", "https://api.openai.com/v1", "gpt-4o-mini", "text", 1, 1),
             )
+            # DeepSeek-V3（从环境变量读取 API Key）
             deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "")
             if not deepseek_key:
-                print("[Seed] WARNING: DEEPSEEK_API_KEY not set, DeepSeek-V3 will not work")
+                print("[种子] 警告: DEEPSEEK_API_KEY 未设置，DeepSeek-V3 将无法使用")
             conn.execute(
                 "INSERT INTO ai_models (id, name, provider, api_base, api_key, model_name, category, is_enabled, is_default) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (2, "DeepSeek-V3", "deepseek", "https://api.deepseek.com", deepseek_key,
                  "deepseek-chat", "text", 1, 0),
             )
-            print("[Seed] Default AI models created (GPT-4o-mini, DeepSeek-V3)")
+            print("[种子] 默认AI模型已创建（GPT-4o-mini, DeepSeek-V3）")
