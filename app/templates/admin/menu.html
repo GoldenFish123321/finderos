@@ -38,6 +38,10 @@
                                     <i class="layui-icon {{ item['icon'] }}"></i> 
                                     {% end %}
                                     {{ item["title"] }}
+                                    <span style="float:right;margin-left:8px;">
+                                        <button class="layui-btn layui-btn-xs layui-btn-primary" onclick="sortMenu({{ item['id'] }}, 'up')" title="上移">▲</button>
+                                        <button class="layui-btn layui-btn-xs layui-btn-primary" onclick="sortMenu({{ item['id'] }}, 'down')" title="下移">▼</button>
+                                    </span>
                                 </a>
                                 {% if item.get("children") %}
                                 <dl class="layui-nav-child">
@@ -48,6 +52,10 @@
                                             <i class="layui-icon {{ child['icon'] }}"></i> 
                                             {% end %}
                                             {{ child["title"] }}
+                                            <span style="float:right;margin-left:8px;">
+                                                <button class="layui-btn layui-btn-xs layui-btn-primary" onclick="sortMenu({{ child['id'] }}, 'up')" title="上移">▲</button>
+                                                <button class="layui-btn layui-btn-xs layui-btn-primary" onclick="sortMenu({{ child['id'] }}, 'down')" title="下移">▼</button>
+                                            </span>
                                         </a>
                                     </dd>
                                     {% end %}
@@ -87,5 +95,23 @@ layui.use(['element', 'form'], function(){
     form.render('select');
     element.render('nav');
 });
+
+// 菜单排序功能（借鉴冯凯乐项目的排序设计）
+function sortMenu(funcId, direction) {
+    var fd = new FormData();
+    fd.append('_xsrf', '{{ xsrf_token }}');
+    fd.append('id', funcId);
+    fd.append('direction', direction);
+    fetch('/admin/menu/sort', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.code === 0) {
+                layer.msg(data.msg, {icon: 1, time: 800}, function() { location.reload(); });
+            } else {
+                layer.msg(data.msg, {icon: 2});
+            }
+        })
+        .catch(function() { location.reload(); });
+}
 </script>
 {% end %}
