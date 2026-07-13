@@ -1,38 +1,37 @@
 """
-watch_source.py �?watch_sources 表的仓储对象
-
-瞭源管理：管理数据采集的来源和请求规则（RequestHeaders + URL 模板）�?"""
+watch_source.py - watch_sources table repository (Repository pattern)
+"""
 import json
 import sqlite3
 from app.models.db import get_db
 
 
 class WatchSourceRepository:
-    """瞭望源数据访问类"""
+    """Watch source data access class."""
 
     @staticmethod
     def get_all(page: int = 1, page_size: int = 20, keyword: str = "") -> tuple:
-        """分页查询瞭望源列表，返回 (rows, total)�?""
+        """Paginated query of watch sources. Returns (rows, total)."""
         with get_db() as conn:
+            conditions = []
+            params = []
             if keyword:
-                where = "WHERE name LIKE ?"
-                params = (f"%{keyword}%",)
-            else:
-                where = ""
-                params = ()
+                conditions.append("name LIKE ?")
+                params.append(f"%{keyword}%")
+            where = "WHERE " + " AND ".join(conditions) if conditions else ""
             total = conn.execute(
                 f"SELECT COUNT(*) as cnt FROM watch_sources {where}", params
             ).fetchone()["cnt"]
             rows = conn.execute(
-                f"SELECT * FROM watch_sources {where} "
-                f"ORDER BY sort_order ASC, id ASC LIMIT ? OFFSET ?",
+                f"SELECT * FROM watch_sources {where} ORDER BY sort_order ASC, id ASC "
+                f"LIMIT ? OFFSET ?",
                 (*params, page_size, (page - 1) * page_size),
             ).fetchall()
         return rows, total
 
     @staticmethod
     def get_enabled() -> list:
-        """获取所有启用的瞭望源�?""
+        """Get all enabled watch sources."""
         with get_db() as conn:
             return conn.execute(
                 "SELECT * FROM watch_sources WHERE is_enabled = 1 ORDER BY sort_order ASC"
@@ -40,7 +39,7 @@ class WatchSourceRepository:
 
     @staticmethod
     def get_by_id(source_id: int):
-        """根据 ID 查询瞭望源�?""
+        """Get watch source by ID."""
         with get_db() as conn:
             return conn.execute(
                 "SELECT * FROM watch_sources WHERE id = ?", (source_id,)
@@ -49,16 +48,16 @@ class WatchSourceRepository:
     @staticmethod
     def create(name: str, description: str, url_template: str,
                request_headers: str = "{}", sort_order: int = 0) -> bool:
-        """创建瞭望源�?""
+        """Create a watch source."""
         try:
-            json.loads(request_headers)  # 校验 JSON 格式
+            json.loads(request_headers)  # Validate JSON format
         except json.JSONDecodeError:
             return False
         try:
             with get_db() as conn:
                 conn.execute(
-                    "INSERT INTO watch_sources (name, description, url_template, request_headers, sort_order) "
-                    "VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO watch_sources (name, description, url_template, "
+                    "request_headers, sort_order) VALUES (?, ?, ?, ?, ?)",
                     (name.strip(), description.strip(), url_template.strip(),
                      request_headers, sort_order),
                 )
@@ -70,9 +69,9 @@ class WatchSourceRepository:
     @staticmethod
     def update(source_id: int, name: str, description: str, url_template: str,
                request_headers: str = "{}", sort_order: int = 0) -> bool:
-        """更新瞭望源�?""
+        """Update a watch source."""
         try:
-            json.loads(request_headers)  # 校验 JSON 格式
+            json.loads(request_headers)  # Validate JSON format
         except json.JSONDecodeError:
             return False
         try:
@@ -90,15 +89,15 @@ class WatchSourceRepository:
 
     @staticmethod
     def delete(source_id: int) -> bool:
-        """删除瞭望源�?""
+        """Delete a watch source."""
         with get_db() as conn:
             conn.execute("DELETE FROM watch_sources WHERE id = ?", (source_id,))
             conn.commit()
-            return True
+            return conn.total_changes > 0
 
     @staticmethod
     def toggle_enabled(source_id: int) -> int:
-        """切换启用/禁用状态，返回新状态�?""
+        """Toggle enabled/disabled status. Returns new status or -1."""
         with get_db() as conn:
             row = conn.execute(
                 "SELECT is_enabled FROM watch_sources WHERE id = ?", (source_id,)
@@ -115,14 +114,19 @@ class WatchSourceRepository:
 
     @staticmethod
     def get_count() -> int:
-        """获取瞭望源总数�?""
+        """Get total source count."""
         with get_db() as conn:
-            return conn.execute("SELECT COUNT(*) as cnt FROM watch_sources").fetchone()["cnt"]
+            return conn.execute(
+                "SELECT COUNT(*) as cnt FROM watch_sources"
+            ).fetchone()["cnt"]
 
     @staticmethod
     def get_headers(source_id: int) -> dict:
-        """获取瞭望源的请求头（JSON �?dict）�?""
-        row = WatchSourceRepository.get_by_id(source_id)
+        """Get parsed request headers for a watch source."""
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT request_headers FROM watch_sources WHERE id = ?", (source_id,)
+            ).fetchone()
         if not row:
             return {}
         try:
