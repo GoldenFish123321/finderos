@@ -13,10 +13,13 @@ PROVIDERS = [
     {"value": "custom", "name": "Custom"},
 ]
 
-# Model categories
+# Model categories (扩展到6种，借鉴冯凯乐/陈子墨)
 CATEGORIES = [
     {"value": "text", "name": "Text"},
-    {"value": "vision", "name": "Vision"},
+    {"value": "image", "name": "Image"},
+    {"value": "audio", "name": "Audio"},
+    {"value": "video", "name": "Video"},
+    {"value": "multimodal", "name": "Multimodal"},
     {"value": "embedding", "name": "Embedding"},
 ]
 

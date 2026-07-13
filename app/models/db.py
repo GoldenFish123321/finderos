@@ -209,17 +209,22 @@ def seed_default_data():
         existing_funcs = conn.execute("SELECT COUNT(*) as cnt FROM functions").fetchone()
         if existing_funcs["cnt"] == 0:
             functions = [
-                (1, "控制台", "layui-icon-console", "/admin", None, 1, 1),
+                # 一级菜单
+                (1, "系统总览", "layui-icon-console", "/admin", None, 1, 1),
                 (2, "权限管理", "layui-icon-vercode", "", None, 2, 1),
                 (3, "系统设置", "layui-icon-set", "", None, 3, 1),
+                # 权限管理子项
                 (4, "用户管理", "layui-icon-user", "/admin/user", 2, 1, 1),
                 (5, "角色管理", "layui-icon-group", "/admin/role", 2, 2, 1),
                 (6, "功能管理", "layui-icon-template-1", "/admin/function", 2, 3, 1),
                 (7, "菜单管理", "layui-icon-list", "/admin/menu", 2, 4, 1),
+                # 业务模块（一级）
                 (8, "瞭望采集", "layui-icon-search", "/admin/watch", None, 4, 1),
                 (9, "瞭源管理", "layui-icon-read", "/admin/watch/source", None, 5, 1),
                 (10, "数据仓库", "layui-icon-component", "/admin/warehouse", None, 6, 1),
                 (11, "模型引擎", "layui-icon-util", "/admin/model", None, 7, 1),
+                # 系统设置子项（新增，借鉴陈子墨丰富的种子数据设计）
+                (12, "AI对话", "layui-icon-dialogue", "/admin/model/chat", 3, 1, 1),
             ]
             conn.executemany(
                 "INSERT INTO functions (id, name, icon, route_path, parent_id, sort_order, is_enabled) "
@@ -279,10 +284,11 @@ def _seed_default_sources():
 
 
 def _seed_default_models():
-    """种子：默认AI模型（GPT-4o-mini + DeepSeek-V3）。"""
+    """种子：默认AI模型（涵盖6种分类，借鉴冯凯乐/陈子墨的丰富模型支持）。"""
     with get_db() as conn:
         existing = conn.execute("SELECT COUNT(*) as cnt FROM ai_models").fetchone()
         if existing["cnt"] == 0:
+            # 文本模型
             conn.execute(
                 "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -291,11 +297,36 @@ def _seed_default_models():
             # DeepSeek-V3（从环境变量读取 API Key）
             deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "")
             if not deepseek_key:
-                print("[种子] 警告: DEEPSEEK_API_KEY 未设置，DeepSeek-V3 将无法使用")
+                print("[种子] 提示: DEEPSEEK_API_KEY 未设置，DeepSeek 模型将使用 Mock 模式")
             conn.execute(
                 "INSERT INTO ai_models (id, name, provider, api_base, api_key, model_name, category, is_enabled, is_default) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (2, "DeepSeek-V3", "deepseek", "https://api.deepseek.com", deepseek_key,
                  "deepseek-chat", "text", 1, 0),
             )
-            print("[种子] 默认AI模型已创建（GPT-4o-mini, DeepSeek-V3）")
+            # 多模态模型（新增）
+            conn.execute(
+                "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (3, "GPT-4o", "openai", "https://api.openai.com/v1", "gpt-4o", "multimodal", 1, 0),
+            )
+            # 图像模型（新增）
+            conn.execute(
+                "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (4, "DALL-E 3", "openai", "https://api.openai.com/v1", "dall-e-3", "image", 1, 0),
+            )
+            # 嵌入模型（新增）
+            conn.execute(
+                "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (5, "text-embedding-3-small", "openai", "https://api.openai.com/v1",
+                 "text-embedding-3-small", "embedding", 1, 0),
+            )
+            # 音频模型（新增）
+            conn.execute(
+                "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (6, "Whisper-1", "openai", "https://api.openai.com/v1", "whisper-1", "audio", 1, 0),
+            )
+            print("[种子] 默认AI模型已创建（6个模型，覆盖6种分类）")
