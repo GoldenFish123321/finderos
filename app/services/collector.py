@@ -244,6 +244,22 @@ def _ensure_baidu_cookies():
         _global_cookie_jar = None  # 重置，下次重试
 
 
+def _clean_html(html: str) -> str:
+    """清洗 HTML 内容，移除 <script> / <style> 标签及其内容。
+
+    防止采集结果中嵌入可执行脚本或样式污染。
+    借鉴陈子墨项目的 HTML 清洗实践。
+    """
+    if not html:
+        return html
+    # 移除 script 和 style 标签及其内容
+    cleaned = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL | re.IGNORECASE)
+    cleaned = re.sub(r'<style[^>]*>.*?</style>', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+    # 移除 HTML 注释
+    cleaned = re.sub(r'<!--.*?-->', '', cleaned, flags=re.DOTALL)
+    return cleaned
+
+
 def fetch_and_parse(
     url: str,
     headers: Optional[Dict[str, str]] = None,
@@ -302,9 +318,11 @@ def fetch_and_parse(
         text = data.decode("gbk", errors="replace")
 
     size = len(text)
+    # 清洗 HTML（移除 script/style 等潜在危险标签）
+    safe_text = _clean_html(text)
     parse_fn = PARSERS.get(parser, generic_parse)
     try:
-        news = parse_fn(text)
+        news = parse_fn(safe_text)
     except Exception as e:
         logger.warning(f"解析器 {parser} 失败: {e}")
         news = []
