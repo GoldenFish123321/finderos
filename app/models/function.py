@@ -63,12 +63,12 @@ class FunctionRepository:
                 "SELECT * FROM functions WHERE is_enabled = 1 ORDER BY sort_order ASC, id ASC"
             ).fetchall()
 
-        checked_ids = set()
-        if role_id:
-            rows = conn.execute(
-                "SELECT function_id FROM role_functions WHERE role_id = ?", (role_id,)
-            ).fetchall()
-            checked_ids = {r["function_id"] for r in rows}
+            checked_ids = set()
+            if role_id:
+                rows = conn.execute(
+                    "SELECT function_id FROM role_functions WHERE role_id = ?", (role_id,)
+                ).fetchall()
+                checked_ids = {r["function_id"] for r in rows}
 
         node_map = {}
         tree = []
