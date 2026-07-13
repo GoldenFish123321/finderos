@@ -131,9 +131,30 @@ def init_db():
                 top_k           INTEGER DEFAULT 50,
                 max_tokens      INTEGER DEFAULT 4096,
                 context_size    INTEGER DEFAULT 8192,
+                total_tokens    INTEGER DEFAULT 0,
                 is_enabled      INTEGER DEFAULT 1,
                 is_default      INTEGER DEFAULT 0,
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # 兼容旧表迁移：为已存在的 ai_models 表添加 total_tokens 列
+        try:
+            conn.execute("ALTER TABLE ai_models ADD COLUMN total_tokens INTEGER DEFAULT 0")
+            logger.info("Database migration: added total_tokens column to ai_models")
+        except Exception:
+            pass  # 列已存在
+
+        # 审计日志表
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                action      TEXT NOT NULL,
+                username    TEXT DEFAULT '',
+                target      TEXT DEFAULT '',
+                detail      TEXT DEFAULT '',
+                client_ip   TEXT DEFAULT '',
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
 
@@ -145,6 +166,9 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_watch_sources_enabled ON watch_sources(is_enabled)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_watch_results_source ON watch_results(source_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_models_default ON ai_models(is_default)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_username ON audit_logs(username)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at)")
 
         conn.commit()
         logger.info(f"Database initialized: {DB_PATH}")

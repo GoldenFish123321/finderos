@@ -13,7 +13,7 @@ import tornado.web
 from tornado.httpserver import HTTPServer
 
 from app.config.settings import settings
-from app.controllers.auth import LoginHandler, LogoutHandler
+from app.controllers.auth import LoginHandler, LogoutHandler, RegisterHandler
 from app.controllers.home import IndexHandler
 from app.controllers.admin_home import AdminIndexHandler
 from app.controllers.admin_user import (
@@ -63,9 +63,10 @@ def make_app() -> tornado.web.Application:
 
     return tornado.web.Application(
         [
-            # 登录/登出
+            # 登录/登出/注册
             (r"/", LoginHandler),
             (r"/logout", LogoutHandler),
+            (r"/register", RegisterHandler),
             (r"/index", IndexHandler),
 
             # 管理后台 — Dashboard

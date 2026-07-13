@@ -253,7 +253,15 @@ def fetch_and_parse(
     """发起 HTTP GET → 解压 → 按 parser 解析 → 返回 (状态码, 大小, 原文, 新闻列表)。
 
     百度 URL 会自动先访问首页获取验证 Cookie。
+    内置 SSRF 防护：拒绝内网/回环地址。
     """
+    # SSRF 防护校验
+    from app.utils.security import validate_url_safe
+    is_safe, reason = validate_url_safe(url)
+    if not is_safe:
+        logger.warning(f"SSRF 拦截: {reason} — {url[:100]}")
+        return 0, 0, f"SSRF Blocked: {reason}", []
+
     if headers is None:
         headers = dict(_BASE_HEADERS)
     else:

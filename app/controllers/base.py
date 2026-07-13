@@ -8,6 +8,7 @@ base.py — Controller 公共基础类 (BaseHandler)
 """
 
 import tornado.web
+from app.config.settings import settings
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -15,6 +16,11 @@ class BaseHandler(tornado.web.RequestHandler):
     公共基础 Handler，提供用户认证相关方法。
     所有需要登录验证的 Handler 都应继承此类。
     """
+
+    def set_default_headers(self):
+        """为所有响应设置 OWASP 推荐的安全响应头。"""
+        for header_name, header_value in settings.SECURITY_HEADERS.items():
+            self.set_header(header_name, header_value)
 
     def get_current_user(self) -> str | None:
         """

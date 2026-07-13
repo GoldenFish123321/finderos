@@ -5,7 +5,7 @@
 .chat-container { display: flex; height: calc(100vh - 140px); gap: 15px; }
 .chat-sidebar { width: 260px; flex-shrink: 0; }
 .chat-main { flex: 1; display: flex; flex-direction: column; }
-.chat-messages { flex: 1; overflow-y: auto; background: #f7f8fa; border-radius: 6px; padding: 15px; margin-bottom: 10px; }
+.chat-messages { flex: 1; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 6px; padding: 15px; margin-bottom: 10px; }
 .chat-msg { margin-bottom: 12px; display: flex; gap: 8px; }
 .chat-msg.user { justify-content: flex-end; }
 .chat-msg.assistant { justify-content: flex-start; }
@@ -13,23 +13,26 @@
 .chat-msg.user .avatar { background: #1E9FFF; color: #fff; }
 .chat-msg.assistant .avatar { background: #5FB878; color: #fff; }
 .chat-msg .bubble { max-width: 75%; padding: 10px 14px; border-radius: 8px; font-size: 14px; line-height: 1.6; word-break: break-word; }
-.chat-msg.user .bubble { background: #1E9FFF; color: #fff; border-bottom-right-radius: 2px; }
-.chat-msg.assistant .bubble { background: #fff; color: #333; border: 1px solid #e8e8e8; border-bottom-left-radius: 2px; }
-.chat-msg .token-info { font-size: 11px; color: #999; margin-top: 2px; }
+.chat-msg.user .bubble { background: rgba(94,163,255,0.25); color: #e8e8f0; border-bottom-right-radius: 2px; }
+.chat-msg.assistant .bubble { background: rgba(255,255,255,0.08); color: #e8e8f0; border: 1px solid rgba(255,255,255,0.1); border-bottom-left-radius: 2px; }
+.chat-msg .bubble pre { background: rgba(0,0,0,0.3); border-radius: 6px; padding: 10px; overflow-x: auto; font-size: 12px; }
+.chat-msg .bubble code { background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 3px; font-size: 12px; }
+.chat-msg .token-info { font-size: 11px; color: #888; margin-top: 2px; }
 .chat-input-area { display: flex; gap: 10px; }
-.chat-input-area textarea { flex: 1; resize: none; height: 60px; border-radius: 6px; }
+.chat-input-area textarea { flex: 1; resize: none; height: 60px; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #e8e8f0; }
+.chat-input-area textarea:focus { border-color: rgba(94,163,255,0.4); outline: none; }
 .chat-input-area button { width: 80px; flex-shrink: 0; }
-.model-select-item { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; transition: background 0.2s; }
-.model-select-item:hover { background: #f0f4ff; }
-.model-select-item.active { background: #e6f7ff; border-left: 3px solid #1E9FFF; }
-.model-select-item .m-name { font-size: 14px; font-weight: 500; }
-.model-select-item .m-info { font-size: 11px; color: #999; }
+.model-select-item { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.08); transition: background 0.2s; color: #b0b0d0; }
+.model-select-item:hover { background: rgba(94,163,255,0.08); }
+.model-select-item.active { background: rgba(94,163,255,0.12); border-left: 3px solid #5ea3ff; }
+.model-select-item .m-name { font-size: 14px; font-weight: 500; color: #e8e8f0; }
+.model-select-item .m-info { font-size: 11px; color: #888; }
 .typing-indicator { display: none; padding: 10px 14px; }
 .typing-indicator span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #999; margin: 0 2px; animation: blink 1.4s infinite both; }
 .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
 .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
 @keyframes blink { 0%,80%,100% { opacity: 0.2; } 40% { opacity: 1; } }
-.empty-chat { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #bbb; }
+.empty-chat { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #888; }
 .empty-chat .layui-icon { font-size: 64px; margin-bottom: 15px; }
 </style>
 
@@ -42,7 +45,7 @@
                 {% for m in models %}
                 {% if m['is_enabled'] == 1 %}
                 <div class="model-select-item {% if selected and selected['id'] == m['id'] %}active{% end %}"
-                     data-mid="{{ m['id'] }}" onclick="selectModel({{ m['id'] }}, {% raw json_encode(m['name']) %})">
+                     data-mid="{{ m['id'] }}" onclick="selectModel({{ m['id'] }})">
                     <div class="m-name">
                         {% if m['is_default'] == 1 %}⭐{% end %} {{ m['name'] }}
                     </div>
@@ -97,10 +100,9 @@
 {% block admin_scripts %}
 <script>
 var currentModelId = {{ selected['id'] if selected else 0 }};
-var currentModelName = {% raw json_encode(selected['name']) if selected else "''" %};
 var xsrf = '{% raw xsrf_token %}';
 
-function selectModel(mid, name) {
+function selectModel(mid) {
     location.href = '/admin/model/chat?model_id=' + mid;
 }
 

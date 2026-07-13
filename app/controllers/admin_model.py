@@ -3,11 +3,15 @@ admin_model.py — 模型引擎控制器
 
 管理 AI 模型配置（多 Provider、多分类、参数设置）。
 支持：列表/新增/编辑/删除/启停/清零/设为默认。
+支持：SSE 流式对话（真实 API + Token 追踪 + 本地 Mock 回退）。
 """
 import json
+import logging
 import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
 from app.models.ai_model import AiModelRepository, CATEGORIES, PROVIDERS
+
+logger = logging.getLogger(__name__)
 
 
 class ModelListHandler(AdminBaseHandler):
@@ -32,6 +36,7 @@ class ModelListHandler(AdminBaseHandler):
             category=category,
             categories=CATEGORIES,
             stats=stats,
+            xsrf_token=self.xsrf_token.decode() if isinstance(self.xsrf_token, bytes) else self.xsrf_token,
         )
 
 
@@ -150,7 +155,7 @@ class ModelApiListHandler(AdminBaseHandler):
 
 
 class ModelChatHandler(AdminBaseHandler):
-    """模型对话 — SSE 流式响应"""
+    """模型对话 — SSE 流式响应（真实 API 调用 + 本地 Mock 回退 + Token 追踪）"""
 
     @tornado.web.authenticated
     async def post(self):
@@ -179,62 +184,122 @@ class ModelChatHandler(AdminBaseHandler):
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": message})
 
-        payload = json.dumps({
-            "model": model_name,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "stream": True,
-        }).encode()
-
-        # SSE 流式代理
+        # SSE 响应头
         self.set_header("Content-Type", "text/event-stream")
         self.set_header("Cache-Control", "no-cache")
         self.set_header("Connection", "keep-alive")
         self.set_header("X-Accel-Buffering", "no")
 
         import urllib.request
-        try:
-            req = urllib.request.Request(
-                f"{api_base}/chat/completions",
-                data=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}",
-                }
-            )
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                total_tokens = 0
-                content_chars = 0
-                for line in resp:
-                    line = line.decode("utf-8", errors="replace").strip()
-                    if line.startswith("data: "):
-                        data_str = line[6:]
-                        if data_str == "[DONE]":
-                            self.write(f"data: [DONE]\n\n")
-                            await self.flush()
-                            break
-                        try:
-                            chunk = json.loads(data_str)
-                            delta = chunk.get("choices", [{}])[0].get("delta", {})
-                            content = delta.get("content", "")
-                            if content:
-                                content_chars += len(content)
-                                self.write(f"data: {json.dumps({'content': content})}\n\n")
+        total_tokens = 0
+        api_success = False
+
+        # 尝试真实 API 调用
+        if api_key:
+            try:
+                payload = json.dumps({
+                    "model": model_name,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "stream": True,
+                }).encode()
+
+                req = urllib.request.Request(
+                    f"{api_base}/chat/completions",
+                    data=payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {api_key}",
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=120) as resp:
+                    api_success = True
+                    content_chars = 0
+                    for line in resp:
+                        line = line.decode("utf-8", errors="replace").strip()
+                        if line.startswith("data: "):
+                            data_str = line[6:]
+                            if data_str == "[DONE]":
+                                self.write(f"data: [DONE]\n\n")
                                 await self.flush()
-                            # 优先从 usage 获取，否则从 finish_reason 推断
-                            if "usage" in chunk and chunk["usage"]:
-                                total_tokens = chunk["usage"].get("total_tokens", 0)
-                        except json.JSONDecodeError:
-                            pass
-                # 发送 token 统计（API 返回的精确值或估算值）
-                if total_tokens == 0 and content_chars > 0:
-                    total_tokens = max(1, content_chars // 2)  # 估算：中文约2字符/token
-                self.write(f"event: stats\ndata: {json.dumps({'tokens': total_tokens})}\n\n")
-                await self.flush()
-        except Exception as e:
-            self.write(f"data: {json.dumps({'error': str(e)})}\n\n")
+                                break
+                            try:
+                                chunk = json.loads(data_str)
+                                delta = chunk.get("choices", [{}])[0].get("delta", {})
+                                content = delta.get("content", "")
+                                if content:
+                                    content_chars += len(content)
+                                    self.write(
+                                        f"data: {json.dumps({'content': content})}\n\n"
+                                    )
+                                    await self.flush()
+                                if "usage" in chunk and chunk["usage"]:
+                                    total_tokens = chunk["usage"].get(
+                                        "total_tokens", 0
+                                    )
+                            except json.JSONDecodeError:
+                                pass
+                    if total_tokens == 0 and content_chars > 0:
+                        total_tokens = max(1, content_chars // 2)
+            except Exception as e:
+                logger.warning(f"API 调用失败: {e}，回退到本地 Mock")
+
+        # 本地 Mock 回退（当 API key 未配置或调用失败时）
+        if not api_success:
+            total_tokens = await self._mock_stream_response(message, model)
+            api_success = True
+
+        # 发送 token 统计
+        self.write(
+            f"event: stats\ndata: {json.dumps({'tokens': total_tokens, 'mock': not bool(api_key)})}\n\n"
+        )
+        await self.flush()
+
+        # 记录 Token 消耗到数据库
+        if total_tokens > 0:
+            AiModelRepository.add_tokens(model_id, total_tokens)
+
+        # 审计日志
+        from app.utils.security import write_audit_log
+        write_audit_log(
+            action="CHAT",
+            username=self.current_user,
+            target=f"model:{model_id}",
+            detail=f"tokens={total_tokens}, msg_len={len(message)}",
+            client_ip=self.request.remote_ip or "",
+        )
+
+    async def _mock_stream_response(self, message: str, model) -> int:
+        """
+        本地 Mock 流式响应（字符级分片模拟 SSE）。
+        无需真实 API，用于演示/开发环境。
+        返回估算 token 数。
+        """
+        import asyncio
+
+        system_prompt = model["system_prompt"] or ""
+        mock_reply = (
+            f"您好！我是 {model['name']}（{model['provider']}）。\n\n"
+            f"您刚才问：「{message}」\n\n"
+            f"当前为本地 Mock 模式。配置有效的 API Key 后，将自动切换为真实 AI 对话。\n\n"
+            f"🔧 系统提示词：{system_prompt[:100] if system_prompt else '（未设置）'}"
+        )
+        chars = list(mock_reply)
+        for i, ch in enumerate(chars):
+            self.write(f"data: {json.dumps({'content': ch})}\n\n")
             await self.flush()
+            await asyncio.sleep(0.02)  # 模拟流式打字效果
+            if i > 0 and i % 20 == 0:
+                await asyncio.sleep(0.01)
+
+        self.write(f"data: [DONE]\n\n")
+        await self.flush()
+
+        # 估算 token（中文约 1-2 字符/token，英文约 4 字符/token）
+        chinese_chars = sum(1 for c in mock_reply if '\u4e00' <= c <= '\u9fff')
+        other_chars = len(mock_reply) - chinese_chars
+        return max(1, chinese_chars + other_chars // 4)
 
 
 class ModelChatPageHandler(AdminBaseHandler):

@@ -154,9 +154,37 @@ class AiModelRepository:
         return True
 
     @staticmethod
+    def add_tokens(model_id: int, tokens: int) -> bool:
+        """累加 Token 消耗量。"""
+        try:
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE ai_models SET total_tokens = total_tokens + ? WHERE id = ?",
+                    (tokens, model_id),
+                )
+                conn.commit()
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
     def clear_tokens(model_id: int) -> bool:
-        """Clear token count (placeholder - not yet implemented)."""
+        """清零 Token 计数。"""
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE ai_models SET total_tokens = 0 WHERE id = ?", (model_id,)
+            )
+            conn.commit()
         return True
+
+    @staticmethod
+    def get_token_stats() -> dict:
+        """获取 Token 消耗统计。"""
+        with get_db() as conn:
+            total = conn.execute(
+                "SELECT COALESCE(SUM(total_tokens), 0) as cnt FROM ai_models"
+            ).fetchone()["cnt"]
+            return {"total_tokens": total}
 
     @staticmethod
     def get_count() -> int:

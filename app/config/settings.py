@@ -23,6 +23,36 @@ class Settings:
     LOGIN_URL = "/"
     """未登录时的跳转地址。"""
 
+    # === 安全响应头 ===
+    SECURITY_HEADERS = {
+        "X-Frame-Options": "DENY",
+        "X-Content-Type-Options": "nosniff",
+        "X-XSS-Protection": "1; mode=block",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Content-Security-Policy": (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "img-src 'self' data: https:; "
+            "font-src 'self' https://cdn.jsdelivr.net; "
+            "connect-src 'self' https:; "
+            "frame-src 'none'"
+        ),
+    }
+    """HTTP 安全响应头集合（CSP / X-Frame / HSTS 等 OWASP 推荐头）。"""
+
+    # === SSRF 防护 ===
+    SSRF_BLOCKED_HOSTS = [
+        "127.0.0.1", "localhost", "0.0.0.0", "::1",
+        "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+        "169.254.0.0/16", "100.64.0.0/10",
+    ]
+    """SSRF 防护：禁止请求的内网/回环地址段。"""
+
+    SSRF_ALLOWED_SCHEMES = {"http", "https"}
+    """SSRF 防护：仅允许的 URL 协议。"""
+
     # === 数据库配置 ===
     DB_PATH = os.environ.get("DB_PATH", "database/finderos.db")
     """SQLite 数据库文件路径。"""
@@ -44,6 +74,9 @@ class Settings:
 
     LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", 900))
     """登录锁定时间（秒），默认 15 分钟。"""
+
+    AUDIT_ENABLED = os.environ.get("AUDIT_ENABLED", "").lower() != "false"
+    """是否启用审计日志（默认启用）。"""
 
 
 settings = Settings()

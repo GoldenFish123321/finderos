@@ -39,9 +39,9 @@
                     <td>{{ s['id'] }}</td>
                     <td><b>{{ s['name'] }}</b></td>
                     <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                        title="{{ s['description'] }}">{{ s['description'] }}</td>
+                        title="{{ s['description'] }}">{{ s['description'] or '—' }}</td>
                     <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                        title="{{ s['url_template'] }}"><code>{{ s['url_template'][:60] }}...</code></td>
+                        title="{{ s['url_template'] }}"><code>{{ s['url_template'][:60] if len(s['url_template']) > 60 else s['url_template'] }}{% if len(s['url_template']) > 60 %}...{% end %}</code></td>
                     <td>
                         {% if s['is_enabled'] == 1 %}
                         <span class="layui-badge layui-bg-green">启用</span>
@@ -95,8 +95,9 @@
 
 {% block admin_scripts %}
 <script>
-layui.use(['laypage', 'jquery'], function(){
-    var laypage = layui.laypage, $ = layui.$;
+layui.use(['laypage', 'jquery', 'form'], function(){
+    var laypage = layui.laypage, $ = layui.$, form = layui.form;
+    form.render();
     {% if total_pages > 1 %}
     laypage.render({
         elem: 'src-pagination', count: {{ total }}, limit: 20, curr: {{ page }},

@@ -3,75 +3,110 @@
 {% block title %}{{ title }}{% end %}
 
 {% block admin_content %}
-<div class="layui-row layui-col-space12">
-    <div class="layui-col-md4">
-        <div class="layui-card">
-            <div class="layui-card-body stat-box">
-                <div class="stat-number">{{ user_count }}</div>
-                <div class="stat-label">系统用户数</div>
-                <div class="stat-desc">含管理员账号</div>
-            </div>
-        </div>
-    </div>
-    <div class="layui-col-md4">
-        <div class="layui-card">
-            <div class="layui-card-body stat-box">
-                <div class="stat-number">{{ role_count }}</div>
-                <div class="stat-label">角色数</div>
-                <div class="stat-desc">系统角色+自定义角色</div>
-            </div>
-        </div>
-    </div>
-    <div class="layui-col-md4">
-        <div class="layui-card">
-            <div class="layui-card-body stat-box">
-                <div class="stat-number">{{ func_count }}</div>
-                <div class="stat-label">功能模块数</div>
-                <div class="stat-desc">一级+二级功能</div>
-            </div>
+<style>
+.dashboard-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 16px; }
+@media (max-width: 900px) { .dashboard-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.welcome-card {
+    grid-column: 1 / -1;
+    background: linear-gradient(135deg, rgba(94,163,255,0.08), rgba(167,139,250,0.06));
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 28px 32px;
+    backdrop-filter: blur(10px);
+}
+.welcome-card h2 {
+    font-size: 22px; font-weight: 700; color: var(--text-primary); margin: 0 0 8px;
+}
+.welcome-card .greeting {
+    font-size: 14px; color: var(--text-secondary); line-height: 1.6;
+}
+.welcome-card .greeting strong {
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.welcome-card .quick-links { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.welcome-card .quick-links a { font-size: 12px; }
+
+.stat-card-dark {
+    text-align: center; padding: 24px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-smooth);
+    backdrop-filter: blur(10px);
+}
+.stat-card-dark:hover {
+    border-color: var(--border-active);
+    transform: translateY(-2px);
+    box-shadow: var(--glow-blue);
+}
+.stat-card-dark .stat-icon { font-size: 32px; margin-bottom: 8px; }
+.stat-card-dark .stat-number {
+    font-size: 34px; font-weight: 800;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.2;
+}
+.stat-card-dark .stat-label { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+.stat-card-dark .stat-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; opacity: 0.7; }
+</style>
+
+<div class="dashboard-grid">
+    <!-- 欢迎卡片 -->
+    <div class="welcome-card">
+        <h2>👋 欢迎回来</h2>
+        <p class="greeting">
+            <strong>{{ username }}</strong>，瞭望与问数系统（DataFinderAgentOS）v2.5 已就绪。
+            支持权限管理、瞭望采集、数据仓库和 AI 模型引擎。
+        </p>
+        <div class="quick-links">
+            <a href="/admin/watch" class="btn-glass btn-sm btn-primary">🔍 瞭望采集</a>
+            <a href="/admin/model" class="btn-glass btn-sm">🤖 模型引擎</a>
+            <a href="/admin/warehouse" class="btn-glass btn-sm">🗄️ 数据仓库</a>
         </div>
     </div>
 
-    <!-- Day6-2 新增统计 -->
-    <div class="layui-col-md4">
-        <div class="layui-card">
-            <div class="layui-card-body stat-box">
-                <div class="stat-number" style="color:#5FB878;">{{ source_count }}</div>
-                <div class="stat-label">瞭望源</div>
-                <div class="stat-desc">数据采集源配置</div>
-            </div>
-        </div>
+    <!-- 统计卡片 -->
+    <div class="stat-card-dark">
+        <div class="stat-icon">👤</div>
+        <div class="stat-number">{{ user_count }}</div>
+        <div class="stat-label">系统用户</div>
+        <div class="stat-desc">含管理员账号</div>
     </div>
-    <div class="layui-col-md4">
-        <div class="layui-card">
-            <div class="layui-card-body stat-box">
-                <div class="stat-number" style="color:#FFB800;">{{ result_count }}</div>
-                <div class="stat-label">采集结果</div>
-                <div class="stat-desc">成功 {{ result_stats['success'] }} 条</div>
-            </div>
-        </div>
+    <div class="stat-card-dark">
+        <div class="stat-icon">👥</div>
+        <div class="stat-number">{{ role_count }}</div>
+        <div class="stat-label">角色数</div>
+        <div class="stat-desc">系统角色+自定义</div>
     </div>
-    <div class="layui-col-md4">
-        <div class="layui-card">
-            <div class="layui-card-body stat-box">
-                <div class="stat-number" style="color:#FF5722;">{{ model_count }}</div>
-                <div class="stat-label">AI模型</div>
-                <div class="stat-desc">已启用 {{ model_stats['enabled'] }} 个</div>
-            </div>
-        </div>
+    <div class="stat-card-dark">
+        <div class="stat-icon">🔧</div>
+        <div class="stat-number">{{ func_count }}</div>
+        <div class="stat-label">功能模块</div>
+        <div class="stat-desc">一级+二级功能</div>
     </div>
-
-    <div class="layui-col-md12">
-        <div class="layui-card">
-            <div class="layui-card-header">👋 欢迎使用管理后台</div>
-            <div class="layui-card-body">
-                <p>欢迎回来，<strong>{{ username }}</strong>！</p>
-                <p style="color:#666;margin-top:10px;">
-                    瞭望与问数系统（DataFinderAgentOS）v0.2 是一个数据查询与分析平台。
-                    支持权限管理、瞭望采集、瞭源管理、数据仓库和模型引擎。
-                </p>
-            </div>
-        </div>
+    <div class="stat-card-dark">
+        <div class="stat-icon">📡</div>
+        <div class="stat-number" style="background:linear-gradient(135deg,var(--accent-green),var(--accent-cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">{{ source_count }}</div>
+        <div class="stat-label">瞭望源</div>
+        <div class="stat-desc">数据采集源配置</div>
+    </div>
+    <div class="stat-card-dark">
+        <div class="stat-icon">📰</div>
+        <div class="stat-number" style="background:linear-gradient(135deg,var(--accent-orange),#ff6b35);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">{{ result_count }}</div>
+        <div class="stat-label">采集结果</div>
+        <div class="stat-desc">成功 {{ result_stats['success'] }} 条</div>
+    </div>
+    <div class="stat-card-dark">
+        <div class="stat-icon">🤖</div>
+        <div class="stat-number" style="background:linear-gradient(135deg,#FF5722,var(--accent-orange));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">{{ model_count }}</div>
+        <div class="stat-label">AI模型</div>
+        <div class="stat-desc">已启用 {{ model_stats['enabled'] }} 个</div>
     </div>
 </div>
 {% end %}
