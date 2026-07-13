@@ -10,6 +10,7 @@ from app.models.role import RoleRepository
 from app.models.function import FunctionRepository
 from app.models.watch_source import WatchSourceRepository
 from app.models.watch_result import WatchResultRepository
+from app.models.data_warehouse import DataWarehouseRepository
 from app.models.ai_model import AiModelRepository
 
 
@@ -23,6 +24,7 @@ class AdminIndexHandler(AdminBaseHandler):
         func_count = FunctionRepository.get_count()
         source_count = WatchSourceRepository.get_count()
         result_count = WatchResultRepository.get_count()
+        warehouse_count = DataWarehouseRepository.get_count()
         model_count = AiModelRepository.get_count()
         result_stats = WatchResultRepository.get_stats()
         model_stats = AiModelRepository.get_stats()
@@ -36,6 +38,7 @@ class AdminIndexHandler(AdminBaseHandler):
             func_count=func_count,
             source_count=source_count,
             result_count=result_count,
+            warehouse_count=warehouse_count,
             model_count=model_count,
             result_stats=result_stats,
             model_stats=model_stats,

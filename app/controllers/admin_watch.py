@@ -13,6 +13,7 @@ import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
 from app.models.watch_source import WatchSourceRepository
 from app.models.watch_result import WatchResultRepository
+from app.models.data_warehouse import DataWarehouseRepository
 from app.services.collector import fetch_and_parse
 
 
@@ -155,7 +156,7 @@ class WatchHandler(AdminBaseHandler):
 
 
 class WatchSaveHandler(AdminBaseHandler):
-    """保存选中的采集结果到数据仓库（含 URL 去重）"""
+    """保存选中的采集结果到数据仓库（含 URL 去重，v0.2.13 同时写入独立 data_warehouse 表）"""
 
     @tornado.web.authenticated
     def post(self):
@@ -165,9 +166,38 @@ class WatchSaveHandler(AdminBaseHandler):
             return
 
         ids = [int(rid) for rid in result_ids if rid]
+        # 原有标记逻辑
         saved, skipped = WatchResultRepository.mark_saved_batch(ids)
 
-        if saved > 0:
+        # v0.2.13: 同时写入独立 data_warehouse 表（借鉴郭家琪）
+        dw_count = 0
+        for rid in ids:
+            result = WatchResultRepository.get_by_id(rid)
+            if not result:
+                continue
+            result_data = result["result_data"] or ""
+            if result_data.startswith("SAVED:"):
+                result_data = result_data[6:]  # 去掉前缀
+            # 尝试解析 JSON 提取标题/链接/摘要
+            items = []
+            try:
+                items = json.loads(result_data)
+            except (json.JSONDecodeError, TypeError):
+                pass
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, dict):
+                        if DataWarehouseRepository.create(
+                            result_id=rid,
+                            title=item.get("title", ""),
+                            link=item.get("link", ""),
+                            summary=item.get("summary", ""),
+                            source_name=item.get("source_name", ""),
+                            raw_data=json.dumps(item, ensure_ascii=False),
+                        ):
+                            dw_count += 1
+
+        if saved > 0 or dw_count > 0:
             msg = f"成功保存 {saved} 条结果到数据仓库"
             if skipped > 0:
                 msg += f"（跳过 {skipped} 条重复/已保存）"

@@ -73,6 +73,7 @@ class MenuHandler(AdminBaseHandler):
             selected_role=selected_role,
             selected_role_id=role_id,
             menu_tree=menu_tree,
+            xsrf_token=self.xsrf_token.decode() if isinstance(self.xsrf_token, bytes) else self.xsrf_token,
         )
 
 
