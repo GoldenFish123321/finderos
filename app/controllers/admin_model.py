@@ -72,11 +72,15 @@ class ModelFormHandler(AdminBaseHandler):
         model_name = self.get_body_argument("model_name", "").strip()
         category = self.get_body_argument("category", "text").strip()
         system_prompt = self.get_body_argument("system_prompt", "").strip()
-        temperature = float(self.get_body_argument("temperature", 0.7))
-        top_p = float(self.get_body_argument("top_p", 1.0))
-        top_k = int(self.get_body_argument("top_k", 50))
-        max_tokens = int(self.get_body_argument("max_tokens", 4096))
-        context_size = int(self.get_body_argument("context_size", 8192))
+        try:
+            temperature = float(self.get_body_argument("temperature", 0.7))
+            top_p = float(self.get_body_argument("top_p", 1.0))
+            top_k = int(self.get_body_argument("top_k", 50))
+            max_tokens = int(self.get_body_argument("max_tokens", 4096))
+            context_size = int(self.get_body_argument("context_size", 8192))
+        except (ValueError, TypeError):
+            self.write('<script>alert("参数值格式不正确，请检查数字字段");window.history.back();</script>')
+            return
 
         if not name:
             self.write('<script>alert("模型名称不能为空");window.history.back();</script>')
@@ -115,9 +119,12 @@ class ModelToggleHandler(AdminBaseHandler):
     def post(self):
         model_id = int(self.get_body_argument("id", 0))
         status = AiModelRepository.toggle_enabled(model_id)
-        self.redirect(
-            f"/admin/model?msg={'已启用' if status == 1 else '已禁用'}"
-        )
+        if status == -1:
+            self.write('<script>alert("模型不存在");window.history.back();</script>')
+        else:
+            self.redirect(
+                f"/admin/model?msg={'已启用' if status == 1 else '已禁用'}"
+            )
 
 
 class ModelDefaultHandler(AdminBaseHandler):
