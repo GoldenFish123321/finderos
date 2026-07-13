@@ -55,3 +55,11 @@
 </div>
 {% end %}
 
+{% block admin_scripts %}
+<script>
+layui.use('form', function(){
+    var form = layui.form;
+    form.render();
+});
+</script>
+{% end %}

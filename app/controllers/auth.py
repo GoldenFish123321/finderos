@@ -11,6 +11,7 @@ import tornado.web
 from app.config.settings import settings
 from app.controllers.base import BaseHandler
 from app.models.user import UserRepository
+from app.utils.security import write_audit_log
 
 # ========== 登录失败限速（内存级） ==========
 # 结构: {(ip, username): (failure_count, first_failure_timestamp)}
@@ -92,6 +93,7 @@ class LoginHandler(BaseHandler):
         client_ip = self.request.remote_ip or "0.0.0.0"
         allowed, rate_limit_error = _check_rate_limit(client_ip, username)
         if not allowed:
+            write_audit_log("LOGIN_BLOCKED", username, "rate_limit", rate_limit_error, client_ip)
             return self.render(
                 "login.html",
                 title="瞭望与问数系统 — 用户登录",
@@ -101,6 +103,7 @@ class LoginHandler(BaseHandler):
         # 验证用户
         if not UserRepository.verify_user(username, password):
             _record_failure(client_ip, username)
+            write_audit_log("LOGIN_FAIL", username, "password", "密码错误", client_ip)
             return self.render(
                 "login.html",
                 title="瞭望与问数系统 — 用户登录",
@@ -110,6 +113,7 @@ class LoginHandler(BaseHandler):
         # 登录成功：清除限速记录，设置安全 Cookie
         _clear_failures(client_ip, username)
         self.set_secure_cookie("username", username)
+        write_audit_log("LOGIN_SUCCESS", username, "", "登录成功", client_ip)
         self._redirect_by_role(username)
 
     def _redirect_by_role(self, username: str):
@@ -138,3 +142,70 @@ class LogoutHandler(BaseHandler):
     def get(self):
         self.clear_cookie("username")
         self.redirect("/")
+
+
+class RegisterHandler(BaseHandler):
+    """用户注册处理器（前台自助注册）"""
+
+    def get(self):
+        if self.current_user:
+            return self.redirect("/index")
+        self.render("register.html", title="用户注册 — 瞭望与问数系统", error=None)
+
+    def post(self):
+        if self.current_user:
+            return self.redirect("/index")
+
+        username = self.get_body_argument("username", "").strip()
+        password = self.get_body_argument("password", "").strip()
+        password_confirm = self.get_body_argument("password_confirm", "").strip()
+
+        # 参数校验
+        if not username or not password:
+            return self.render(
+                "register.html",
+                title="用户注册 — 瞭望与问数系统",
+                error="用户名和密码不能为空",
+            )
+        if len(username) < 2:
+            return self.render(
+                "register.html",
+                title="用户注册 — 瞭望与问数系统",
+                error="用户名至少需要2个字符",
+            )
+        if len(password) < 6:
+            return self.render(
+                "register.html",
+                title="用户注册 — 瞭望与问数系统",
+                error="密码至少需要6个字符",
+            )
+        if password != password_confirm:
+            return self.render(
+                "register.html",
+                title="用户注册 — 瞭望与问数系统",
+                error="两次密码输入不一致",
+            )
+
+        # 检查用户名是否已存在
+        if UserRepository.get_user_by_username(username):
+            return self.render(
+                "register.html",
+                title="用户注册 — 瞭望与问数系统",
+                error="该用户名已被注册",
+            )
+
+        # 创建用户（默认角色：普通用户 id=2）
+        success = UserRepository.create_user(username, password, role_id=2)
+        if not success:
+            return self.render(
+                "register.html",
+                title="用户注册 — 瞭望与问数系统",
+                error="注册失败，请稍后重试",
+            )
+
+        client_ip = self.request.remote_ip or "0.0.0.0"
+        write_audit_log("REGISTER", username, "", "用户自助注册成功", client_ip)
+
+        # 注册成功后自动登录
+        self.set_secure_cookie("username", username)
+        self.redirect("/index?msg=注册成功，欢迎使用瞭望与问数系统！")

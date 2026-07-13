@@ -1,59 +1,50 @@
 {% extends "base_layout.html" %}
 
 {% block admin_content %}
-<div class="layui-card">
-    <div class="layui-card-header"><i class="layui-icon layui-icon-component"></i> 数据仓库</div>
-    <div class="layui-card-body">
-        <!-- 统计卡片 -->
-        <div class="layui-row layui-col-space15" style="margin-bottom:15px;">
-            <div class="layui-col-md3">
-                <div class="stat-box" style="background:#f6f8fa;border-radius:4px;">
-                    <div class="stat-number" style="color:#1E9FFF;">{{ stats['total'] }}</div>
-                    <div class="stat-label">采集总数</div>
-                </div>
-            </div>
-            <div class="layui-col-md3">
-                <div class="stat-box" style="background:#f6f8fa;border-radius:4px;">
-                    <div class="stat-number" style="color:#5FB878;">{{ stats['success'] }}</div>
-                    <div class="stat-label">成功次数</div>
-                </div>
-            </div>
-            <div class="layui-col-md3">
-                <div class="stat-box" style="background:#f6f8fa;border-radius:4px;">
-                    <div class="stat-number" style="color:#FFB800;">
-                        {{ "%.1f" % (stats['total_size'] / 1024 / 1024) if stats['total_size'] > 1048576 else "%.1f" % (stats['total_size'] / 1024) }}
-                    </div>
-                    <div class="stat-label">
-                        {{ 'MB' if stats['total_size'] > 1048576 else 'KB' }}
-                    </div>
-                </div>
-            </div>
-            <div class="layui-col-md3">
-                <div class="stat-box" style="background:#f6f8fa;border-radius:4px;">
-                    <div class="stat-number" style="color:#FF5722;">{{ stats['source_count'] }}</div>
-                    <div class="stat-label">数据来源数</div>
-                </div>
-            </div>
-        </div>
+<style>
+/* 深色主题覆盖 */
+.wh-stat { text-align: center; padding: 20px 10px; background: var(--bg-card) !important; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); transition: all var(--transition-smooth); }
+.wh-stat:hover { border-color: var(--border-active); transform: translateY(-2px); }
+.wh-stat .num { font-size: 32px; font-weight: 700; }
+.wh-stat .lbl { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+.wh-search { display: flex; gap: 10px; align-items: center; margin: 16px 0; flex-wrap: wrap; }
+.wh-search input { width: 240px; }
+.wh-table-wrap { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden; }
+.wh-table-wrap table { width: 100%; border-collapse: collapse; }
+.wh-table-wrap th { background: rgba(255,255,255,0.03); color: var(--text-muted); font-size: 12px; font-weight: 500; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border-subtle); }
+.wh-table-wrap td { padding: 10px 12px; font-size: 13px; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); }
+.wh-table-wrap tr:hover td { background: rgba(94,163,255,0.04); }
+.wh-table-wrap .st-200 { color: var(--accent-green); font-weight: 600; }
+.wh-table-wrap .st-fail { color: var(--accent-red); }
+</style>
 
-        <!-- 搜索区 -->
-        <div class="search-bar">
-            <input type="text" class="layui-input" id="search-kw" placeholder="搜索关键词..." value="{{ keyword }}">
-            <button class="layui-btn layui-btn-normal" id="btn-search">
-                <i class="layui-icon layui-icon-search"></i> 搜索
-            </button>
-            <button class="layui-btn layui-btn-danger layui-btn-sm" id="btn-batch-delete" style="margin-left:auto;">
-                <i class="layui-icon layui-icon-delete"></i> 批量删除
-            </button>
-            <span class="msg-tip">{{ handler.get_query_argument('msg', '') }}</span>
-        </div>
+<div class="glass-panel" style="padding:20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h3 style="margin:0;font-size:17px;color:var(--text-primary);">🗄️ 数据仓库</h3>
+        <span style="color:var(--accent-green);font-size:13px;">{{ handler.get_query_argument('msg', '') }}</span>
+    </div>
 
-        <!-- 列表 -->
-        <table class="layui-table" lay-size="sm">
+    <!-- 统计卡片 -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">
+        <div class="wh-stat"><div class="num" style="background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">{{ stats['total'] }}</div><div class="lbl">采集总数</div></div>
+        <div class="wh-stat"><div class="num" style="color:var(--accent-green);">{{ stats['success'] }}</div><div class="lbl">成功次数</div></div>
+        <div class="wh-stat"><div class="num" style="color:var(--accent-orange);">{{ "%.1f" % (stats['total_size'] / 1024 / 1024) if stats['total_size'] and stats['total_size'] > 1048576 else ("%.1f" % (stats['total_size'] / 1024) if stats['total_size'] else '0') }}</div><div class="lbl">{{ 'MB' if stats['total_size'] and stats['total_size'] > 1048576 else 'KB' }}</div></div>
+        <div class="wh-stat"><div class="num" style="color:var(--accent-red);">{{ stats['source_count'] }}</div><div class="lbl">数据来源数</div></div>
+    </div>
+
+    <!-- 搜索区 -->
+    <div class="wh-search">
+        <input type="text" class="input-dark" id="search-kw" placeholder="搜索关键词..." value="{{ keyword }}" style="width:240px;">
+        <button class="btn-glass btn-sm" id="btn-search">🔍 搜索</button>
+        <button class="btn-glass btn-sm btn-danger" id="btn-batch-delete" style="margin-left:auto;">🗑 批量删除</button>
+    </div>
+
+    <!-- 列表 -->
+    <div class="wh-table-wrap">
+        <table>
             <thead>
                 <tr>
-                    <th width="40"><input type="checkbox" id="check-all" lay-skin="primary" title=""></th>
-                    <th>ID</th>
+                    <th width="40"><input type="checkbox" id="check-all"></th>
                     <th>瞭望源</th>
                     <th>关键词</th>
                     <th>状态码</th>
@@ -66,49 +57,43 @@
                 {% if results %}
                 {% for r in results %}
                 <tr>
-                    <td><input type="checkbox" name="wh_ids" value="{{ r['id'] }}" lay-skin="primary"></td>
+                    <td><input type="checkbox" name="wh_ids" value="{{ r['id'] }}"></td>
                     <td>{{ r['source_name'] or '未知' }}</td>
                     <td><b>{{ r['keyword'] }}</b></td>
                     <td>
                         {% if r['response_status'] == 200 %}
-                        <span class="layui-badge layui-bg-green">200</span>
+                        <span class="st-200">200 ✓</span>
                         {% elif r['response_status'] == 0 %}
-                        <span class="layui-badge">失败</span>
+                        <span class="st-fail">失败</span>
                         {% else %}
-                        <span class="layui-badge layui-bg-orange">{{ r['response_status'] }}</span>
+                        <span style="color:var(--accent-orange);">{{ r['response_status'] }}</span>
                         {% end %}
                     </td>
                     <td>{{ "%.1f" % (r['response_size'] / 1024) if r['response_size'] > 1024 else str(r['response_size']) + 'B' }}{{ 'KB' if r['response_size'] > 1024 else '' }}</td>
                     <td>{{ r['created_at'] }}</td>
                     <td>
-                        <div class="layui-btn-group">
-                            <a href="/admin/warehouse/detail?id={{ r['id'] }}" class="layui-btn layui-btn-xs layui-btn-normal">
-                                <i class="layui-icon layui-icon-read"></i> 详情
-                            </a>
-                            <form action="/admin/warehouse/delete" method="post" style="display:inline;">
-                                {% module xsrf_form_html() %}
-                                <input type="hidden" name="id" value="{{ r['id'] }}">
-                                <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger"
-                                        onclick="return confirm('确定删除吗？')">
-                                    <i class="layui-icon layui-icon-delete"></i> 删除
-                                </button>
-                            </form>
-                        </div>
+                        <a href="/admin/warehouse/detail?id={{ r['id'] }}" class="btn-glass btn-sm">📄 详情</a>
+                        <form action="/admin/warehouse/delete" method="post" style="display:inline;">
+                            {% module xsrf_form_html() %}
+                            <input type="hidden" name="id" value="{{ r['id'] }}">
+                            <button type="submit" class="btn-glass btn-sm btn-danger" onclick="return confirm('确定删除吗？')">🗑</button>
+                        </form>
                     </td>
                 </tr>
                 {% end %}
                 {% else %}
-                <tr><td colspan="8" class="empty-state">
-                    <i class="layui-icon layui-icon-face-surprised"></i><p>暂无采集数据</p>
+                <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">
+                    <div style="font-size:40px;margin-bottom:8px;">📭</div>
+                    <p>暂无采集数据</p>
                 </td></tr>
                 {% end %}
             </tbody>
         </table>
-
-        {% if total_pages > 1 %}
-        <div style="text-align:center;"><div id="wh-pagination"></div></div>
-        {% end %}
     </div>
+
+    {% if total_pages > 1 %}
+    <div style="text-align:center;margin-top:16px;"><div id="wh-pagination"></div></div>
+    {% end %}
 </div>
 {% end %}
 
@@ -116,8 +101,8 @@
 <script>
 var xsrf = '{% raw xsrf_token %}';
 
-layui.use(['laypage', 'form', 'jquery'], function(){
-    var laypage = layui.laypage, form = layui.form, $ = layui.$;
+layui.use(['laypage', 'jquery'], function(){
+    var laypage = layui.laypage, $ = layui.$;
     {% if total_pages > 1 %}
     laypage.render({
         elem: 'wh-pagination', count: {{ total }}, limit: 20, curr: {{ page }},
@@ -125,55 +110,49 @@ layui.use(['laypage', 'form', 'jquery'], function(){
         jump: function(obj, first){
             if (!first) {
                 var url = '/admin/warehouse?page=' + obj.curr;
-                var kw = $('#search-kw').val();
+                var kw = document.getElementById('search-kw').value;
                 if (kw) url += '&keyword=' + encodeURIComponent(kw);
                 location.href = url;
             }
         }
     });
     {% end %}
-    $('#btn-search').click(function(){
-        var kw = $('#search-kw').val();
+    document.getElementById('btn-search').addEventListener('click', function(){
+        var kw = document.getElementById('search-kw').value;
         location.href = '/admin/warehouse' + (kw ? '?keyword=' + encodeURIComponent(kw) : '');
     });
-    $('#search-kw').keydown(function(e){ if (e.keyCode === 13) $('#btn-search').click(); });
+    document.getElementById('search-kw').addEventListener('keydown', function(e){
+        if (e.keyCode === 13) document.getElementById('btn-search').click();
+    });
 
     // 全选
-    form.on('checkbox', function(data){
-        if (data.elem.id === 'check-all') {
-            var checked = data.elem.checked;
-            $('input[name="wh_ids"]').each(function(){ this.checked = checked; });
-            form.render('checkbox');
-        }
+    document.getElementById('check-all').addEventListener('change', function(){
+        var checked = this.checked;
+        document.querySelectorAll('input[name="wh_ids"]').forEach(function(cb){ cb.checked = checked; });
     });
 
     // 批量删除
-    $('#btn-batch-delete').click(function(){
+    document.getElementById('btn-batch-delete').addEventListener('click', function(){
         var ids = [];
-        $('input[name="wh_ids"]:checked').each(function(){ ids.push($(this).val()); });
-        if (ids.length === 0) {
-            layer.msg('请先勾选要删除的记录', {icon: 2});
-            return;
-        }
+        document.querySelectorAll('input[name="wh_ids"]:checked').forEach(function(cb){ ids.push(cb.value); });
+        if (ids.length === 0) { layer.msg('请先勾选要删除的记录', {icon: 2}); return; }
         layer.confirm('确定删除选中的 ' + ids.length + ' 条记录吗？', function(index){
             layer.close(index);
-            var $btn = $('#btn-batch-delete');
-            $btn.prop('disabled', true);
+            var btn = document.getElementById('btn-batch-delete');
+            btn.disabled = true;
             $.post('/admin/warehouse/batch-delete', {ids: ids.join(','), _xsrf: xsrf}, function(res){
-                $btn.prop('disabled', false);
+                btn.disabled = false;
                 if (res.code === 0) {
                     layer.msg(res.msg, {icon: 1}, function(){ location.reload(); });
                 } else {
                     layer.msg(res.msg, {icon: 2});
                 }
             }, 'json').fail(function(){
-                $btn.prop('disabled', false);
+                btn.disabled = false;
                 layer.msg('请求失败', {icon: 2});
             });
         });
     });
-
-    form.render('checkbox');
 });
 </script>
 {% end %}

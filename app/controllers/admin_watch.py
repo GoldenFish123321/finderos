@@ -36,6 +36,7 @@ class WatchHandler(AdminBaseHandler):
             page=page, page_size=12, keyword=keyword, source_id=source_id
         )
         total_pages = max(1, (total + 12 - 1) // 12)
+        stats = WatchResultRepository.get_stats()
 
         self.render(
             "admin/watch.html",
@@ -48,6 +49,7 @@ class WatchHandler(AdminBaseHandler):
             total_pages=total_pages,
             keyword=keyword,
             active_source_id=source_id,
+            saved_count=stats["saved"],
             xsrf_token=self.xsrf_token.decode() if isinstance(self.xsrf_token, bytes) else self.xsrf_token,
         )
 
@@ -153,7 +155,7 @@ class WatchHandler(AdminBaseHandler):
 
 
 class WatchSaveHandler(AdminBaseHandler):
-    """保存选中的采集结果到数据仓库"""
+    """保存选中的采集结果到数据仓库（含 URL 去重）"""
 
     @tornado.web.authenticated
     def post(self):
@@ -162,11 +164,14 @@ class WatchSaveHandler(AdminBaseHandler):
             self.write({"code": 1, "msg": "请选择要保存的结果"})
             return
 
-        count = 0
-        for rid in result_ids:
-            result = WatchResultRepository.get_by_id(int(rid))
-            if result:
-                WatchResultRepository.mark_saved(int(rid))
-                count += 1
+        ids = [int(rid) for rid in result_ids if rid]
+        saved, skipped = WatchResultRepository.mark_saved_batch(ids)
 
-        self.write({"code": 0, "msg": f"成功保存 {count} 条结果到数据仓库"})
+        if saved > 0:
+            msg = f"成功保存 {saved} 条结果到数据仓库"
+            if skipped > 0:
+                msg += f"（跳过 {skipped} 条重复/已保存）"
+        else:
+            msg = f"所有 {skipped} 条结果已存在或已保存，无需重复操作"
+
+        self.write({"code": 0, "msg": msg})

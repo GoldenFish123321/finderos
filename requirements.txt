@@ -1,1 +1,13 @@
+# 瞭望与问数系统 (DataFinderAgentOS) v0.2
+# =========================================
+# 核心依赖
 tornado>=6.4
+
+# 可选：如需异步 HTTP 客户端（提升 AI 对话并发性能）
+# aiohttp>=3.9
+
+# 说明：
+# - 项目主要使用 Python 标准库（sqlite3, urllib, hashlib, ssl 等）
+# - tornado 是唯一的必须外部依赖
+# - AI 模型对话通过 urllib.request 发起 HTTP 请求（纯标准库）
+# - 瞭望采集同样使用 urllib（零第三方爬虫依赖）

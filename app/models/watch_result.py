@@ -126,3 +126,63 @@ class WatchResultRepository:
                 "total": total, "saved": saved, "success": success,
                 "total_size": total_size, "source_count": source_count,
             }
+
+    @staticmethod
+    def check_url_exists(request_url: str) -> bool:
+        """Check if a URL already exists in watch_results (URL dedup)."""
+        if not request_url:
+            return False
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) as cnt FROM watch_results WHERE request_url = ?",
+                (request_url,)
+            ).fetchone()
+            return row["cnt"] > 0
+
+    @staticmethod
+    def create_if_not_exists(source_id: int, keyword: str, request_url: str,
+                              response_status: int = 0, response_size: int = 0,
+                              result_data: str = "") -> tuple:
+        """
+        Create a collection result if URL doesn't already exist.
+        Returns (new_id, is_new) — is_new is True if created, False if duplicate skipped.
+        """
+        if request_url and WatchResultRepository.check_url_exists(request_url):
+            return 0, False
+        new_id = WatchResultRepository.create(
+            source_id, keyword, request_url,
+            response_status, response_size, result_data
+        )
+        return new_id, True
+
+    @staticmethod
+    def mark_saved_batch(result_ids: list) -> tuple:
+        """
+        Batch mark results as saved to warehouse, with URL dedup.
+        Returns (saved_count, skipped_count).
+        """
+        saved = 0
+        skipped = 0
+        with get_db() as conn:
+            for rid in result_ids:
+                row = conn.execute(
+                    "SELECT request_url FROM watch_results WHERE id = ?", (rid,)
+                ).fetchone()
+                if not row:
+                    skipped += 1
+                    continue
+                # Check if already saved
+                current = conn.execute(
+                    "SELECT result_data FROM watch_results WHERE id = ?", (rid,)
+                ).fetchone()
+                if current and (current["result_data"] or "").startswith("SAVED:"):
+                    skipped += 1
+                    continue
+                # Mark as saved
+                conn.execute(
+                    "UPDATE watch_results SET result_data = 'SAVED:' || COALESCE(result_data, '') WHERE id = ?",
+                    (rid,),
+                )
+                saved += 1
+            conn.commit()
+        return saved, skipped

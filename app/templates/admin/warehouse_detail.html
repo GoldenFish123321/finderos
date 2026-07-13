@@ -31,7 +31,7 @@
         <div class="layui-card" style="margin-top:15px;">
             <div class="layui-card-header">响应内容预览</div>
             <div class="layui-card-body">
-                <pre style="max-height:500px;overflow:auto;background:#f5f5f5;padding:15px;border-radius:4px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-all;">{{ result['result_data'] }}</pre>
+                <pre style="max-height:500px;overflow:auto;padding:15px;border-radius:4px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-all;">{{ result['result_data'] or '[空]' }}</pre>
             </div>
         </div>
 
