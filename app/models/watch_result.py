@@ -113,4 +113,16 @@ class WatchResultRepository:
             saved = conn.execute(
                 "SELECT COUNT(*) as cnt FROM watch_results WHERE result_data LIKE 'SAVED:%'"
             ).fetchone()["cnt"]
-            return {"total": total, "saved": saved}
+            success = conn.execute(
+                "SELECT COUNT(*) as cnt FROM watch_results WHERE response_status = 200"
+            ).fetchone()["cnt"]
+            total_size = conn.execute(
+                "SELECT COALESCE(SUM(response_size), 0) as total FROM watch_results"
+            ).fetchone()["total"]
+            source_count = conn.execute(
+                "SELECT COUNT(DISTINCT source_id) as cnt FROM watch_results WHERE source_id IS NOT NULL"
+            ).fetchone()["cnt"]
+            return {
+                "total": total, "saved": saved, "success": success,
+                "total_size": total_size, "source_count": source_count,
+            }

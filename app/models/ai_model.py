@@ -172,4 +172,7 @@ class AiModelRepository:
             enabled = conn.execute(
                 "SELECT COUNT(*) as cnt FROM ai_models WHERE is_enabled = 1"
             ).fetchone()["cnt"]
-            return {"total": total, "enabled": enabled}
+            has_default = conn.execute(
+                "SELECT COUNT(*) as cnt FROM ai_models WHERE is_default = 1"
+            ).fetchone()["cnt"]
+            return {"total": total, "enabled": enabled, "has_default": has_default}

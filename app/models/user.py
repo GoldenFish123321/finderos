@@ -85,7 +85,9 @@ class UserRepository:
                 f"SELECT COUNT(*) as cnt FROM users {where}", params
             ).fetchone()["cnt"]
             rows = conn.execute(
-                f"SELECT * FROM users {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+                f"SELECT u.*, r.name as role_name FROM users u "
+                f"LEFT JOIN roles r ON u.role_id = r.id "
+                f"{where} ORDER BY u.id DESC LIMIT ? OFFSET ?",
                 (*params, page_size, (page - 1) * page_size),
             ).fetchall()
         return rows, total
