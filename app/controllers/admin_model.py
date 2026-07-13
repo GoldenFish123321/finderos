@@ -190,69 +190,89 @@ class ModelChatHandler(AdminBaseHandler):
         self.set_header("Connection", "keep-alive")
         self.set_header("X-Accel-Buffering", "no")
 
-        import urllib.request
+        import asyncio
+        import concurrent.futures
+
         total_tokens = 0
         api_success = False
+        is_mock = True  # 默认使用 Mock，真实 API 成功时改为 False
 
-        # 尝试真实 API 调用
+        # 尝试真实 API 调用（在线程池中执行，避免阻塞 Tornado 事件循环）
         if api_key:
-            try:
-                payload = json.dumps({
-                    "model": model_name,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                    "stream": True,
-                }).encode()
+            payload = json.dumps({
+                "model": model_name,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "stream": True,
+            }).encode()
 
-                req = urllib.request.Request(
-                    f"{api_base}/chat/completions",
-                    data=payload,
-                    headers={
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {api_key}",
-                    },
-                )
-                with urllib.request.urlopen(req, timeout=120) as resp:
-                    api_success = True
-                    content_chars = 0
-                    for line in resp:
-                        line = line.decode("utf-8", errors="replace").strip()
-                        if line.startswith("data: "):
-                            data_str = line[6:]
-                            if data_str == "[DONE]":
-                                self.write(f"data: [DONE]\n\n")
+            def _sync_stream_call():
+                """在线程池中执行的同步 HTTP 流式调用，返回 (lines, error)."""
+                import urllib.request
+                import urllib.error
+                lines = []
+                try:
+                    req = urllib.request.Request(
+                        f"{api_base}/chat/completions",
+                        data=payload,
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {api_key}",
+                        },
+                    )
+                    with urllib.request.urlopen(req, timeout=120) as resp:
+                        for line in resp:
+                            lines.append(line)
+                    return lines, None
+                except Exception as e:
+                    return lines, str(e)
+
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                lines, err = await loop.run_in_executor(pool, _sync_stream_call)
+
+            if err is None:
+                api_success = True
+                is_mock = False
+                content_chars = 0
+                for line in lines:
+                    line = line.decode("utf-8", errors="replace").strip()
+                    if line.startswith("data: "):
+                        data_str = line[6:]
+                        if data_str == "[DONE]":
+                            self.write(f"data: [DONE]\n\n")
+                            await self.flush()
+                            break
+                        try:
+                            chunk = json.loads(data_str)
+                            delta = chunk.get("choices", [{}])[0].get("delta", {})
+                            content = delta.get("content", "")
+                            if content:
+                                content_chars += len(content)
+                                self.write(
+                                    f"data: {json.dumps({'content': content})}\n\n"
+                                )
                                 await self.flush()
-                                break
-                            try:
-                                chunk = json.loads(data_str)
-                                delta = chunk.get("choices", [{}])[0].get("delta", {})
-                                content = delta.get("content", "")
-                                if content:
-                                    content_chars += len(content)
-                                    self.write(
-                                        f"data: {json.dumps({'content': content})}\n\n"
-                                    )
-                                    await self.flush()
-                                if "usage" in chunk and chunk["usage"]:
-                                    total_tokens = chunk["usage"].get(
-                                        "total_tokens", 0
-                                    )
-                            except json.JSONDecodeError:
-                                pass
-                    if total_tokens == 0 and content_chars > 0:
-                        total_tokens = max(1, content_chars // 2)
-            except Exception as e:
-                logger.warning(f"API 调用失败: {e}，回退到本地 Mock")
+                            if "usage" in chunk and chunk["usage"]:
+                                total_tokens = chunk["usage"].get(
+                                    "total_tokens", 0
+                                )
+                        except json.JSONDecodeError:
+                            pass
+                if total_tokens == 0 and content_chars > 0:
+                    total_tokens = max(1, content_chars // 2)
+            else:
+                logger.warning(f"API 调用失败: {err}，回退到本地 Mock")
 
         # 本地 Mock 回退（当 API key 未配置或调用失败时）
         if not api_success:
             total_tokens = await self._mock_stream_response(message, model)
             api_success = True
 
-        # 发送 token 统计
+        # 发送 token 统计（is_mock 反映本次对话是否实际使用了 Mock 回退）
         self.write(
-            f"event: stats\ndata: {json.dumps({'tokens': total_tokens, 'mock': not bool(api_key)})}\n\n"
+            f"event: stats\ndata: {json.dumps({'tokens': total_tokens, 'mock': is_mock})}\n\n"
         )
         await self.flush()
 
