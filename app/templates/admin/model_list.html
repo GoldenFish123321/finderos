@@ -383,10 +383,25 @@ function sendChat() {
     var buffer = '';
     var fullContent = '';
     var tokenCount = 0;
+    var pendingLine = '';
 
     xhr.onprogress = function() {
-        var newData = xhr.responseText.substring(buffer.length);
+        var newData = pendingLine + xhr.responseText.substring(buffer.length);
         buffer = xhr.responseText;
+        pendingLine = '';
+
+        // 处理跨 onprogress 事件被截断的行：保留末尾不完整行到下次
+        if (newData.length > 0 && newData.charAt(newData.length - 1) !== '\n') {
+            var lastNewline = newData.lastIndexOf('\n');
+            if (lastNewline >= 0) {
+                pendingLine = newData.substring(lastNewline + 1);
+                newData = newData.substring(0, lastNewline + 1);
+            } else {
+                pendingLine = newData;
+                return;
+            }
+        }
+
         var lines = newData.split('\n');
         var expectStats = false;
 
@@ -398,13 +413,13 @@ function sendChat() {
                 expectStats = false;
                 try {
                     var stats = JSON.parse(line.substring(6));
-                    tokenCount = stats.total || 0;
+                    tokenCount = stats.tokens || 0;
                 } catch(e) {}
                 continue;
             }
             if (line.startsWith('data: ')) {
-                var chunk = line.substring(6);
-                if (chunk === '[DONE]') {
+                var dataStr = line.substring(6);
+                if (dataStr === '[DONE]') {
                     // 完成
                     var typingEl = document.getElementById('typing-indicator');
                     if (typingEl) typingEl.remove();
@@ -418,7 +433,21 @@ function sendChat() {
                     input.focus();
                     return;
                 }
-                fullContent += chunk;
+                try {
+                    var parsed = JSON.parse(dataStr);
+                    if (parsed.error) {
+                        var typingEl2 = document.getElementById('typing-indicator');
+                        if (typingEl2) typingEl2.remove();
+                        messagesEl.insertAdjacentHTML('beforeend',
+                            '<div class="chat-message assistant"><div class="msg-avatar">🤖</div><div class="msg-bubble" style="color:var(--accent-red);">❌ ' + parsed.error + '</div></div>');
+                        input.disabled = false;
+                        document.getElementById('chat-send-btn').disabled = false;
+                        return;
+                    }
+                    fullContent += (parsed.content || '');
+                } catch(e) {
+                    // JSON 解析失败（可能是跨块断行），跳过
+                }
                 // 用 marked.js 渲染
                 updateAssistantBubble(fullContent);
             }
