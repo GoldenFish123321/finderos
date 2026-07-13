@@ -247,7 +247,7 @@
         <div class="result-grid" id="news-grid">
             {% if results %}
             {% for r in results %}
-            <div class="watch-result-card" data-rid="{{ r['id'] }}" onclick="toggleCard(this)">
+            <div class="watch-result-card" data-rid="{{ r['id'] }}">
                 <div class="card-select">✓</div>
                 <div class="card-title">
                     {% set parsed = None %}

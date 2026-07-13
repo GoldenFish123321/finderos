@@ -178,12 +178,15 @@ class WatchSaveHandler(AdminBaseHandler):
             result_data = result["result_data"] or ""
             if result_data.startswith("SAVED:"):
                 result_data = result_data[6:]  # 去掉前缀
-            # 尝试解析 JSON 提取标题/链接/摘要
+            # 尝试解析 JSON 提取标题/链接/摘要（兼容单个 dict 和 list 两种格式）
             items = []
             try:
                 items = json.loads(result_data)
             except (json.JSONDecodeError, TypeError):
                 pass
+            # 统一处理：单个 dict 包装为 list，list 直接使用
+            if isinstance(items, dict):
+                items = [items]
             if isinstance(items, list):
                 for item in items:
                     if isinstance(item, dict):
