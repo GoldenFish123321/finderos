@@ -17,12 +17,10 @@
                 {% end %}
             </td></tr>
             <tr><td>响应大小</td><td>
-                {% if result.get('response_size') %}
-                    {% if result['response_size'] > 1024 %}
-                        {{ "%.1f KB" % (result['response_size'] / 1024) }}
-                    {% else %}
-                        {{ result['response_size'] }} B
-                    {% end %}
+                {% if result['response_size'] and result['response_size'] > 1024 %}
+                    {{ "%.1f KB" % (result['response_size'] / 1024) }}
+                {% elif result['response_size'] %}
+                    {{ result['response_size'] }} B
                 {% else %}
                     0 B
                 {% end %}
