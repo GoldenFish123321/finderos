@@ -95,6 +95,10 @@
 </div>
 
 <!-- 隐藏的批量操作表单 -->
+<form id="form-delete" method="post" action="/admin/user/delete" style="display:none;">
+    {% module xsrf_form_html() %}
+    <input type="hidden" name="id" id="delete-id">
+</form>
 <form id="form-batch-delete" method="post" action="/admin/user/batch-delete" style="display:none;">
     {% module xsrf_form_html() %}
     <input type="hidden" name="ids" id="batch-delete-ids">
