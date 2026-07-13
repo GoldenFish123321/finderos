@@ -13,55 +13,66 @@ from app.controllers.base import BaseHandler
 from app.models.user import UserRepository
 from app.utils.security import write_audit_log
 
-# ========== 登录失败限速（内存级） ==========
-# 结构: {(ip, username): (failure_count, first_failure_timestamp)}
-_login_failures: dict = {}
 
+class LoginRateLimiter:
+    """登录频率限制器（内存级，支持独立作用域）。
 
-def _check_rate_limit(ip: str, username: str) -> tuple[bool, str]:
+    参考 OWASP 认证防护最佳实践，按 IP+用户名 组合进行失败计数。
+    超过阈值后锁定期内禁止该组合继续尝试登录。
+
+    使用示例:
+        limiter = LoginRateLimiter(scope="admin")
+        allowed, msg = limiter.check(ip, username)
+        if not allowed: ...
+        limiter.record_failure(ip, username)
+        limiter.clear(ip, username)
     """
-    检查登录频率限制。
-    返回 (允许登录, 错误消息)。
-    同一 IP+用户名组合在锁定期窗口内最多失败 N 次。
-    """
-    now = time.time()
-    key = (ip, username)
 
-    # 清理过期条目，防止内存泄漏
-    expired_keys = [k for k, (c, ts) in _login_failures.items()
-                    if now - ts > settings.LOGIN_LOCKOUT_SECONDS]
-    for k in expired_keys:
-        del _login_failures[k]
+    def __init__(self, scope: str = "default"):
+        self._scope = scope
+        self._failures: dict = {}  # {(ip, username): (count, first_ts)}
 
-    count, first_ts = _login_failures.get(key, (0, now))
+    def _cleanup_expired(self, now: float):
+        """清理所有过期的失败记录，防止内存泄漏。"""
+        lockout = settings.LOGIN_LOCKOUT_SECONDS
+        expired = [k for k, (_, ts) in self._failures.items() if now - ts > lockout]
+        for k in expired:
+            del self._failures[k]
 
-    # 窗口过期，重置
-    if now - first_ts > settings.LOGIN_LOCKOUT_SECONDS:
-        _login_failures.pop(key, None)
+    def check(self, ip: str, username: str) -> tuple[bool, str]:
+        """检查是否允许登录。返回 (允许, 错误消息)。"""
+        now = time.time()
+        self._cleanup_expired(now)
+        key = (ip, username)
+        count, first_ts = self._failures.get(key, (0, now))
+
+        if now - first_ts > settings.LOGIN_LOCKOUT_SECONDS:
+            self._failures.pop(key, None)
+            return True, ""
+
+        if count >= settings.LOGIN_MAX_FAILURES:
+            remaining = int(settings.LOGIN_LOCKOUT_SECONDS - (now - first_ts))
+            return False, f"登录失败次数过多，请 {max(remaining, 1)} 秒后再试"
+
         return True, ""
 
-    if count >= settings.LOGIN_MAX_FAILURES:
-        remaining = int(settings.LOGIN_LOCKOUT_SECONDS - (now - first_ts))
-        return False, f"登录失败次数过多，请 {max(remaining, 1)} 秒后再试"
+    def record_failure(self, ip: str, username: str):
+        """记录一次登录失败。"""
+        now = time.time()
+        key = (ip, username)
+        count, first_ts = self._failures.get(key, (0, now))
+        if now - first_ts > settings.LOGIN_LOCKOUT_SECONDS:
+            self._failures[key] = (1, now)
+        else:
+            self._failures[key] = (count + 1, first_ts)
 
-    return True, ""
-
-
-def _record_failure(ip: str, username: str):
-    """记录一次登录失败。"""
-    now = time.time()
-    key = (ip, username)
-    count, first_ts = _login_failures.get(key, (0, now))
-    # 窗口过期，重置计数
-    if now - first_ts > settings.LOGIN_LOCKOUT_SECONDS:
-        _login_failures[key] = (1, now)
-    else:
-        _login_failures[key] = (count + 1, first_ts)
+    def clear(self, ip: str, username: str):
+        """登录成功后清除失败记录。"""
+        self._failures.pop((ip, username), None)
 
 
-def _clear_failures(ip: str, username: str):
-    """登录成功后清除失败记录。"""
-    _login_failures.pop((ip, username), None)
+# 全局登录限速器实例
+login_limiter = LoginRateLimiter(scope="global")
 
 
 class LoginHandler(BaseHandler):
@@ -91,7 +102,7 @@ class LoginHandler(BaseHandler):
 
         # 频率限制检查
         client_ip = self.request.remote_ip or "0.0.0.0"
-        allowed, rate_limit_error = _check_rate_limit(client_ip, username)
+        allowed, rate_limit_error = login_limiter.check(client_ip, username)
         if not allowed:
             write_audit_log("LOGIN_BLOCKED", username, "rate_limit", rate_limit_error, client_ip)
             return self.render(
@@ -102,7 +113,7 @@ class LoginHandler(BaseHandler):
 
         # 验证用户
         if not UserRepository.verify_user(username, password):
-            _record_failure(client_ip, username)
+            login_limiter.record_failure(client_ip, username)
             write_audit_log("LOGIN_FAIL", username, "password", "密码错误", client_ip)
             return self.render(
                 "login.html",
@@ -111,7 +122,7 @@ class LoginHandler(BaseHandler):
             )
 
         # 登录成功：清除限速记录，设置安全 Cookie
-        _clear_failures(client_ip, username)
+        login_limiter.clear(client_ip, username)
         self.set_secure_cookie("username", username)
         write_audit_log("LOGIN_SUCCESS", username, "", "登录成功", client_ip)
         self._redirect_by_role(username)
