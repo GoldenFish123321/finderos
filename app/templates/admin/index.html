@@ -1,0 +1,77 @@
+{% extends "base_layout.html" %}
+
+{% block title %}{{ title }}{% end %}
+
+{% block admin_content %}
+<div class="layui-row layui-col-space12">
+    <div class="layui-col-md4">
+        <div class="layui-card">
+            <div class="layui-card-body stat-box">
+                <div class="stat-number">{{ user_count }}</div>
+                <div class="stat-label">系统用户数</div>
+                <div class="stat-desc">含管理员账号</div>
+            </div>
+        </div>
+    </div>
+    <div class="layui-col-md4">
+        <div class="layui-card">
+            <div class="layui-card-body stat-box">
+                <div class="stat-number">{{ role_count }}</div>
+                <div class="stat-label">角色数</div>
+                <div class="stat-desc">系统角色+自定义角色</div>
+            </div>
+        </div>
+    </div>
+    <div class="layui-col-md4">
+        <div class="layui-card">
+            <div class="layui-card-body stat-box">
+                <div class="stat-number">{{ func_count }}</div>
+                <div class="stat-label">功能模块数</div>
+                <div class="stat-desc">一级+二级功能</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Day6-2 新增统计 -->
+    <div class="layui-col-md4">
+        <div class="layui-card">
+            <div class="layui-card-body stat-box">
+                <div class="stat-number" style="color:#5FB878;">{{ source_count }}</div>
+                <div class="stat-label">瞭望源</div>
+                <div class="stat-desc">数据采集源配置</div>
+            </div>
+        </div>
+    </div>
+    <div class="layui-col-md4">
+        <div class="layui-card">
+            <div class="layui-card-body stat-box">
+                <div class="stat-number" style="color:#FFB800;">{{ result_count }}</div>
+                <div class="stat-label">采集结果</div>
+                <div class="stat-desc">成功 {{ result_stats['success'] }} 条</div>
+            </div>
+        </div>
+    </div>
+    <div class="layui-col-md4">
+        <div class="layui-card">
+            <div class="layui-card-body stat-box">
+                <div class="stat-number" style="color:#FF5722;">{{ model_count }}</div>
+                <div class="stat-label">AI模型</div>
+                <div class="stat-desc">已启用 {{ model_stats['enabled'] }} 个</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="layui-col-md12">
+        <div class="layui-card">
+            <div class="layui-card-header">👋 欢迎使用管理后台</div>
+            <div class="layui-card-body">
+                <p>欢迎回来，<strong>{{ username }}</strong>！</p>
+                <p style="color:#666;margin-top:10px;">
+                    瞭望与问数系统（DataFinderAgentOS）v0.2 是一个数据查询与分析平台。
+                    支持权限管理、瞭望采集、瞭源管理、数据仓库和模型引擎。
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% end %}

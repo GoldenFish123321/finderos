@@ -1,0 +1,91 @@
+{% extends "base_layout.html" %}
+
+{% block title %}{{ title }}{% end %}
+
+{% block admin_content %}
+<div class="layui-card">
+    <div class="layui-card-header">菜单管理 — 角色菜单预览</div>
+    <div class="layui-card-body">
+        <!-- 角色选择 -->
+        <div class="search-bar">
+            <form method="get" action="/admin/menu" style="display:flex;gap:10px;align-items:center;">
+                <label>选择角色：</label>
+                <select name="role_id" lay-search="" onchange="this.form.submit()">
+                    {% for r in roles %}
+                    <option value="{{ r['id'] }}" {% if selected_role_id == str(r['id']) %}selected{% end %}>
+                        {{ r['name'] }}
+                    </option>
+                    {% end %}
+                </select>
+            </form>
+        </div>
+
+        <!-- 菜单预览 -->
+        {% if selected_role %}
+        <div class="layui-row">
+            <div class="layui-col-md6">
+                <div class="layui-card">
+                    <div class="layui-card-header">
+                        {{ selected_role["name"] }} — 菜单预览
+                    </div>
+                    <div class="layui-card-body" style="background:#2F4056;min-height:300px;">
+                        {% if menu_tree %}
+                        <ul class="layui-nav layui-nav-tree" style="background:transparent;">
+                            {% for item in menu_tree %}
+                            <li class="layui-nav-item layui-nav-itemed">
+                                <a href="javascript:;">
+                                    {% if item.get("icon") %}
+                                    <i class="layui-icon {{ item['icon'] }}"></i> 
+                                    {% end %}
+                                    {{ item["title"] }}
+                                </a>
+                                {% if item.get("children") %}
+                                <dl class="layui-nav-child">
+                                    {% for child in item["children"] %}
+                                    <dd {% if child.get("href") %}data-href="{{ child['href'] }}"{% end %}>
+                                        <a href="javascript:;">
+                                            {% if child.get("icon") %}
+                                            <i class="layui-icon {{ child['icon'] }}"></i> 
+                                            {% end %}
+                                            {{ child["title"] }}
+                                        </a>
+                                    </dd>
+                                    {% end %}
+                                </dl>
+                                {% end %}
+                            </li>
+                            {% end %}
+                        </ul>
+                        {% else %}
+                        <p style="color:#a7b1c2;text-align:center;padding:40px;">该角色暂无菜单</p>
+                        {% end %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="layui-col-md6">
+                <div class="layui-card">
+                    <div class="layui-card-header">菜单结构 (JSON)</div>
+                    <div class="layui-card-body">
+                        <pre style="background:#f5f5f5;padding:15px;border-radius:4px;overflow:auto;max-height:300px;font-size:12px;">{% raw json_encode(menu_tree) %}</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <p style="text-align:center;color:#999;padding:40px;">请选择一个角色查看其菜单</p>
+        {% end %}
+    </div>
+</div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+layui.use(['element', 'form'], function(){
+    var element = layui.element;
+    var form = layui.form;
+    form.render('select');
+    element.render('nav');
+});
+</script>
+{% end %}

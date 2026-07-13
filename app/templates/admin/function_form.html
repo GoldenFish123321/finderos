@@ -1,0 +1,72 @@
+{% extends "base_layout.html" %}
+
+{% block title %}{{ title }}{% end %}
+
+{% block admin_content %}
+<div class="layui-card">
+    <div class="layui-card-header">{{ "编辑功能" if func else "新增功能" }}</div>
+    <div class="layui-card-body" style="max-width:500px;">
+        <form class="layui-form" method="post" action="/admin/function/edit">
+            {% module xsrf_form_html() %}
+            {% if func %}
+            <input type="hidden" name="id" value="{{ func['id'] }}">
+            {% end %}
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">功能名称</label>
+                <div class="layui-input-block">
+                    <input type="text" name="name" value="{{ func['name'] if func else '' }}" 
+                           required lay-verify="required" placeholder="如：用户管理" class="layui-input">
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">图标</label>
+                <div class="layui-input-block">
+                    <input type="text" name="icon" value="{{ func['icon'] if func else '' }}" 
+                           placeholder="如：layui-icon-user" class="layui-input">
+                    <div class="layui-form-mid layui-word-aux">Layui 图标类名，参考 <a href="https://layui.dev/docs/2/icon/" target="_blank">图标文档</a></div>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">路由地址</label>
+                <div class="layui-input-block">
+                    <input type="text" name="route_path" value="{{ func['route_path'] if func else '' }}" 
+                           placeholder="如：/admin/user" class="layui-input">
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">父级功能</label>
+                <div class="layui-input-block">
+                    <select name="parent_id">
+                        <option value="">一级功能（顶级）</option>
+                        {% for p in parents %}
+                        <option value="{{ p['id'] }}" 
+                            {% if func and func['parent_id'] == p['id'] %}selected{% end %}>
+                            {{ p['name'] }}
+                        </option>
+                        {% end %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">排序</label>
+                <div class="layui-input-block">
+                    <input type="number" name="sort_order" value="{{ func['sort_order'] if func else '0' }}" 
+                           class="layui-input" style="width:100px;">
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <div class="layui-input-block">
+                    <button type="submit" class="layui-btn" lay-submit lay-filter="save">保存</button>
+                    <a href="/admin/function" class="layui-btn layui-btn-primary">返回</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% end %}

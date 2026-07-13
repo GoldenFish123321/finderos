@@ -1,0 +1,93 @@
+{% extends "base_layout.html" %}
+
+{% block title %}{{ title }}{% end %}
+
+{% block admin_content %}
+<div class="layui-card">
+    <div class="layui-card-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <span><i class="layui-icon layui-icon-template-1"></i> 功能管理</span>
+        <span id="msg-tip" style="color:#5FB878;"></span>
+    </div>
+    <div class="layui-card-body">
+        <div class="search-bar">
+            <div style="flex:1;">管理系统所有功能模块，支持一级+二级树形结构。禁用功能将自动移除所有角色的该权限。</div>
+            <a href="/admin/function/add" class="layui-btn layui-btn-sm"><i class="layui-icon layui-icon-add-1"></i> 新增功能</a>
+        </div>
+
+        <table class="layui-table" lay-skin="line">
+            <thead>
+                <tr>
+                    <th style="width:60px;">ID</th>
+                    <th style="width:50px;">图标</th>
+                    <th>功能名称</th>
+                    <th>路由地址</th>
+                    <th style="width:60px;">层级</th>
+                    <th style="width:50px;">排序</th>
+                    <th style="width:70px;">状态</th>
+                    <th style="width:150px;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in functions %}
+                <tr>
+                    <td>{{ f["id"] }}</td>
+                    <td><i class="layui-icon {{ f['icon'] }}" style="font-size:20px;{% if f['is_enabled'] == 0 %}color:#ccc;{% end %}"></i></td>
+                    <td>
+                        {% if f["parent_id"] %}
+                        <span style="padding-left:20px;">├─</span>
+                        {% end %}
+                        {{ f["name"] }}
+                    </td>
+                    <td><code style="background:#f5f5f5;padding:2px 6px;border-radius:3px;">{{ f["route_path"] or "—" }}</code></td>
+                    <td>{{ "二级" if f["parent_id"] else "一级" }}</td>
+                    <td>{{ f["sort_order"] }}</td>
+                    <td>
+                        {% if f["is_enabled"] %}
+                        <span class="layui-badge layui-bg-green">启用</span>
+                        {% else %}
+                        <span class="layui-badge">禁用</span>
+                        {% end %}
+                    </td>
+                    <td>
+                        <div class="layui-btn-group">
+                            <a href="/admin/function/edit?id={{ f['id'] }}" class="layui-btn layui-btn-xs layui-btn-normal"><i class="layui-icon layui-icon-edit"></i></a>
+                            <button class="layui-btn layui-btn-xs {% if f['is_enabled'] %}layui-btn-warm{% else %}layui-btn-normal{% end %} btn-toggle" data-id="{{ f['id'] }}" title="{{ '禁用' if f['is_enabled'] else '启用' }}">
+                                <i class="layui-icon {% if f['is_enabled'] %}layui-icon-pause{% else %}layui-icon-play{% end %}"></i>
+                            </button>
+                            <button class="layui-btn layui-btn-xs layui-btn-danger btn-delete" data-id="{{ f['id'] }}" data-name="{{ f['name'] }}">
+                                <i class="layui-icon layui-icon-delete"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% end %}
+            </tbody>
+        </table>
+
+        <div style="text-align:center;"><div id="pagination"></div></div>
+    </div>
+</div>
+
+<form id="form-toggle" method="post" action="/admin/function/toggle" style="display:none;">
+    {% module xsrf_form_html() %}
+    <input type="hidden" name="id" id="toggle-id">
+</form>
+<form id="form-delete" method="post" action="/admin/function/delete" style="display:none;">
+    {% module xsrf_form_html() %}
+    <input type="hidden" name="id" id="delete-id">
+</form>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+initListPage({
+    url: '/admin/function',
+    hasSearch: false,
+    hasToggle: true,
+    hasDelete: true,
+    deleteConfirmText: '确定删除功能 <b>{name}</b> 吗？子功能将一并删除。',
+    total: {{ total }},
+    page: {{ page }}
+});
+</script>
+{% end %}

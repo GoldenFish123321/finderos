@@ -1,0 +1,121 @@
+{% extends "base_layout.html" %}
+
+{% block admin_content %}
+<div class="layui-card">
+    <div class="layui-card-header"><i class="layui-icon layui-icon-read"></i> 瞭源管理</div>
+    <div class="layui-card-body">
+        <!-- 搜索区 -->
+        <div class="search-bar">
+            <input type="text" class="layui-input" id="search-kw" placeholder="搜索瞭望源名称..." value="{{ keyword }}">
+            <button class="layui-btn layui-btn-normal" id="btn-search">
+                <i class="layui-icon layui-icon-search"></i> 搜索
+            </button>
+            <a href="/admin/watch/source/add" class="layui-btn">
+                <i class="layui-icon layui-icon-add-1"></i> 新增瞭望源
+            </a>
+            {% if msg %}
+            <span class="msg-tip">{{ msg }}</span>
+            {% end %}
+        </div>
+
+        <!-- 列表 -->
+        <table class="layui-table" lay-size="sm">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>名称</th>
+                    <th>描述</th>
+                    <th>URL模板</th>
+                    <th>状态</th>
+                    <th>排序</th>
+                    <th>创建时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if sources %}
+                {% for s in sources %}
+                <tr>
+                    <td>{{ s['id'] }}</td>
+                    <td><b>{{ s['name'] }}</b></td>
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                        title="{{ s['description'] }}">{{ s['description'] }}</td>
+                    <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                        title="{{ s['url_template'] }}"><code>{{ s['url_template'][:60] }}...</code></td>
+                    <td>
+                        {% if s['is_enabled'] == 1 %}
+                        <span class="layui-badge layui-bg-green">启用</span>
+                        {% else %}
+                        <span class="layui-badge">禁用</span>
+                        {% end %}
+                    </td>
+                    <td>{{ s['sort_order'] }}</td>
+                    <td>{{ s['created_at'][:10] }}</td>
+                    <td>
+                        <div class="layui-btn-group">
+                            <a href="/admin/watch/source/edit?id={{ s['id'] }}" class="layui-btn layui-btn-xs layui-btn-normal">
+                                <i class="layui-icon layui-icon-edit"></i> 编辑
+                            </a>
+                            <form action="/admin/watch/source/toggle" method="post" style="display:inline;">
+                                {% module xsrf_form_html() %}
+                                <input type="hidden" name="id" value="{{ s['id'] }}">
+                                <button type="submit" class="layui-btn layui-btn-xs layui-btn-warm">
+                                    {{ '禁用' if s['is_enabled'] == 1 else '启用' }}
+                                </button>
+                            </form>
+                            <form action="/admin/watch/source/delete" method="post" style="display:inline;">
+                                {% module xsrf_form_html() %}
+                                <input type="hidden" name="id" value="{{ s['id'] }}">
+                                <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger"
+                                        onclick="return confirm('确定删除瞭望源「{{ s['name'] }}」吗？')">
+                                    <i class="layui-icon layui-icon-delete"></i> 删除
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% end %}
+                {% else %}
+                <tr><td colspan="8" class="empty-state">
+                    <i class="layui-icon layui-icon-face-surprised"></i><p>暂无瞭望源数据</p>
+                </td></tr>
+                {% end %}
+            </tbody>
+        </table>
+
+        <!-- 分页 -->
+        {% if total_pages > 1 %}
+        <div style="text-align:center;">
+            <div id="src-pagination"></div>
+        </div>
+        {% end %}
+    </div>
+</div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+layui.use(['laypage', 'jquery'], function(){
+    var laypage = layui.laypage, $ = layui.$;
+    {% if total_pages > 1 %}
+    laypage.render({
+        elem: 'src-pagination', count: {{ total }}, limit: 20, curr: {{ page }},
+        layout: ['prev', 'page', 'next', 'skip', 'count'],
+        jump: function(obj, first){
+            if (!first) {
+                var url = '/admin/watch/source?page=' + obj.curr;
+                var kw = $('#search-kw').val();
+                if (kw) url += '&keyword=' + encodeURIComponent(kw);
+                location.href = url;
+            }
+        }
+    });
+    {% end %}
+    $('#btn-search').click(function(){
+        var kw = $('#search-kw').val();
+        location.href = '/admin/watch/source' + (kw ? '?keyword=' + encodeURIComponent(kw) : '');
+    });
+    $('#search-kw').keydown(function(e){ if (e.keyCode === 13) $('#btn-search').click(); });
+});
+</script>
+{% end %}

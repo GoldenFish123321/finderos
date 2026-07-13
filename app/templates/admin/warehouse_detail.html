@@ -1,0 +1,45 @@
+{% extends "base_layout.html" %}
+
+{% block admin_content %}
+<div class="layui-card">
+    <div class="layui-card-header"><i class="layui-icon layui-icon-read"></i> 采集详情</div>
+    <div class="layui-card-body">
+        <table class="layui-table">
+            <tr><td width="120">ID</td><td>{{ result['id'] }}</td></tr>
+            <tr><td>瞭望源</td><td>{{ result['source_name'] or '未知' }}</td></tr>
+            <tr><td>关键词</td><td><b>{{ result['keyword'] }}</b></td></tr>
+            <tr><td>请求URL</td><td><code style="word-break:break-all;">{{ result['request_url'] }}</code></td></tr>
+            <tr><td>响应状态</td><td>
+                {% if result['response_status'] == 200 %}
+                <span class="layui-badge layui-bg-green">200 OK</span>
+                {% else %}
+                <span class="layui-badge layui-bg-orange">{{ result['response_status'] }}</span>
+                {% end %}
+            </td></tr>
+            <tr><td>响应大小</td><td>
+                {% if result.get('response_size') %}
+                    {% if result['response_size'] > 1024 %}
+                        {{ "%.1f KB" % (result['response_size'] / 1024) }}
+                    {% else %}
+                        {{ result['response_size'] }} B
+                    {% end %}
+                {% else %}
+                    0 B
+                {% end %}
+            </td></tr>
+            <tr><td>采集时间</td><td>{{ result['created_at'] }}</td></tr>
+        </table>
+
+        <div class="layui-card" style="margin-top:15px;">
+            <div class="layui-card-header">响应内容预览</div>
+            <div class="layui-card-body">
+                <pre style="max-height:500px;overflow:auto;background:#f5f5f5;padding:15px;border-radius:4px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-all;">{{ result['result_data'] }}</pre>
+            </div>
+        </div>
+
+        <div style="margin-top:15px;">
+            <a href="/admin/warehouse" class="layui-btn layui-btn-primary">返回列表</a>
+        </div>
+    </div>
+</div>
+{% end %}

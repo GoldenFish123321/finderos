@@ -1,0 +1,36 @@
+/**
+ * base.css — 瞭望与问数系统基础样式
+ */
+
+/* 全局重置 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    color: #333;
+    background: #f0f2f5;
+}
+
+/* 链接 */
+a {
+    color: #1E9FFF;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+a:hover {
+    color: #5FB878;
+}
+
+/* 通用辅助 */
+.text-center { text-align: center; }
+.text-right  { text-align: right; }
+.clearfix::after {
+    content: "";
+    display: table;
+    clear: both;
+}

@@ -1,0 +1,179 @@
+{% extends "base_layout.html" %}
+
+{% block admin_content %}
+<div class="layui-card">
+    <div class="layui-card-header"><i class="layui-icon layui-icon-component"></i> 数据仓库</div>
+    <div class="layui-card-body">
+        <!-- 统计卡片 -->
+        <div class="layui-row layui-col-space15" style="margin-bottom:15px;">
+            <div class="layui-col-md3">
+                <div class="stat-box" style="background:#f6f8fa;border-radius:4px;">
+                    <div class="stat-number" style="color:#1E9FFF;">{{ stats['total'] }}</div>
+                    <div class="stat-label">采集总数</div>
+                </div>
+            </div>
+            <div class="layui-col-md3">
+                <div class="stat-box" style="background:#f6f8fa;border-radius:4px;">
+                    <div class="stat-number" style="color:#5FB878;">{{ stats['success'] }}</div>
+                    <div class="stat-label">成功次数</div>
+                </div>
+            </div>
+            <div class="layui-col-md3">
+                <div class="stat-box" style="background:#f6f8fa;border-radius:4px;">
+                    <div class="stat-number" style="color:#FFB800;">
+                        {{ "%.1f" % (stats['total_size'] / 1024 / 1024) if stats['total_size'] > 1048576 else "%.1f" % (stats['total_size'] / 1024) }}
+                    </div>
+                    <div class="stat-label">
+                        {{ 'MB' if stats['total_size'] > 1048576 else 'KB' }}
+                    </div>
+                </div>
+            </div>
+            <div class="layui-col-md3">
+                <div class="stat-box" style="background:#f6f8fa;border-radius:4px;">
+                    <div class="stat-number" style="color:#FF5722;">{{ stats['source_count'] }}</div>
+                    <div class="stat-label">数据来源数</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 搜索区 -->
+        <div class="search-bar">
+            <input type="text" class="layui-input" id="search-kw" placeholder="搜索关键词..." value="{{ keyword }}">
+            <button class="layui-btn layui-btn-normal" id="btn-search">
+                <i class="layui-icon layui-icon-search"></i> 搜索
+            </button>
+            <button class="layui-btn layui-btn-danger layui-btn-sm" id="btn-batch-delete" style="margin-left:auto;">
+                <i class="layui-icon layui-icon-delete"></i> 批量删除
+            </button>
+            <span class="msg-tip">{{ handler.get_query_argument('msg', '') }}</span>
+        </div>
+
+        <!-- 列表 -->
+        <table class="layui-table" lay-size="sm">
+            <thead>
+                <tr>
+                    <th width="40"><input type="checkbox" id="check-all" lay-skin="primary" title=""></th>
+                    <th>ID</th>
+                    <th>瞭望源</th>
+                    <th>关键词</th>
+                    <th>状态码</th>
+                    <th>大小</th>
+                    <th>时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if results %}
+                {% for r in results %}
+                <tr>
+                    <td><input type="checkbox" name="wh_ids" value="{{ r['id'] }}" lay-skin="primary"></td>
+                    <td>{{ r['source_name'] or '未知' }}</td>
+                    <td><b>{{ r['keyword'] }}</b></td>
+                    <td>
+                        {% if r['response_status'] == 200 %}
+                        <span class="layui-badge layui-bg-green">200</span>
+                        {% elif r['response_status'] == 0 %}
+                        <span class="layui-badge">失败</span>
+                        {% else %}
+                        <span class="layui-badge layui-bg-orange">{{ r['response_status'] }}</span>
+                        {% end %}
+                    </td>
+                    <td>{{ "%.1f" % (r['response_size'] / 1024) if r['response_size'] > 1024 else str(r['response_size']) + 'B' }}{{ 'KB' if r['response_size'] > 1024 else '' }}</td>
+                    <td>{{ r['created_at'] }}</td>
+                    <td>
+                        <div class="layui-btn-group">
+                            <a href="/admin/warehouse/detail?id={{ r['id'] }}" class="layui-btn layui-btn-xs layui-btn-normal">
+                                <i class="layui-icon layui-icon-read"></i> 详情
+                            </a>
+                            <form action="/admin/warehouse/delete" method="post" style="display:inline;">
+                                {% module xsrf_form_html() %}
+                                <input type="hidden" name="id" value="{{ r['id'] }}">
+                                <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger"
+                                        onclick="return confirm('确定删除吗？')">
+                                    <i class="layui-icon layui-icon-delete"></i> 删除
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% end %}
+                {% else %}
+                <tr><td colspan="8" class="empty-state">
+                    <i class="layui-icon layui-icon-face-surprised"></i><p>暂无采集数据</p>
+                </td></tr>
+                {% end %}
+            </tbody>
+        </table>
+
+        {% if total_pages > 1 %}
+        <div style="text-align:center;"><div id="wh-pagination"></div></div>
+        {% end %}
+    </div>
+</div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+var xsrf = '{% raw xsrf_token %}';
+
+layui.use(['laypage', 'form', 'jquery'], function(){
+    var laypage = layui.laypage, form = layui.form, $ = layui.$;
+    {% if total_pages > 1 %}
+    laypage.render({
+        elem: 'wh-pagination', count: {{ total }}, limit: 20, curr: {{ page }},
+        layout: ['prev', 'page', 'next', 'skip', 'count'],
+        jump: function(obj, first){
+            if (!first) {
+                var url = '/admin/warehouse?page=' + obj.curr;
+                var kw = $('#search-kw').val();
+                if (kw) url += '&keyword=' + encodeURIComponent(kw);
+                location.href = url;
+            }
+        }
+    });
+    {% end %}
+    $('#btn-search').click(function(){
+        var kw = $('#search-kw').val();
+        location.href = '/admin/warehouse' + (kw ? '?keyword=' + encodeURIComponent(kw) : '');
+    });
+    $('#search-kw').keydown(function(e){ if (e.keyCode === 13) $('#btn-search').click(); });
+
+    // 全选
+    form.on('checkbox', function(data){
+        if (data.elem.id === 'check-all') {
+            var checked = data.elem.checked;
+            $('input[name="wh_ids"]').each(function(){ this.checked = checked; });
+            form.render('checkbox');
+        }
+    });
+
+    // 批量删除
+    $('#btn-batch-delete').click(function(){
+        var ids = [];
+        $('input[name="wh_ids"]:checked').each(function(){ ids.push($(this).val()); });
+        if (ids.length === 0) {
+            layer.msg('请先勾选要删除的记录', {icon: 2});
+            return;
+        }
+        layer.confirm('确定删除选中的 ' + ids.length + ' 条记录吗？', function(index){
+            layer.close(index);
+            var $btn = $('#btn-batch-delete');
+            $btn.prop('disabled', true);
+            $.post('/admin/warehouse/batch-delete', {ids: ids.join(','), _xsrf: xsrf}, function(res){
+                $btn.prop('disabled', false);
+                if (res.code === 0) {
+                    layer.msg(res.msg, {icon: 1}, function(){ location.reload(); });
+                } else {
+                    layer.msg(res.msg, {icon: 2});
+                }
+            }, 'json').fail(function(){
+                $btn.prop('disabled', false);
+                layer.msg('请求失败', {icon: 2});
+            });
+        });
+    });
+
+    form.render('checkbox');
+});
+</script>
+{% end %}

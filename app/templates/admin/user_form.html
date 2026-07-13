@@ -1,0 +1,57 @@
+{% extends "base_layout.html" %}
+
+{% block title %}{{ title }}{% end %}
+
+{% block admin_content %}
+<div class="layui-card">
+    <div class="layui-card-header">{{ "编辑用户" if user else "新增用户" }}</div>
+    <div class="layui-card-body" style="max-width:500px;">
+        <form class="layui-form" method="post" action="/admin/user/edit" id="user-form">
+            {% module xsrf_form_html() %}
+            {% if user %}
+            <input type="hidden" name="id" value="{{ user['id'] }}">
+            {% end %}
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">用户名</label>
+                <div class="layui-input-block">
+                    <input type="text" name="username" value="{{ user['username'] if user else '' }}" 
+                           required lay-verify="required" placeholder="请输入用户名" class="layui-input">
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">密码</label>
+                <div class="layui-input-block">
+                    <input type="password" name="password" id="password-input" 
+                           placeholder="{{ '留空则不修改' if user else '请输入密码' }}" class="layui-input"
+                           {{ '' if user else 'required' }}>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">角色</label>
+                <div class="layui-input-block">
+                    <select name="role_id" lay-search="">
+                        <option value="">未分配角色</option>
+                        {% for r in roles %}
+                        <option value="{{ r['id'] }}" 
+                            {% if user and user['role_id'] == r['id'] %}selected{% end %}>
+                            {{ r['name'] }}
+                        </option>
+                        {% end %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <div class="layui-input-block">
+                    <button type="submit" class="layui-btn" lay-submit lay-filter="save">保存</button>
+                    <a href="/admin/user" class="layui-btn layui-btn-primary">返回</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% end %}
+

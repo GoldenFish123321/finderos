@@ -1,0 +1,136 @@
+{% extends "base_layout.html" %}
+
+{% block admin_content %}
+<div class="layui-card">
+    <div class="layui-card-header">
+        <i class="layui-icon layui-icon-util"></i> {{ '编辑模型' if model else '新增模型' }}
+    </div>
+    <div class="layui-card-body">
+        <form class="layui-form" action="/admin/model/{{ 'edit' if model else 'add' }}" method="post"
+              style="max-width:700px;">
+            {% module xsrf_form_html() %}
+            {% if model %}
+            <input type="hidden" name="id" value="{{ model['id'] }}">
+            {% end %}
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">模型名称</label>
+                <div class="layui-input-block">
+                    <input type="text" name="name" class="layui-input" required
+                           value="{{ model['name'] if model else '' }}" placeholder="例如：GPT-4o-mini">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">提供商</label>
+                <div class="layui-input-block">
+                    <select name="provider">
+                        {% for p in providers %}
+                        <option value="{{ p }}" {% if model and model['provider'] == p %}selected{% end %}>
+                            {{ p }}
+                        </option>
+                        {% end %}
+                    </select>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">API Base URL</label>
+                <div class="layui-input-block">
+                    <input type="text" name="api_base" class="layui-input"
+                           value="{{ model['api_base'] if model else '' }}" placeholder="https://api.openai.com/v1">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">API Key</label>
+                <div class="layui-input-block">
+                    <input type="password" name="api_key" class="layui-input"
+                           value="{{ model['api_key'] if model else '' }}" placeholder="sk-...">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">Model Name</label>
+                <div class="layui-input-block">
+                    <input type="text" name="model_name" class="layui-input"
+                           value="{{ model['model_name'] if model else '' }}" placeholder="gpt-4o-mini">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">分类</label>
+                <div class="layui-input-block">
+                    <select name="category">
+                        {% for c in categories %}
+                        <option value="{{ c }}" {% if model and model['category'] == c %}selected{% end %}>
+                            {{ c }}
+                        </option>
+                        {% end %}
+                    </select>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">System Prompt</label>
+                <div class="layui-input-block">
+                    <textarea name="system_prompt" class="layui-textarea" rows="3"
+                              placeholder="系统提示词...">{{ model['system_prompt'] if model else '' }}</textarea>
+                </div>
+            </div>
+
+            <fieldset class="layui-elem-field" style="margin-top:15px;">
+                <legend>参数设置</legend>
+                <div class="layui-field-box">
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">Temperature</label>
+                        <div class="layui-input-block">
+                            <input type="number" name="temperature" class="layui-input" style="width:120px;"
+                                   step="0.1" min="0" max="2"
+                                   value="{{ model['temperature'] if model else '0.7' }}">
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">Top P</label>
+                        <div class="layui-input-block">
+                            <input type="number" name="top_p" class="layui-input" style="width:120px;"
+                                   step="0.1" min="0" max="1"
+                                   value="{{ model['top_p'] if model else '1.0' }}">
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">Top K</label>
+                        <div class="layui-input-block">
+                            <input type="number" name="top_k" class="layui-input" style="width:120px;"
+                                   value="{{ model['top_k'] if model else '50' }}">
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">Max Tokens</label>
+                        <div class="layui-input-block">
+                            <input type="number" name="max_tokens" class="layui-input" style="width:120px;"
+                                   value="{{ model['max_tokens'] if model else '4096' }}">
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">Context Size</label>
+                        <div class="layui-input-block">
+                            <input type="number" name="context_size" class="layui-input" style="width:120px;"
+                                   value="{{ model['context_size'] if model else '8192' }}">
+                        </div>
+                    </div>
+                </div>
+            </fieldset>
+
+            <div class="layui-form-item" style="margin-top:20px;">
+                <div class="layui-input-block">
+                    <button type="submit" class="layui-btn layui-btn-normal">
+                        <i class="layui-icon layui-icon-ok"></i> 保存
+                    </button>
+                    <a href="/admin/model" class="layui-btn layui-btn-primary">返回</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+layui.use('form', function(){});
+</script>
+{% end %}

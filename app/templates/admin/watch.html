@@ -1,0 +1,383 @@
+{% extends "base_layout.html" %}
+
+{% block admin_content %}
+<style>
+/* ===== 瞭望采集三区布局 ===== */
+.watch-layout { display: flex; gap: 15px; height: calc(100vh - 130px); }
+
+/* A区：搜索采集区 — 居中排列 */
+.watch-zone-a { width: 320px; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px; }
+.watch-zone-a .layui-card { flex: 1; }
+.watch-zone-a .layui-card-body {
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+    text-align: center;
+}
+.watch-zone-a .layui-input { width: 100%; text-align: center; }
+.watch-zone-a .layui-btn-fluid { width: 100%; }
+
+/* B区：瞭望源规则列表 — 优化布局，避免挤压 */
+.watch-zone-b { width: 240px; flex-shrink: 0; overflow-y: auto; }
+.watch-zone-b .source-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; border-bottom: 1px solid #f0f0f0;
+    cursor: pointer; transition: background 0.2s;
+}
+.watch-zone-b .source-item:hover { background: #f6f8fa; }
+.watch-zone-b .source-item.active { background: #e6f7ff; border-left: 3px solid #1890ff; }
+.watch-zone-b .source-info { flex: 1; min-width: 0; }
+.watch-zone-b .source-name { font-size: 13px; color: #333; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.watch-zone-b .source-params { font-size: 11px; color: #999; margin-top: 2px; }
+.watch-zone-b .source-toggle { flex-shrink: 0; }
+
+/* C区：采集结果展示 — 新闻列表式 */
+.watch-zone-c { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+.watch-zone-c .layui-card { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.watch-zone-c .layui-card-body { flex: 1; overflow-y: auto; }
+
+.news-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 0; border-bottom: 1px solid #f0f0f0; margin-bottom: 10px;
+}
+.news-toolbar .toolbar-left { display: flex; align-items: center; gap: 10px; }
+.news-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px; border-bottom: 1px solid #f5f5f5;
+    transition: background 0.2s;
+}
+.news-item:hover { background: #fafbfc; }
+.news-item .news-checkbox { flex-shrink: 0; margin-top: 3px; }
+.news-item .news-content { flex: 1; min-width: 0; }
+.news-item .news-title { font-size: 15px; font-weight: 500; color: #1a1a2e; margin-bottom: 4px; line-height: 1.4; }
+.news-item .news-title a { color: #1a1a2e; text-decoration: none; }
+.news-item .news-title a:hover { color: #1E9FFF; }
+.news-item .news-summary { font-size: 12px; color: #888; line-height: 1.6; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.news-item .news-meta { font-size: 11px; color: #bbb; }
+.news-item .news-meta span { margin-right: 12px; }
+
+/* 采集进度 */
+.collect-progress { display: none; padding: 10px; text-align: center; }
+.collect-progress .layui-icon { font-size: 24px; color: #1E9FFF; animation: spin 1s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* 空状态 */
+.news-empty { text-align: center; padding: 60px 20px; color: #ccc; }
+.news-empty .layui-icon { font-size: 64px; }
+.news-empty p { font-size: 14px; margin-top: 10px; }
+
+/* 分页 */
+.watch-pagination-wrap { text-align: center; padding: 15px 0; }
+</style>
+
+<div class="watch-layout">
+    <!-- A区：搜索采集区 -->
+    <div class="watch-zone-a">
+        <div class="layui-card">
+            <div class="layui-card-header"><i class="layui-icon layui-icon-search"></i> 瞭望采集</div>
+            <div class="layui-card-body">
+                <input type="text" id="collect-keyword" class="layui-input" placeholder="输入关键词进行采集..."
+                       value="{{ keyword }}" autocomplete="off">
+                <button class="layui-btn layui-btn-normal layui-btn-fluid" id="btn-collect">
+                    <i class="layui-icon layui-icon-search"></i> 立即采集
+                </button>
+                <div class="collect-progress" id="collect-progress">
+                    <i class="layui-icon layui-icon-loading layui-anim layui-anim-rotate layui-anim-loop"></i>
+                    <span>采集中，请稍后...</span>
+                </div>
+                <div id="collect-result" style="font-size:12px;color:#5FB878;text-align:center;"></div>
+            </div>
+        </div>
+        <div class="layui-card">
+            <div class="layui-card-header">📊 采集统计</div>
+            <div class="layui-card-body" style="font-size:13px;color:#666;text-align:center;">
+                <p>结果总数：<b style="color:#1E9FFF;">{{ total }}</b></p>
+                <p>当前页：{{ page }} / {{ total_pages }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- B区：瞭望源规则列表 -->
+    <div class="watch-zone-b">
+        <div class="layui-card" style="height:100%;display:flex;flex-direction:column;">
+            <div class="layui-card-header">
+                <i class="layui-icon layui-icon-read"></i> 瞭望源规则
+                <a href="/admin/watch/source" style="float:right;font-size:12px;color:#1E9FFF;">管理</a>
+            </div>
+            <div class="layui-card-body" style="padding:0;flex:1;overflow-y:auto;">
+                {% if sources %}
+                {% for s in sources %}
+                <div class="source-item {% if active_source_id == s['id'] %}active{% end %}"
+                     data-sid="{{ s['id'] }}">
+                    <div class="source-info">
+                        <div class="source-name">{{ s['name'] }}</div>
+                        <div class="source-params">
+                            {% if 'page' in (s['url_template'] or '') or '{page}' in (s['url_template'] or '') %}
+                            <span style="color:#1E9FFF;">分页参数: {page}</span>
+                            {% end %}
+                            {% if '{keyword}' in (s['url_template'] or '') %}
+                            <span style="color:#5FB878;"> &nbsp;关键词: {keyword}</span>
+                            {% end %}
+                        </div>
+                    </div>
+                    <div class="source-toggle">
+                        <input type="checkbox" name="source_ids" value="{{ s['id'] }}"
+                               lay-skin="switch" lay-text="ON|OFF" checked
+                               {% if active_source_id == s['id'] %}data-active="1"{% end %}>
+                    </div>
+                </div>
+                {% end %}
+                {% else %}
+                <div class="empty-state">
+                    <i class="layui-icon layui-icon-face-surprised"></i>
+                    <p>暂无可用瞭望源</p>
+                </div>
+                {% end %}
+            </div>
+        </div>
+    </div>
+
+    <!-- C区：采集结果展示 -->
+    <div class="watch-zone-c">
+        <div class="layui-card">
+            <div class="layui-card-header">
+                <i class="layui-icon layui-icon-component"></i> 采集结果
+                <span style="float:right;font-size:12px;color:#999;">共 <b id="news-total">{{ total }}</b> 条</span>
+            </div>
+            <div class="layui-card-body">
+                <!-- 工具栏 -->
+                <div class="news-toolbar" id="news-toolbar" style="{% if not results %}display:none;{% end %}">
+                    <div class="toolbar-left">
+                        <input type="checkbox" id="check-all" lay-skin="primary" title="全选">
+                        <button class="layui-btn layui-btn-xs layui-btn-warm" id="btn-save-warehouse">
+                            <i class="layui-icon layui-icon-component"></i> 保存到数据仓库
+                        </button>
+                    </div>
+                    <span id="save-status" style="font-size:12px;color:#5FB878;"></span>
+                </div>
+
+                <!-- 新闻列表 -->
+                <div id="news-list">
+                    {% if results %}
+                    {% for r in results %}
+                    <div class="news-item">
+                        <div class="news-checkbox">
+                            <input type="checkbox" name="news_ids" value="{{ r['id'] }}" lay-skin="primary">
+                        </div>
+                        <div class="news-content">
+                            <div class="news-title">
+                                {% if r['request_url'] and r['request_url'].startswith('http') %}
+                                <a href="{{ r['request_url'] }}" target="_blank">{{ r['keyword'] }}</a>
+                                {% else %}
+                                {{ r['keyword'] }}
+                                {% end %}
+                            </div>
+                            {% if r['result_data'] and r['result_data'].startswith('{') %}
+                            {% import json %}
+                            {% set parsed = json.loads(r['result_data']) if r['result_data'].startswith('{') else None %}
+                            <div class="news-summary">{{ parsed.get('summary', '') if parsed else '' }}</div>
+                            <div class="news-meta">
+                                <span>📰 {{ parsed.get('source_name', r['source_name'] or '百度新闻') if parsed else (r['source_name'] or '百度新闻') }}</span>
+                                <span>⏱ {{ r['created_at'] }}</span>
+                            </div>
+                            {% else %}
+                            <div class="news-summary">{{ r['result_data'][:200] if r['result_data'] else '（HTML原始数据）' }}</div>
+                            <div class="news-meta">
+                                <span>📰 {{ r['source_name'] or '未知源' }}</span>
+                                <span>⏱ {{ r['created_at'] }}</span>
+                            </div>
+                            {% end %}
+                        </div>
+                    </div>
+                    {% end %}
+                    {% else %}
+                    <div class="news-empty" id="news-empty">
+                        <i class="layui-icon layui-icon-face-smile"></i>
+                        <p>暂无采集结果，请在左侧输入关键词并点击「立即采集」</p>
+                    </div>
+                    {% end %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 分页 -->
+        {% if total_pages > 1 %}
+        <div class="watch-pagination-wrap">
+            <div id="watch-pagination"></div>
+        </div>
+        {% end %}
+    </div>
+</div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+var xsrf = '{% raw xsrf_token %}';
+
+layui.use(['form', 'laypage', 'jquery'], function(){
+    var form = layui.form, laypage = layui.laypage, $ = layui.$;
+
+    // 分页
+    {% if total_pages > 1 %}
+    laypage.render({
+        elem: 'watch-pagination',
+        count: {{ total }},
+        limit: 12,
+        curr: {{ page }},
+        layout: ['prev', 'page', 'next', 'skip', 'count'],
+        jump: function(obj, first){
+            if (!first) {
+                var url = '/admin/watch?page=' + obj.curr;
+                var kw = $('#collect-keyword').val();
+                if (kw) url += '&keyword=' + encodeURIComponent(kw);
+                location.href = url;
+            }
+        }
+    });
+    {% end %}
+
+    // 全选
+    form.on('checkbox', function(data){
+        if (data.elem.id === 'check-all') {
+            var checked = data.elem.checked;
+            $('input[name="news_ids"]').each(function(){
+                this.checked = checked;
+            });
+            form.render('checkbox');
+        }
+    });
+
+    // B区瞭望源点击切换激活
+    $('.source-item').click(function(e){
+        if ($(e.target).is('input') || $(e.target).closest('.layui-form-switch').length) return;
+        var sid = $(this).data('sid');
+        var kw = $('#collect-keyword').val();
+        var url = '/admin/watch?source_id=' + sid;
+        if (kw) url += '&keyword=' + encodeURIComponent(kw);
+        location.href = url;
+    });
+
+    // 采集按钮
+    $('#btn-collect').click(function(){
+        var keyword = $('#collect-keyword').val().trim();
+        if (!keyword) {
+            layer.msg('请输入关键词', {icon: 2});
+            return;
+        }
+
+        // 收集选中的源
+        var sourceIds = [];
+        $('input[name="source_ids"]:checked').each(function(){
+            sourceIds.push($(this).val());
+        });
+
+        $('#collect-progress').show();
+        $('#btn-collect').prop('disabled', true);
+        $('#collect-result').text('');
+
+        $.post('/admin/watch', {
+            keyword: keyword,
+            source_ids: sourceIds.join(','),
+            _xsrf: xsrf
+        }, function(res){
+            $('#collect-progress').hide();
+            $('#btn-collect').prop('disabled', false);
+            if (res.code === 0) {
+                // 显示采集结果
+                $('#collect-result').text(res.msg);
+                if (res.news && res.news.length > 0) {
+                    renderNewsResults(res.news);
+                    $('#news-total').text(res.total);
+                    $('#news-toolbar').show();
+                    $('#news-empty').hide();
+                } else {
+                    layer.msg(res.msg + '（未能解析到新闻条目，请查看数据仓库原始数据）', {icon: 1});
+                }
+                // 刷新页面以显示持久化数据
+                setTimeout(function(){ location.reload(); }, 2000);
+            } else {
+                layer.msg(res.msg, {icon: 2});
+            }
+        }, 'json').fail(function(){
+            $('#collect-progress').hide();
+            $('#btn-collect').prop('disabled', false);
+            layer.msg('采集请求失败，请检查网络连接', {icon: 2});
+        });
+    });
+
+    // 保存到数据仓库
+    $('#btn-save-warehouse').click(function(){
+        var selectedIds = [];
+        $('input[name="news_ids"]:checked').each(function(){
+            selectedIds.push($(this).val());
+        });
+        if (selectedIds.length === 0) {
+            layer.msg('请先勾选要保存的新闻', {icon: 2});
+            return;
+        }
+
+        var $btn = $(this);
+        $btn.prop('disabled', true);
+        $('#save-status').text('保存中...');
+
+        $.post('/admin/watch/save', {
+            result_ids: selectedIds,
+            _xsrf: xsrf
+        }, function(res){
+            $btn.prop('disabled', false);
+            if (res.code === 0) {
+                $('#save-status').text(res.msg).css('color', '#5FB878');
+                layer.msg(res.msg, {icon: 1});
+            } else {
+                $('#save-status').text(res.msg).css('color', '#FF5722');
+                layer.msg(res.msg, {icon: 2});
+            }
+        }, 'json').fail(function(){
+            $btn.prop('disabled', false);
+            $('#save-status').text('保存失败').css('color', '#FF5722');
+            layer.msg('保存请求失败', {icon: 2});
+        });
+    });
+
+    // 回车触发采集
+    $('#collect-keyword').keydown(function(e){
+        if (e.keyCode === 13) $('#btn-collect').click();
+    });
+
+    form.render('checkbox');
+});
+
+// 在前端渲染采集返回的新闻结果
+function renderNewsResults(newsList) {
+    var html = '';
+    for (var i = 0; i < newsList.length; i++) {
+        var news = newsList[i];
+        html += '<div class="news-item">';
+        html += '<div class="news-checkbox"><input type="checkbox" name="news_ids" value="' + news.id + '" lay-skin="primary"></div>';
+        html += '<div class="news-content">';
+        html += '<div class="news-title">';
+        if (news.link) {
+            html += '<a href="' + news.link + '" target="_blank">' + escapeHtml(news.title) + '</a>';
+        } else {
+            html += escapeHtml(news.title);
+        }
+        html += '</div>';
+        if (news.summary) {
+            html += '<div class="news-summary">' + escapeHtml(news.summary) + '</div>';
+        }
+        html += '<div class="news-meta"><span>📰 ' + escapeHtml(news.source_name || '百度新闻') + '</span></div>';
+        html += '</div></div>';
+    }
+    $('#news-list').html(html);
+    $('#news-total').text(newsList.length);
+    $('#news-toolbar').show();
+    $('#news-empty').hide();
+    layui.form.render('checkbox');
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% end %}
