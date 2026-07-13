@@ -115,3 +115,40 @@ class UserToggleHandler(AdminBaseHandler):
             self.write('<script>alert("用户不存在");window.history.back();</script>')
         else:
             self.redirect(f"/admin/user?msg={'已启用' if status == 1 else '已禁用'}")
+
+
+class UserBatchDeleteHandler(AdminBaseHandler):
+    """批量删除用户（借鉴冯凯乐项目的批量操作设计）"""
+
+    @tornado.web.authenticated
+    def post(self):
+        ids_str = self.get_body_argument("ids", "")
+        if not ids_str:
+            self.write({"code": 1, "msg": "请选择要删除的用户"})
+            return
+        try:
+            ids = [int(x) for x in ids_str.split(",") if x.strip()]
+            count = UserRepository.batch_delete(ids)
+            self.write({"code": 0, "msg": f"成功删除 {count} 个用户"})
+        except (ValueError, TypeError):
+            self.write({"code": 1, "msg": "参数格式错误"})
+
+
+class UserBatchToggleHandler(AdminBaseHandler):
+    """批量启用/禁用用户（借鉴冯凯乐项目的批量操作设计）"""
+
+    @tornado.web.authenticated
+    def post(self):
+        ids_str = self.get_body_argument("ids", "")
+        enable_str = self.get_body_argument("enable", "1")
+        if not ids_str:
+            self.write({"code": 1, "msg": "请选择要操作的用户"})
+            return
+        try:
+            ids = [int(x) for x in ids_str.split(",") if x.strip()]
+            enable = enable_str == "1"
+            count = UserRepository.batch_toggle(ids, enable)
+            action = "启用" if enable else "禁用"
+            self.write({"code": 0, "msg": f"成功{action} {count} 个用户"})
+        except (ValueError, TypeError):
+            self.write({"code": 1, "msg": "参数格式错误"})

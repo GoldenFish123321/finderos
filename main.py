@@ -18,6 +18,7 @@ from app.controllers.home import IndexHandler
 from app.controllers.admin_home import AdminIndexHandler
 from app.controllers.admin_user import (
     UserListHandler, UserFormHandler, UserDeleteHandler, UserToggleHandler,
+    UserBatchDeleteHandler, UserBatchToggleHandler,
 )
 from app.controllers.admin_role import (
     RoleListHandler, RoleFormHandler, RoleDeleteHandler,
@@ -78,6 +79,8 @@ def make_app() -> tornado.web.Application:
             (r"/admin/user/edit", UserFormHandler),
             (r"/admin/user/delete", UserDeleteHandler),
             (r"/admin/user/toggle", UserToggleHandler),
+            (r"/admin/user/batch-delete", UserBatchDeleteHandler),
+            (r"/admin/user/batch-toggle", UserBatchToggleHandler),
 
             # 管理后台 — 角色管理
             (r"/admin/role", RoleListHandler),
