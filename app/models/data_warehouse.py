@@ -153,9 +153,9 @@ class DataWarehouseRepository:
     def delete(dw_id: int) -> bool:
         """删除单条数据仓库记录。"""
         with get_db() as conn:
-            conn.execute("DELETE FROM data_warehouse WHERE id = ?", (dw_id,))
+            cursor = conn.execute("DELETE FROM data_warehouse WHERE id = ?", (dw_id,))
             conn.commit()
-            return conn.total_changes > 0
+            return cursor.rowcount > 0
 
     @staticmethod
     def batch_delete(ids: list[int]) -> int:
@@ -163,8 +163,8 @@ class DataWarehouseRepository:
         count = 0
         with get_db() as conn:
             for dw_id in ids:
-                conn.execute("DELETE FROM data_warehouse WHERE id = ?", (dw_id,))
-                if conn.total_changes > 0:
+                cursor = conn.execute("DELETE FROM data_warehouse WHERE id = ?", (dw_id,))
+                if cursor.rowcount > 0:
                     count += 1
             conn.commit()
         return count
