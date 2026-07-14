@@ -167,7 +167,7 @@
         <div class="error-msg">⚠ {{ error }}</div>
         {% end %}
 
-        <form method="post" action="/" id="login-form">
+        <form method="post" action="/" id="login-form" onsubmit="var btn=document.getElementById('login-submit');btn.disabled=true;btn.textContent='登录中...';">
             {% module xsrf_form_html() %}
             <div class="input-group">
                 <label>用户名</label>
@@ -179,7 +179,7 @@
                 <input type="password" name="password" placeholder="请输入密码"
                        autocomplete="off" id="password-input" required>
             </div>
-            <button type="submit" class="btn-submit">登 录</button>
+            <button type="submit" class="btn-submit" id="login-submit">登 录</button>
         </form>
 
         <div class="form-footer">

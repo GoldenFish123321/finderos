@@ -463,15 +463,36 @@ document.body.classList.add('dark-theme');
 
     /* 响应式 */
     @media (max-width: 768px) {
-        .sidebar { width: 0; overflow: hidden; }
+        .sidebar { position: fixed; top: 0; left: 0; bottom: 0; z-index: 1000;
+            width: 0; overflow: hidden; transition: width 0.3s ease; }
         .sidebar.open { width: 280px; }
-        .chat-header { padding: 10px 14px; }
+        .chat-header { padding: 10px 14px; padding-left: 50px; }
         .chat-messages { padding: 12px; }
         .chat-msg { max-width: 92%; }
+        .mobile-menu-btn { display: flex !important; }
     }
+    .mobile-menu-btn {
+        display: none;
+        position: fixed; top: 10px; left: 10px; z-index: 1001;
+        width: 34px; height: 34px; border-radius: 50%;
+        background: var(--accent-blue); color: #fff; border: none;
+        font-size: 16px; cursor: pointer;
+        align-items: center; justify-content: center;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+    }
+    .sidebar-overlay-chat {
+        display: none;
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 999;
+        background: rgba(0,0,0,0.5); backdrop-filter: blur(2px);
+    }
+    .sidebar-overlay-chat.show { display: block; }
 </style>
 
 <div class="app-container">
+    <!-- 移动端汉堡菜单按钮 -->
+    <button class="mobile-menu-btn" id="mobile-menu-btn" onclick="toggleSidebar()" title="菜单">☰</button>
+    <!-- 移动端遮罩层 -->
+    <div class="sidebar-overlay-chat" id="sidebar-overlay" onclick="toggleSidebar()"></div>
     <!-- ============ 左侧边栏: A区+B区+C区 ============ -->
     <div class="sidebar" id="sidebar">
         <!-- A区: LOGO -->
@@ -597,6 +618,20 @@ fetch('/api/chat/employees?_xsrf=' + XSRF)
     .then(d => { if (d.code === 0) employees = d.items; })
     .catch(() => {});
 
+// 移动端侧边栏切换
+function toggleSidebar() {
+    var sidebar = document.getElementById('sidebar');
+    var overlay = document.getElementById('sidebar-overlay');
+    var isOpen = sidebar.classList.contains('open');
+    if (isOpen) {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('show');
+    } else {
+        sidebar.classList.add('open');
+        overlay.classList.add('show');
+    }
+}
+
 // ============================================================
 // 模型切换
 // ============================================================
@@ -689,27 +724,32 @@ function loadConversation(cid) {
 }
 
 function deleteConversation(cid) {
-    if (!confirm('确定删除此对话？')) return;
-    var formData = new URLSearchParams();
-    formData.append('_xsrf', XSRF);
-    formData.append('id', cid);
-
-    fetch('/api/chat/conversation/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: formData
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-        if (d.code === 0) {
-            if (currentConversationId === cid) {
-                currentConversationId = null;
-                // 取消所有任务高亮
-                document.querySelectorAll('.task-item').forEach(function(el) { el.classList.remove('active'); });
-                resetChatToWelcome();
-            }
-            refreshTaskList();
-        }
+    layui.use(['layer'], function(){
+        var layer = layui.layer;
+        layer.confirm('确定删除此对话？', {
+            icon: 3, title: '删除确认', btn: ['确定删除', '取消']
+        }, function(index){
+            layer.close(index);
+            var formData = new URLSearchParams();
+            formData.append('_xsrf', XSRF);
+            formData.append('id', cid);
+            fetch('/api/chat/conversation/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: formData
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.code === 0) {
+                    if (currentConversationId === cid) {
+                        currentConversationId = null;
+                        document.querySelectorAll('.task-item').forEach(function(el) { el.classList.remove('active'); });
+                        resetChatToWelcome();
+                    }
+                    refreshTaskList();
+                }
+            });
+        });
     });
 }
 

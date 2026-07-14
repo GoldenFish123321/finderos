@@ -2,43 +2,44 @@
 
 {% block admin_content %}
 <style>
-/* 数字员工列表 — 沉浸式深色科技风 */
+/* 数字员工列表 — 深色科技风（使用 CSS 变量，与全局主题统一） */
 .emp-stats { display:flex; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
-.emp-stat-card { flex:1; min-width:140px; background:var(--card-bg,#1e2233); border-radius:8px; padding:18px; text-align:center; border:1px solid var(--border-color,#2a2f42); }
-.emp-stat-card .num { font-size:28px; font-weight:700; color:var(--accent-blue,#409eff); }
-.emp-stat-card .label { font-size:13px; color:var(--text-secondary,#8892a4); margin-top:4px; }
+.emp-stat-card { flex:1; min-width:140px; background:var(--bg-card); border-radius:var(--radius-md); padding:18px; text-align:center; border:1px solid var(--border-subtle); }
+.emp-stat-card .num { font-size:28px; font-weight:700; background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.emp-stat-card .label { font-size:13px; color:var(--text-muted); margin-top:4px; }
 .emp-tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
-.emp-tabs a { padding:8px 18px; border-radius:6px; font-size:14px; color:var(--text-secondary,#8892a4); background:var(--card-bg,#1e2233); border:1px solid var(--border-color,#2a2f42); text-decoration:none; transition:all 0.2s; }
-.emp-tabs a.active, .emp-tabs a:hover { color:#fff; background:var(--accent-blue,#409eff); border-color:var(--accent-blue,#409eff); }
-.emp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:16px; }
-.emp-card { background:var(--card-bg,#1e2233); border:1px solid var(--border-color,#2a2f42); border-radius:10px; padding:20px; transition:all 0.25s; position:relative; overflow:hidden; }
-.emp-card:hover { transform:translateY(-2px); box-shadow:0 8px 25px rgba(0,0,0,0.3); border-color:var(--accent-blue,#409eff); }
+.emp-tabs a { padding:8px 18px; border-radius:20px; font-size:13px; color:var(--text-muted); background:var(--bg-card); border:1px solid var(--border-subtle); text-decoration:none; transition:all var(--transition-fast); }
+.emp-tabs a.active, .emp-tabs a:hover { color:#fff; background:var(--accent-blue); border-color:var(--accent-blue); }
+.emp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:16px; }
+.emp-card { background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:20px; transition:all var(--transition-smooth); position:relative; overflow:hidden; backdrop-filter:blur(10px); }
+.emp-card:hover { transform:translateY(-2px); box-shadow:var(--glow-blue); border-color:var(--border-active); }
 .emp-card-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
-.emp-card-name { font-size:18px; font-weight:600; color:#fff; }
+.emp-card-name { font-size:18px; font-weight:600; color:var(--text-primary); }
 .emp-card-type { font-size:11px; padding:3px 10px; border-radius:12px; font-weight:600; }
-.emp-card-type.llm { background:rgba(64,158,255,0.15); color:#409eff; }
-.emp-card-type.api { background:rgba(103,194,58,0.15); color:#67c23a; }
-.emp-card-desc { font-size:13px; color:var(--text-secondary,#8892a4); margin-bottom:12px; line-height:1.5; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-.emp-card-meta { display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:var(--text-muted,#606880); margin-bottom:12px; }
+.emp-card-type.llm { background:rgba(94,163,255,0.15); color:var(--accent-blue); }
+.emp-card-type.api { background:rgba(95,184,120,0.15); color:var(--accent-green); }
+.emp-card-desc { font-size:13px; color:var(--text-secondary); margin-bottom:12px; line-height:1.5; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.emp-card-meta { display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:var(--text-muted); margin-bottom:12px; }
 .emp-card-meta span { background:rgba(255,255,255,0.04); padding:3px 8px; border-radius:4px; }
 .emp-card-badges { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
-.emp-card-badges .skill-tag { font-size:11px; padding:2px 8px; border-radius:10px; background:rgba(230,162,60,0.12); color:#e6a23c; }
+.emp-card-badges .skill-tag { font-size:11px; padding:2px 8px; border-radius:10px; background:rgba(255,184,0,0.12); color:var(--accent-orange); }
 .emp-card-actions { display:flex; gap:8px; flex-wrap:wrap; }
 .emp-card-actions a, .emp-card-actions button { font-size:12px; padding:5px 12px; border-radius:5px; cursor:pointer; text-decoration:none; border:none; }
-.emp-card-actions .btn-test { background:var(--accent-blue,#409eff); color:#fff; }
-.emp-card-actions .btn-edit { background:rgba(255,255,255,0.08); color:var(--text-secondary,#8892a4); }
-.emp-card-actions .btn-toggle { background:rgba(255,255,255,0.06); color:var(--text-secondary,#8892a4); }
-.emp-card-actions .btn-delete { background:rgba(245,108,108,0.12); color:#f56c6c; }
+.emp-card-actions .btn-test { background:var(--accent-blue); color:#fff; }
+.emp-card-actions .btn-edit { background:rgba(255,255,255,0.08); color:var(--text-secondary); }
+.emp-card-actions .btn-toggle { background:rgba(255,255,255,0.06); color:var(--text-secondary); }
+.emp-card-actions .btn-delete { background:rgba(255,87,34,0.12); color:var(--accent-red); }
 .status-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
-.status-dot.on { background:#67c23a; }
-.status-dot.off { background:#909399; }
+.status-dot.on { background:var(--accent-green); }
+.status-dot.off { background:var(--text-muted); }
 .emp-disabled { opacity:0.5; }
+@media (max-width:768px) { .emp-grid { grid-template-columns:1fr; } }
 </style>
 
-<div class="admin-content-header">
-    <h2 style="margin:0;color:#fff;">🧑‍💼 数字员工</h2>
-    <a href="/admin/employee/add" class="layui-btn layui-btn-normal" style="margin-left:auto;">
-        <i class="layui-icon layui-icon-add-1"></i> 新增员工
+<div class="admin-content-header" style="display:flex;align-items:center;margin-bottom:16px;">
+    <h2 style="margin:0;color:var(--text-primary);">🧑‍💼 数字员工</h2>
+    <a href="/admin/employee/add" class="btn-glass btn-primary" style="margin-left:auto;">
+        + 新增员工
     </a>
 </div>
 
@@ -102,17 +103,18 @@
                     {{ '⏸ 禁用' if emp['is_enabled'] == 1 else '▶ 启用' }}
                 </button>
             </form>
-            <form action="/admin/employee/delete" method="post" style="display:inline;" onsubmit="return confirm('确认删除「' + {{ emp.get('name_js', '\"\"') }} + '」？');">
+            <form action="/admin/employee/delete" method="post" style="display:inline;">
                 {% module xsrf_form_html() %}
                 <input type="hidden" name="id" value="{{ emp['id'] }}">
-                <button type="submit" class="btn-delete">🗑 删除</button>
+                <input type="hidden" name="emp_name" value="{{ emp['name'] }}">
+                <button type="button" class="btn-delete btn-emp-delete" data-name="{{ emp['name'] }}">🗑 删除</button>
             </form>
         </div>
     </div>
     {% end %}
     {% if not employees %}
-    <div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--text-secondary,#8892a4);">
-        <div style="font-size:48px;margin-bottom:16px;">🤖</div>
+    <div class="empty-state-dark" style="grid-column:1/-1;">
+        <div class="empty-icon">🤖</div>
         <p>暂无数字员工，点击右上角"新增员工"创建第一个</p>
     </div>
     {% end %}
@@ -124,8 +126,8 @@
     {% for p in range(1, total_pages + 1) %}
     <a href="/admin/employee?page={{ p }}{{ '&type=' + employee_type if employee_type else '' }}"
        style="display:inline-block;padding:6px 14px;margin:0 3px;border-radius:4px;
-              {{ 'background:var(--accent-blue,#409eff);color:#fff;' if p == page else 'background:var(--card-bg,#1e2233);color:var(--text-secondary,#8892a4);' }}
-              text-decoration:none;font-size:13px;">{{ p }}</a>
+              {{ 'background:var(--accent-blue);color:#fff;' if p == page else 'background:var(--bg-card);color:var(--text-secondary);' }}
+              text-decoration:none;font-size:13px;border:1px solid var(--border-subtle);">{{ p }}</a>
     {% end %}
 </div>
 {% end %}
@@ -133,11 +135,28 @@
 
 {% block admin_scripts %}
 <script>
-// 显示操作消息
-(function(){
+// 使用 Layui layer 进行删除确认和消息提示
+layui.use(['layer'], function(){
+    var layer = layui.layer;
+
+    // 消息提示（替代原生 alert）
     var params = new URLSearchParams(window.location.search);
     var msg = params.get('msg');
-    if (msg) { alert(msg); }
-})();
+    if (msg) { layer.msg(msg, {icon: 1, time: 2000}); }
+
+    // 删除确认（替代原生 confirm）
+    document.querySelectorAll('.btn-emp-delete').forEach(function(btn){
+        btn.addEventListener('click', function(){
+            var name = this.getAttribute('data-name');
+            var form = this.closest('form');
+            layer.confirm('确认删除「' + name + '」吗？此操作不可恢复。', {
+                icon: 3, title: '删除确认', btn: ['确定删除', '取消']
+            }, function(index){
+                layer.close(index);
+                form.submit();
+            });
+        });
+    });
+});
 </script>
 {% end %}

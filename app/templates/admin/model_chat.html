@@ -170,16 +170,23 @@ function switchConversation(convId) {
 }
 
 function deleteConversation(convId) {
-    if (!confirm('确认删除此对话？')) return;
-    var formData = new FormData();
-    formData.append('_xsrf', xsrf);
-    formData.append('id', convId);
-    fetch('/admin/api/conversation/delete', { method: 'POST', body: formData })
-        .then(function(){ loadConversationList(); });
-    if (currentConversationId === convId) {
-        currentConversationId = null;
-        document.getElementById('chat-messages').innerHTML = '';
-    }
+    layui.use(['layer'], function(){
+        var layer = layui.layer;
+        layer.confirm('确认删除此对话？', {
+            icon: 3, title: '删除确认', btn: ['确定删除', '取消']
+        }, function(index){
+            layer.close(index);
+            var formData = new FormData();
+            formData.append('_xsrf', xsrf);
+            formData.append('id', convId);
+            fetch('/admin/api/conversation/delete', { method: 'POST', body: formData })
+                .then(function(){ loadConversationList(); });
+            if (currentConversationId === convId) {
+                currentConversationId = null;
+                document.getElementById('chat-messages').innerHTML = '';
+            }
+        });
+    });
 }
 
 function sendMessage() {

@@ -89,10 +89,10 @@
                                 {% if r['is_deep_collected'] != 1 %}disabled{% end %}>
                             👁 查看
                         </button>
-                        <form action="/admin/warehouse/delete" method="post" style="display:inline;">
+                        <form action="/admin/warehouse/delete" method="post" style="display:inline;" class="form-wh-delete">
                             {% module xsrf_form_html() %}
                             <input type="hidden" name="id" value="{{ r['id'] }}">
-                            <button type="submit" class="btn-glass btn-sm btn-danger" onclick="return confirm('确定删除吗？')">🗑</button>
+                            <button type="button" class="btn-glass btn-sm btn-danger btn-wh-delete" data-title="{{ r['title'] or '未知' }}">🗑</button>
                         </form>
                     </td>
                 </tr>
@@ -145,6 +145,20 @@ layui.use(['laypage', 'jquery'], function(){
     document.getElementById('check-all').addEventListener('change', function(){
         var checked = this.checked;
         document.querySelectorAll('input[name="wh_ids"]').forEach(function(cb){ cb.checked = checked; });
+    });
+
+    // 单条删除确认（替代原生 confirm）
+    document.querySelectorAll('.btn-wh-delete').forEach(function(btn){
+        btn.addEventListener('click', function(){
+            var title = this.getAttribute('data-title');
+            var form = this.closest('.form-wh-delete');
+            layer.confirm('确定删除「' + title + '」吗？', {
+                icon: 3, title: '删除确认', btn: ['确定删除', '取消']
+            }, function(index){
+                layer.close(index);
+                form.submit();
+            });
+        });
     });
 
     // 批量删除
