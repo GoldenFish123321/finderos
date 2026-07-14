@@ -825,6 +825,20 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
                         continue;
                     }
 
+                    // 处理 action 事件（快捷指令触发如 /clear）
+                    if (currentEvent === 'action') {
+                        try {
+                            const act = JSON.parse(dataStr);
+                            if (act.action === 'clear') {
+                                document.getElementById('chat-messages').innerHTML = '';
+                                document.getElementById('chat-welcome').style.display = 'flex';
+                                currentConversationId = null;
+                            }
+                        } catch(e) {}
+                        currentEvent = '';
+                        continue;
+                    }
+
                     // 处理 content / error
                     try {
                         const data = JSON.parse(dataStr);
