@@ -106,7 +106,7 @@ class CollectionScheduler:
 
             total_collected = 0
             for keyword in keywords:
-                encoded_kw = urllib.parse.quote(keyword)
+                encoded_kw = urllib.parse.quote(keyword, encoding="utf-8")
                 request_url = url_template.replace("{keyword}", encoded_kw).replace("{page}", "0")
 
                 safe, reason = validate_url_safe(request_url)

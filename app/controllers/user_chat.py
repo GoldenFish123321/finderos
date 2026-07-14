@@ -99,6 +99,76 @@ def _estimate_tokens(text: str) -> int:
     return max(1, chinese + other // 4)
 
 
+def _build_employee_card(emp: dict, api_data: dict, user_message: str = "") -> dict:
+    """根据数字员工类型和 API 返回数据构建前端卡片。
+
+    返回 None 表示不需要卡片渲染（数据不适合卡片展示）。
+    """
+    emp_name = emp.get("name", "")
+    emp_type = emp.get("employee_type", "llm")
+    response_template = emp.get("response_render_template", "")
+
+    # 天气类员工：识别天气数据
+    if ("天气" in emp_name or "weather" in emp_name.lower() or
+            "temp" in str(api_data).lower() or "weather" in str(api_data).lower()):
+        card = {"type": "weather", "title": f"{emp_name} · 天气查询", "data": {}}
+        if isinstance(api_data, dict):
+            card["data"] = {
+                "city": api_data.get("city") or api_data.get("location") or api_data.get("name") or user_message,
+                "temp": api_data.get("temp") or api_data.get("temperature") or api_data.get("current"),
+                "weather": api_data.get("weather") or api_data.get("condition") or api_data.get("text") or api_data.get("status"),
+                "date": api_data.get("date") or api_data.get("time") or api_data.get("updateTime") or "",
+                "detail": str(api_data.get("detail", api_data.get("description", ""))) if api_data.get("detail") or api_data.get("description") else "",
+            }
+        return card
+
+    # 新闻类员工
+    if "新闻" in emp_name or "news" in emp_name.lower():
+        card = {"type": "news", "title": f"{emp_name} · 新闻聚合", "data": {"items": []}}
+        if isinstance(api_data, dict):
+            items = api_data.get("articles") or api_data.get("news") or api_data.get("results") or api_data.get("data") or []
+            if isinstance(items, list):
+                card["data"]["items"] = [
+                    {"title": it.get("title", str(it)[:60])} if isinstance(it, dict) else str(it)[:60]
+                    for it in items[:8]
+                ]
+        return card
+
+    # 通用：如果有 response_render_template，生成通用卡片
+    if response_template:
+        card = {"type": "default", "title": emp_name, "content": ""}
+        if isinstance(api_data, str):
+            card["content"] = api_data[:500]
+        elif isinstance(api_data, dict):
+            parts = []
+            for k, v in api_data.items():
+                if isinstance(v, str) and len(v) < 200:
+                    parts.append(f"**{k}**: {v}")
+            card["content"] = "\n".join(parts[:10])
+        return card
+
+    # 列表型数据
+    if isinstance(api_data, dict):
+        list_keys = ["items", "data", "results", "list", "records"]
+        for lk in list_keys:
+            if lk in api_data and isinstance(api_data[lk], list):
+                items = api_data[lk]
+                if items:
+                    return {
+                        "type": "default",
+                        "title": emp_name,
+                        "data": {
+                            "items": [
+                                {"title": it.get("title", it.get("name", str(it)[:60]))}
+                                if isinstance(it, dict) else str(it)[:60]
+                                for it in items[:8]
+                            ]
+                        }
+                    }
+
+    return None
+
+
 async def _sse_write(handler, content: str, event: str = None):
     """向 SSE 流写入一条消息。"""
     payload = json.dumps({"content": content})
@@ -140,14 +210,13 @@ def _call_llm_api_sync(api_base: str, api_key: str, payload_bytes: bytes,
     import urllib.request
     import urllib.error
     try:
-        req = urllib.request.Request(
-            f"{api_base}/chat/completions",
-            data=payload_bytes,
-            headers={
-                "Content-Type": "application/json; charset=utf-8",
-                "Authorization": f"Bearer {api_key}",
-            },
-        )
+        # 确保 URL 仅含 ASCII（防御含中文的 api_base 导致编码错误）
+        safe_url = api_base.rstrip("/") + "/chat/completions"
+        safe_headers = {
+            "Content-Type": "application/json; charset=utf-8",
+            "Authorization": "Bearer " + (api_key or ""),
+        }
+        req = urllib.request.Request(safe_url, data=payload_bytes, headers=safe_headers)
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.read(), None
     except Exception as e:
@@ -960,7 +1029,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
 
         emp_name = emp.get("name", "数字员工")
         self.write(
-            f"event: employee\ndata: {json.dumps({'name': emp_name, 'type': emp.get('employee_type', 'llm')})}\n\n"
+            f"event: employee\ndata: {json.dumps({'name': emp_name, 'type': emp.get('employee_type', 'llm')}, ensure_ascii=False)}\n\n"
         )
         await self.flush()
 
@@ -1131,7 +1200,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
         return _estimate_tokens(full_reply)
 
     async def _invoke_api_employee(self, emp: dict, message: str):
-        """API 型员工调用 — SSE 流式返回。"""
+        """API 型员工调用 — SSE 流式返回（含卡片渲染 + 元信息）。"""
         import time as _time
         import urllib.parse
         _start = _time.time()
@@ -1150,10 +1219,17 @@ class UserEmployeeInvokeHandler(BaseHandler):
             await _sse_done(self)
             return
 
+        # ── FIX-1: URL 模板编码（显式 UTF-8，防御 ASCII 编码错误）──
         try:
-            encoded_msg = urllib.parse.quote(message, safe="")
+            encoded_msg = urllib.parse.quote(message, safe="", encoding="utf-8")
             api_url = api_url.replace("{message}", encoded_msg)
             api_params = api_params.replace("{message}", encoded_msg)
+        except Exception as e:
+            logger.warning(f"URL 模板替换失败: {e}，使用原始 URL")
+
+        # ── FIX-1: 确保 URL 不含未编码的非 ASCII 字符 ──
+        try:
+            api_url = urllib.parse.quote(api_url, safe=":/?#[]@!$&'()*+,;=%-", encoding="utf-8")
         except Exception:
             pass
 
@@ -1179,9 +1255,10 @@ class UserEmployeeInvokeHandler(BaseHandler):
         self.set_header("Connection", "keep-alive")
         self.set_header("X-Accel-Buffering", "no")
 
+        # ── FIX-2: 发送员工元信息（显示名称而非编码）──
         emp_name = emp.get("name", "数字员工")
         self.write(
-            f"event: employee\ndata: {json.dumps({'name': emp_name, 'type': 'api'})}\n\n"
+            f"event: employee\ndata: {json.dumps({'name': emp_name, 'type': 'api'}, ensure_ascii=False)}\n\n"
         )
         await self.flush()
 
@@ -1207,8 +1284,11 @@ class UserEmployeeInvokeHandler(BaseHandler):
         if err:
             await _sse_write(self, f"API 调用失败: {err}")
             await _sse_done(self)
+            await _sse_stats(self, 0, False, round(_time.time() - _start, 2))
             return
 
+        # ── 响应模板渲染 ──
+        rendered_body = body
         if response_template:
             try:
                 import re as _re
@@ -1222,22 +1302,37 @@ class UserEmployeeInvokeHandler(BaseHandler):
                     if isinstance(value, str):
                         rendered = rendered.replace("{{" + key + "}}", value)
                 rendered = _re.sub(r'\{\{.*?\}\}', '', rendered)
-                body = rendered
+                rendered_body = rendered
             except Exception:
                 pass
 
-        for ch in body[:5000]:
+        # ── FIX-2: 构建并发送卡片 SSE 事件 ──
+        try:
+            api_data = json.loads(body) if body else {}
+        except (json.JSONDecodeError, TypeError):
+            api_data = {"raw": body}
+        card_data = _build_employee_card(emp, api_data, message)
+        if card_data:
+            self.write(
+                f"event: card\ndata: {json.dumps(card_data, ensure_ascii=False)}\n\n"
+            )
+            await self.flush()
+
+        # ── 流式输出文本 ──
+        for ch in rendered_body[:5000]:
             await _sse_write(self, ch)
             await asyncio.sleep(0.01)
         await _sse_done(self)
 
+        # ── FIX-3: 发送统计元信息（Token + 响应时间）──
         elapsed = round(_time.time() - _start, 2)
-        await _sse_stats(self, 0, False, elapsed)
+        tokens = _estimate_tokens(rendered_body)
+        await _sse_stats(self, tokens, False, elapsed)
 
         write_audit_log(
             action="USER_EMPLOYEE_INVOKE",
             username=self.current_user,
             target=f"employee:{emp['id']}",
-            detail=f"api_call, status={status}, elapsed={elapsed}s",
+            detail=f"api_call, status={status}, elapsed={elapsed}s, tokens={tokens}",
             client_ip=self.request.remote_ip or "",
         )
