@@ -205,13 +205,17 @@ class ModelChatHandler(AdminBaseHandler):
         temperature = model["temperature"]
         max_tokens = model["max_tokens"]
 
-        # 多轮对话：加载历史消息
+        # 多轮对话：加载历史消息（含归属权校验，防止 IDOR 越权）
         history_messages = []
         conv_id = None
         if conversation_id:
             try:
                 conv_id = int(conversation_id)
-                history_messages = ConversationRepository.get_recent_messages(conv_id, limit=10)
+                conv = ConversationRepository.get_by_id(conv_id)
+                if conv and conv.get("username", "") == self.current_user:
+                    history_messages = ConversationRepository.get_recent_messages(conv_id, limit=10)
+                else:
+                    conv_id = None  # 无权访问，回退为单轮对话
             except (ValueError, TypeError):
                 pass
 
@@ -464,7 +468,7 @@ class ConversationDeleteHandler(AdminBaseHandler):
         if not conv:
             self.write({"code": 1, "msg": "对话不存在"})
             return
-        if conv.get("username", "") and conv["username"] != self.current_user:
+        if conv.get("username", "") != self.current_user:
             self.write({"code": 1, "msg": "无权删除此对话"})
             return
         ConversationRepository.delete(conv_id)

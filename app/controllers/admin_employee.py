@@ -382,9 +382,9 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             else:
                 logger.warning(f"数字员工 API 调用失败: {err}，回退到本地 Mock")
 
-        # Mock 回退
+        # Mock 回退（复用已执行的 tool_ctx，避免双重执行昂贵操作）
         if not api_success:
-            total_tokens = await self._mock_llm_response(emp, message)
+            total_tokens = await self._mock_llm_response(emp, message, tool_ctx)
 
         if total_tokens > 0 and model:
             AiModelRepository.add_tokens(model["id"], total_tokens)
@@ -400,8 +400,12 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             client_ip=self.request.remote_ip or "",
         )
 
-    async def _mock_llm_response(self, emp: dict, message: str) -> int:
-        """LLM 型员工智能响应：解析意图 → 执行工具 → 格式化回复。"""
+    async def _mock_llm_response(self, emp: dict, message: str, tool_results: dict = None) -> int:
+        """LLM 型员工智能响应：解析意图 → 执行工具 → 格式化回复。
+        
+        Args:
+            tool_results: 可选，调用方已执行的工具结果（避免双重执行）
+        """
         name = emp.get("name", "数字员工")
         skills_list = []
         try:
@@ -411,7 +415,8 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         crawl4ai_on = emp.get("crawl4ai_enabled", 0) == 1
 
         # 1. 执行工具调用：根据意图自动查询数据仓库 / 触发采集
-        tool_results = await self._execute_employee_tools(emp, message)
+        if tool_results is None:
+            tool_results = await self._execute_employee_tools(emp, message)
 
         # 2. 构建智能回复
         lines = [f"🤖 **{name}** 为您服务。\n"]
