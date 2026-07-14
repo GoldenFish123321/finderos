@@ -281,52 +281,33 @@ class ModelChatHandler(AdminBaseHandler):
 
             def _sync_stream_call():
                 """在线程池中执行的同步 HTTP 流式调用。
-                使用生成器逐块产出数据，避免全缓冲，实现真正的 SSE 流式传输。
-                返回 (chunks_generator, error)。"""
+                在线程池内完成所有阻塞 I/O（resp.read），返回原始字节数据。
+                返回 (raw_data, error)。"""
                 import urllib.request
                 import urllib.error
 
-                def _chunk_generator():
-                    try:
-                        req = urllib.request.Request(
-                            f"{api_base}/chat/completions",
-                            data=payload,
-                            headers={
-                                "Content-Type": "application/json",
-                                "Authorization": f"Bearer {api_key}",
-                            },
-                        )
-                        with urllib.request.urlopen(req, timeout=120) as resp:
-                            # 逐块读取（8KB 块），避免全缓冲
-                            while True:
-                                chunk = resp.read(8192)
-                                if not chunk:
-                                    break
-                                yield chunk
-                    except Exception as e:
-                        yield ("__ERROR__", str(e))
-
-                return _chunk_generator(), None
+                try:
+                    req = urllib.request.Request(
+                        f"{api_base}/chat/completions",
+                        data=payload,
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {api_key}",
+                        },
+                    )
+                    with urllib.request.urlopen(req, timeout=120) as resp:
+                        return resp.read(), None
+                except Exception as e:
+                    return b"", str(e)
 
             loop = asyncio.get_event_loop()
-            chunk_gen, err = await loop.run_in_executor(_chat_executor, _sync_stream_call)
-
-            # 在线程池中收集所有块，然后在主事件循环中逐行处理
-            # （urllib 不支持异步，必须在 executor 中读完所有数据）
-            raw_chunks = []
-            for chunk in chunk_gen:
-                if isinstance(chunk, tuple) and chunk[0] == "__ERROR__":
-                    err = chunk[1]
-                    break
-                raw_chunks.append(chunk)
+            raw_data, err = await loop.run_in_executor(_chat_executor, _sync_stream_call)
 
             if err is None:
                 api_success = True
                 is_mock = False
                 content_chars = 0
                 assistant_reply_parts = []
-                # 合并所有原始字节后按行分割处理
-                raw_data = b"".join(raw_chunks)
                 for line in raw_data.split(b"\n"):
                     line = line.decode("utf-8", errors="replace").strip()
                     if line.startswith("data: "):

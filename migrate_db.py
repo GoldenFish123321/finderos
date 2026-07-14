@@ -84,6 +84,12 @@ def run_migrations():
             "sql": "CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at)",
             "check": lambda c: _index_exists(c, "idx_audit_logs_created"),
         },
+        # v0.2.x: 数据仓库无 link 记录去重索引（防止并发竞态写入重复数据）
+        {
+            "name": "idx_dw_title_source",
+            "sql": "CREATE UNIQUE INDEX IF NOT EXISTS idx_dw_title_source ON data_warehouse(title, source_name) WHERE (link IS NULL OR link = '')",
+            "check": lambda c: _index_exists(c, "idx_dw_title_source"),
+        },
     ]
 
     applied = 0
