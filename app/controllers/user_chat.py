@@ -229,6 +229,11 @@ class UserChatStreamHandler(BaseHandler):
             self.write({"code": 1, "msg": "消息过长（最多10000字符）"})
             return
 
+        # 快捷指令处理（/ 开头）
+        if message.startswith("/"):
+            await self._handle_slash_command(message, conversation_id)
+            return
+
         model = AiModelRepository.get_by_id(model_id)
         if not model or model.get("is_enabled") == 0:
             self.write({"code": 1, "msg": "模型不可用"})
@@ -398,6 +403,12 @@ class UserChatStreamHandler(BaseHandler):
             ConversationRepository.add_message(
                 conv_id, "assistant", assistant_reply, total_tokens
             )
+            # 自动标题：首条消息后，若标题仍为"新对话"，用前30字替换
+            conv = ConversationRepository.get_by_id(conv_id)
+            if conv and (conv.get("title") or "").strip() in ("新对话", ""):
+                auto_title = message.strip()[:30]
+                if auto_title:
+                    ConversationRepository.update_title(conv_id, auto_title)
 
         write_audit_log(
             action="USER_CHAT",
@@ -495,6 +506,75 @@ class UserChatStreamHandler(BaseHandler):
             )
 
         return result["intent"], "\n".join(ctx_parts) if ctx_parts else ""
+
+    async def _handle_slash_command(self, message: str, conversation_id):
+        """处理 / 快捷指令。"""
+        cmd = message.strip().lower()
+        if cmd == "/clear":
+            # 清屏：返回空内容让前端清空对话区
+            self.set_header("Content-Type", "text/event-stream")
+            self.set_header("Cache-Control", "no-cache")
+            self.write(f"event: action\ndata: {json.dumps({'action': 'clear'})}\n\n")
+            self.write(f"data: [DONE]\n\n")
+            await self.flush()
+            return
+        elif cmd == "/summary":
+            # 摘要当前对话
+            conv_id = None
+            if conversation_id:
+                try:
+                    conv_id = int(conversation_id)
+                except (ValueError, TypeError):
+                    pass
+            if not conv_id:
+                self.set_header("Content-Type", "text/event-stream")
+                self.set_header("Cache-Control", "no-cache")
+                self.write(f"data: {json.dumps({'content': '当前没有活跃对话，无法生成摘要。'})}\n\n")
+                self.write(f"data: [DONE]\n\n")
+                await self.flush()
+                return
+            msgs = ConversationRepository.get_messages(conv_id, limit=20)
+            if not msgs:
+                self.set_header("Content-Type", "text/event-stream")
+                self.set_header("Cache-Control", "no-cache")
+                self.write(f"data: {json.dumps({'content': '当前对话尚无消息。'})}\n\n")
+                self.write(f"data: [DONE]\n\n")
+                await self.flush()
+                return
+            # 构建摘要文本
+            summary_lines = ["📋 **对话摘要**\n"]
+            for m in msgs:
+                role_label = "👤 用户" if m["role"] == "user" else "🤖 AI"
+                preview = (m["content"] or "")[:80]
+                summary_lines.append(f"- {role_label}: {preview}...")
+            full = "\n".join(summary_lines)
+            self.set_header("Content-Type", "text/event-stream")
+            self.set_header("Cache-Control", "no-cache")
+            for ch in full:
+                self.write(f"data: {json.dumps({'content': ch})}\n\n")
+                await self.flush()
+                await asyncio.sleep(0.01)
+            self.write(f"data: [DONE]\n\n")
+            await self.flush()
+            return
+        elif cmd.startswith("/trans"):
+            # 翻译最后一条消息（简易实现：标记翻译意图）
+            self.set_header("Content-Type", "text/event-stream")
+            self.set_header("Cache-Control", "no-cache")
+            self.write(
+                f"data: {json.dumps({'content': '💡 /trans 指令：请在消息前加「翻译成英文：」或「翻译成中文：」来使用翻译功能。'})}\n\n"
+            )
+            self.write(f"data: [DONE]\n\n")
+            await self.flush()
+            return
+        else:
+            self.set_header("Content-Type", "text/event-stream")
+            self.set_header("Cache-Control", "no-cache")
+            self.write(
+                f"data: {json.dumps({'content': f'未知指令: {message}。可用指令: /clear, /summary, /trans'})}\n\n"
+            )
+            self.write(f"data: [DONE]\n\n")
+            await self.flush()
 
     async def _mock_chat_response(self, message: str, model: dict) -> tuple:
         """本地 Mock 流式响应。返回 (估算token数, 完整回复文本)。"""
