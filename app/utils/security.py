@@ -190,6 +190,5 @@ def write_audit_log(
                    VALUES (?, ?, ?, ?, ?)""",
                 (action, username, target, detail[:1000] if detail else "", client_ip),
             )
-            conn.commit()
     except Exception as e:
         logger.warning(f"审计日志写入失败: {e}")

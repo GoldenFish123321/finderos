@@ -63,9 +63,8 @@ class WatchResultRepository:
     def delete(result_id: int) -> bool:
         """Delete a collection result."""
         with get_db() as conn:
-            conn.execute("DELETE FROM watch_results WHERE id = ?", (result_id,))
-            conn.commit()
-            return conn.total_changes > 0
+            cursor = conn.execute("DELETE FROM watch_results WHERE id = ?", (result_id,))
+            return cursor.rowcount > 0
 
     @staticmethod
     def get_count() -> int:
@@ -77,12 +76,11 @@ class WatchResultRepository:
     def mark_saved(result_id: int) -> bool:
         """Mark a result as saved to warehouse."""
         with get_db() as conn:
-            conn.execute(
+            cursor = conn.execute(
                 "UPDATE watch_results SET result_data = 'SAVED:' || COALESCE(result_data, '') WHERE id = ?",
                 (result_id,),
             )
-            conn.commit()
-            return conn.total_changes > 0
+            return cursor.rowcount > 0
 
     @staticmethod
     def get_saved(page: int = 1, page_size: int = 20, keyword: str = "") -> tuple:

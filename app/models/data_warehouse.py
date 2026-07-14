@@ -38,14 +38,13 @@ class DataWarehouseRepository:
         """
         try:
             with get_db() as conn:
-                conn.execute(
+                cursor = conn.execute(
                     "INSERT OR IGNORE INTO data_warehouse "
                     "(result_id, title, link, summary, source_name, raw_data) "
                     "VALUES (?, ?, ?, ?, ?, ?)",
                     (result_id, title, link, summary, source_name, raw_data),
                 )
-                conn.commit()
-                return conn.total_changes > 0
+                return cursor.rowcount > 0
         except Exception as e:
             logger.error(f"create: 保存数据仓库记录失败 (title={title[:50]}): {e}", exc_info=True)
             return False
@@ -62,19 +61,17 @@ class DataWarehouseRepository:
                     source_name = item.get("source_name", "")
                     raw_data = json.dumps(item, ensure_ascii=False) if item else ""
 
-                    before = conn.total_changes
-                    conn.execute(
+                    cursor = conn.execute(
                         "INSERT OR IGNORE INTO data_warehouse "
                         "(result_id, title, link, summary, source_name, raw_data) "
                         "VALUES (?, ?, ?, ?, ?, ?)",
                         (item.get("result_id"), title, link,
                          item.get("summary"), source_name, raw_data),
                     )
-                    if conn.total_changes > before:
+                    if cursor.rowcount > 0:
                         count += 1
                 except Exception as e:
                     logger.error(f"batch_create: 插入数据仓库记录失败: {e}", exc_info=True)
-            conn.commit()
         return count
 
     @staticmethod
@@ -189,13 +186,12 @@ class DataWarehouseRepository:
                     }
 
                 new_raw = _json.dumps(raw_obj, ensure_ascii=False)
-                conn.execute(
+                cursor = conn.execute(
                     "UPDATE data_warehouse SET raw_data = ?, is_deep_collected = 1, "
                     "deep_collected_at = ? WHERE id = ?",
                     (new_raw, now_utc, dw_id),
                 )
-                conn.commit()
-                return conn.total_changes > 0
+                return cursor.rowcount > 0
         except Exception as e:
             logger.error(f"mark_deep_collected: 深度采集保存失败 (dw_id={dw_id}): {e}", exc_info=True)
             return False
