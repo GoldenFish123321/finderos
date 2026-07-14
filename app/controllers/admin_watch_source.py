@@ -41,7 +41,11 @@ class WatchSourceFormHandler(AdminBaseHandler):
         source_id = self.get_query_argument("id", None)
         source = None
         if source_id:
-            source = WatchSourceRepository.get_by_id(int(source_id))
+            try:
+                source = WatchSourceRepository.get_by_id(int(source_id))
+            except (ValueError, TypeError):
+                self.write('<script>alert("无效的瞭望源ID");window.history.back();</script>')
+                return
             if not source:
                 self.write('<script>alert("瞭望源不存在");window.history.back();</script>')
                 return

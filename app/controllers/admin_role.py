@@ -38,7 +38,11 @@ class RoleFormHandler(AdminBaseHandler):
         role_id = self.get_query_argument("id", None)
         role = None
         if role_id:
-            role = RoleRepository.get_by_id(int(role_id))
+            try:
+                role = RoleRepository.get_by_id(int(role_id))
+            except (ValueError, TypeError):
+                self.write('<script>alert("无效的角色ID");window.history.back();</script>')
+                return
             if not role:
                 self.write('<script>alert("角色不存在");window.history.back();</script>')
                 return

@@ -229,7 +229,8 @@ class DataWarehouseRepository:
                 )
                 conn.commit()
                 return conn.total_changes > 0
-        except Exception:
+        except Exception as e:
+            logger.error(f"mark_deep_collected: 深度采集保存失败 (dw_id={dw_id}): {e}", exc_info=True)
             return False
 
     @staticmethod

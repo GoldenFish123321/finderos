@@ -47,7 +47,11 @@ class UserFormHandler(AdminBaseHandler):
         user_id = self.get_query_argument("id", None)
         user = None
         if user_id:
-            user = UserRepository.get_user_by_id(int(user_id))
+            try:
+                user = UserRepository.get_user_by_id(int(user_id))
+            except (ValueError, TypeError):
+                self.write('<script>alert("无效的用户ID");window.history.back();</script>')
+                return
             if not user:
                 self.write('<script>alert("用户不存在");window.history.back();</script>')
                 return

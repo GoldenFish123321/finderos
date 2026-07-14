@@ -77,7 +77,11 @@ class EmployeeFormHandler(AdminBaseHandler):
         emp_id = self.get_query_argument("id", None)
         emp = None
         if emp_id:
-            emp = DigitalEmployeeRepository.get_by_id(int(emp_id))
+            try:
+                emp = DigitalEmployeeRepository.get_by_id(int(emp_id))
+            except (ValueError, TypeError):
+                self.write('<script>alert("无效的员工ID");window.history.back();</script>')
+                return
             if not emp:
                 self.write('<script>alert("员工不存在");window.history.back();</script>')
                 return
