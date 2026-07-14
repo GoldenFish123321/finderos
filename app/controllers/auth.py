@@ -152,6 +152,13 @@ class LogoutHandler(BaseHandler):
     """登出处理器"""
 
     def get(self):
+        write_audit_log(
+            action="LOGOUT",
+            username=self.current_user or "unknown",
+            target="session",
+            detail="用户主动登出",
+            client_ip=self.request.remote_ip or "",
+        )
         self.clear_cookie("username")
         self.redirect("/")
 

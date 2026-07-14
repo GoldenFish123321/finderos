@@ -78,7 +78,11 @@ class RoleFormHandler(AdminBaseHandler):
             ok = RoleRepository.update(role_id, name, description)
             if ok:
                 # 更新功能关联
-                func_ids = [int(x) for x in function_ids if x]
+                try:
+                    func_ids = [int(x) for x in function_ids if x]
+                except (ValueError, TypeError):
+                    self.write('<script>alert("功能ID格式错误");window.history.back();</script>')
+                    return
                 RoleRepository.set_functions(role_id, func_ids)
                 self.redirect("/admin/role?msg=更新成功")
             else:
@@ -89,7 +93,11 @@ class RoleFormHandler(AdminBaseHandler):
                 # 获取新角色 ID 并关联功能
                 new_role = RoleRepository.get_by_name(name)
                 if new_role:
-                    func_ids = [int(x) for x in function_ids if x]
+                    try:
+                        func_ids = [int(x) for x in function_ids if x]
+                    except (ValueError, TypeError):
+                        self.write('<script>alert("功能ID格式错误");window.history.back();</script>')
+                        return
                     RoleRepository.set_functions(new_role["id"], func_ids)
                 self.redirect("/admin/role?msg=创建成功")
             else:
