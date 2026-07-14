@@ -633,12 +633,16 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             try:
                 if api_method == "POST":
                     data = api_params.encode() if api_params else None
-                    req = urllib.request.Request(api_url, data=data, headers=headers)
-                else:
+                    req = urllib.request.Request(api_url, data=data, headers=headers, method="POST")
+                elif api_method == "GET":
                     full_url = api_url
                     if api_params:
                         full_url += ("&" if "?" in api_url else "?") + api_params
-                    req = urllib.request.Request(full_url, headers=headers)
+                    req = urllib.request.Request(full_url, headers=headers, method="GET")
+                else:
+                    # PUT, DELETE, PATCH 等方法
+                    data = api_params.encode() if api_params else None
+                    req = urllib.request.Request(api_url, data=data, headers=headers, method=api_method)
                 with urllib.request.urlopen(req, timeout=30) as resp:
                     body = resp.read().decode("utf-8", errors="replace")
                     return resp.status, body, None
