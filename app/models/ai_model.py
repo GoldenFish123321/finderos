@@ -179,7 +179,8 @@ class AiModelRepository:
                 )
                 conn.commit()
             return True
-        except Exception:
+        except Exception as e:
+            logger.error(f"add_tokens: 更新模型 {model_id} Token 计数失败: {e}", exc_info=True)
             return False
 
     @staticmethod

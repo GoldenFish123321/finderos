@@ -18,7 +18,10 @@ data_warehouse.py — 数据仓库独立存储模型
 """
 
 import json
+import logging
 from app.models.db import get_db
+
+logger = logging.getLogger(__name__)
 
 
 class DataWarehouseRepository:
@@ -59,7 +62,8 @@ class DataWarehouseRepository:
                     )
                 conn.commit()
                 return conn.total_changes > 0
-        except Exception:
+        except Exception as e:
+            logger.error(f"create: 保存数据仓库记录失败 (title={title[:50]}): {e}", exc_info=True)
             return False
 
     @staticmethod
@@ -101,8 +105,8 @@ class DataWarehouseRepository:
                         )
                     if conn.total_changes > before:
                         count += 1
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.error(f"batch_create: 插入数据仓库记录失败: {e}", exc_info=True)
             conn.commit()
         return count
 

@@ -154,7 +154,7 @@ class ModelDefaultHandler(AdminBaseHandler):
 
 
 class ModelApiListHandler(AdminBaseHandler):
-    """API: 模型列表 JSON（供前端 AJAX 调用）"""
+    """API: 模型列表 JSON（供前端 AJAX 调用，仅返回已启用的模型）"""
 
     @tornado.web.authenticated
     def get(self):
@@ -164,6 +164,9 @@ class ModelApiListHandler(AdminBaseHandler):
         rows, total = AiModelRepository.get_all(page=page, page_size=limit, category=category)
         items = []
         for r in rows:
+            # API 接口仅返回已启用的模型
+            if r.get("is_enabled") != 1:
+                continue
             items.append({
                 "id": r["id"],
                 "name": r["name"],
@@ -174,7 +177,7 @@ class ModelApiListHandler(AdminBaseHandler):
                 "is_enabled": r["is_enabled"],
                 "has_key": bool(r["api_key"]),
             })
-        self.write({"code": 0, "total": total, "items": items})
+        self.write({"code": 0, "total": len(items), "items": items})
 
 
 class ModelChatHandler(AdminBaseHandler):
@@ -486,5 +489,13 @@ class ConversationMessagesHandler(AdminBaseHandler):
     @tornado.web.authenticated
     def get(self):
         conv_id = int(self.get_query_argument("id", 0))
+        # 校验对话归属权，防止 IDOR 越权访问
+        conv = ConversationRepository.get_by_id(conv_id)
+        if not conv:
+            self.write({"code": 1, "msg": "对话不存在"})
+            return
+        if conv.get("username", "") != self.current_user:
+            self.write({"code": 1, "msg": "无权访问此对话"})
+            return
         messages = ConversationRepository.get_messages(conv_id, limit=50)
         self.write({"code": 0, "items": messages})
