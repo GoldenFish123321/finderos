@@ -307,7 +307,7 @@ class UserChatStreamHandler(BaseHandler):
                 "temperature": temperature,
                 "max_tokens": max_tokens,
                 "stream": True,
-            }).encode()
+            }).encode('utf-8')
 
             def _sync_stream_call():
                 import urllib.request
@@ -316,7 +316,7 @@ class UserChatStreamHandler(BaseHandler):
                         f"{api_base}/chat/completions",
                         data=payload,
                         headers={
-                            "Content-Type": "application/json",
+                            "Content-Type": "application/json; charset=utf-8",
                             "Authorization": f"Bearer {api_key}",
                         },
                     )
@@ -560,7 +560,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
                 "temperature": temperature,
                 "max_tokens": max_tokens,
                 "stream": True,
-            }).encode()
+            }).encode('utf-8')
 
             def _sync_stream_call():
                 import urllib.request
@@ -569,7 +569,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
                         f"{api_base}/chat/completions",
                         data=payload,
                         headers={
-                            "Content-Type": "application/json",
+                            "Content-Type": "application/json; charset=utf-8",
                             "Authorization": f"Bearer {api_key}",
                         },
                     )
@@ -871,7 +871,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
         def _sync_api_call():
             try:
                 if api_method == "POST":
-                    data = api_params.encode() if api_params else None
+                    data = api_params.encode('utf-8') if api_params else None
                     req = urllib.request.Request(
                         api_url, data=data, headers=headers, method="POST"
                     )
@@ -881,7 +881,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
                         full_url += ("&" if "?" in api_url else "?") + api_params
                     req = urllib.request.Request(full_url, headers=headers, method="GET")
                 else:
-                    data = api_params.encode() if api_params else None
+                    data = api_params.encode('utf-8') if api_params else None
                     req = urllib.request.Request(
                         api_url, data=data, headers=headers, method=api_method
                     )

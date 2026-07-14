@@ -344,7 +344,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
                 "temperature": temperature,
                 "max_tokens": max_tokens,
                 "stream": True,
-            }).encode()
+            }).encode('utf-8')
 
             def _sync_stream_call():
                 """在线程池中执行的同步 HTTP 流式调用，使用块读取避免逐行全缓冲。"""
@@ -354,7 +354,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
                         f"{api_base}/chat/completions",
                         data=payload,
                         headers={
-                            "Content-Type": "application/json",
+                            "Content-Type": "application/json; charset=utf-8",
                             "Authorization": f"Bearer {api_key}",
                         },
                     )
@@ -631,7 +631,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         def _sync_api_call():
             try:
                 if api_method == "POST":
-                    data = api_params.encode() if api_params else None
+                    data = api_params.encode('utf-8') if api_params else None
                     req = urllib.request.Request(api_url, data=data, headers=headers, method="POST")
                 elif api_method == "GET":
                     full_url = api_url
@@ -640,7 +640,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
                     req = urllib.request.Request(full_url, headers=headers, method="GET")
                 else:
                     # PUT, DELETE, PATCH 等方法
-                    data = api_params.encode() if api_params else None
+                    data = api_params.encode('utf-8') if api_params else None
                     req = urllib.request.Request(api_url, data=data, headers=headers, method=api_method)
                 with urllib.request.urlopen(req, timeout=30) as resp:
                     body = resp.read().decode("utf-8", errors="replace")
