@@ -47,7 +47,8 @@ class WatchSourceRepository:
 
     @staticmethod
     def create(name: str, description: str, url_template: str,
-               request_headers: str = "{}", sort_order: int = 0) -> bool:
+               request_headers: str = "{}", sort_order: int = 0,
+               schedule_interval: int = 0) -> bool:
         """Create a watch source."""
         try:
             json.loads(request_headers)  # Validate JSON format
@@ -57,9 +58,9 @@ class WatchSourceRepository:
             with get_db() as conn:
                 conn.execute(
                     "INSERT INTO watch_sources (name, description, url_template, "
-                    "request_headers, sort_order) VALUES (?, ?, ?, ?, ?)",
+                    "request_headers, sort_order, schedule_interval) VALUES (?, ?, ?, ?, ?, ?)",
                     (name.strip(), description.strip(), url_template.strip(),
-                     request_headers, sort_order),
+                     request_headers, sort_order, schedule_interval),
                 )
                 conn.commit()
             return True
@@ -68,7 +69,8 @@ class WatchSourceRepository:
 
     @staticmethod
     def update(source_id: int, name: str, description: str, url_template: str,
-               request_headers: str = "{}", sort_order: int = 0) -> bool:
+               request_headers: str = "{}", sort_order: int = 0,
+               schedule_interval: int = 0) -> bool:
         """Update a watch source."""
         try:
             json.loads(request_headers)  # Validate JSON format
@@ -78,9 +80,9 @@ class WatchSourceRepository:
             with get_db() as conn:
                 conn.execute(
                     "UPDATE watch_sources SET name=?, description=?, url_template=?, "
-                    "request_headers=?, sort_order=? WHERE id=?",
+                    "request_headers=?, sort_order=?, schedule_interval=? WHERE id=?",
                     (name.strip(), description.strip(), url_template.strip(),
-                     request_headers, sort_order, source_id),
+                     request_headers, sort_order, schedule_interval, source_id),
                 )
                 conn.commit()
             return True

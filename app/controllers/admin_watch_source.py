@@ -72,6 +72,10 @@ class WatchSourceFormHandler(AdminBaseHandler):
         except (ValueError, TypeError):
             self.write('<script>alert("排序号格式不正确");window.history.back();</script>')
             return
+        try:
+            schedule_interval = int(self.get_body_argument("schedule_interval", 0))
+        except (ValueError, TypeError):
+            schedule_interval = 0
 
         if not name or not url_template:
             self.write('<script>alert("名称和URL模板不能为空");window.history.back();</script>')
@@ -79,12 +83,12 @@ class WatchSourceFormHandler(AdminBaseHandler):
 
         if source_id:
             ok = WatchSourceRepository.update(
-                int(source_id), name, description, url_template, request_headers, sort_order
+                int(source_id), name, description, url_template, request_headers, sort_order, schedule_interval
             )
             msg = "更新成功" if ok else "更新失败"
         else:
             ok = WatchSourceRepository.create(
-                name, description, url_template, request_headers, sort_order
+                name, description, url_template, request_headers, sort_order, schedule_interval
             )
             msg = "创建成功" if ok else "创建失败"
 
