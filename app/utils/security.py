@@ -1,10 +1,12 @@
 """
 security.py — 安全工具模块
 
-提供 SSRF 防护 URL 校验 + 审计日志写入。
+提供 SSRF 防护 URL 校验 + API Key 加密存储 + 审计日志写入。
 参考 OWASP Top 10 (2021): A10: Server-Side Request Forgery (SSRF)
 """
 
+import base64
+import hashlib
 import ipaddress
 import logging
 import re
@@ -12,6 +14,8 @@ import socket
 import time
 from datetime import datetime, timezone
 from urllib.parse import urlparse
+
+from cryptography.fernet import Fernet
 
 from app.config.settings import settings
 from app.models.db import get_db
@@ -96,6 +100,64 @@ def validate_url_safe(url: str) -> tuple[bool, str]:
         return False, f"禁止访问内网地址: {hostname} ({ip})"
 
     return True, ""
+
+
+# ── API Key 加密存储 ──────────────────────────────────────────
+
+# Fernet 实例缓存（延迟初始化，避免循环导入）
+_fernet_instance: Fernet | None = None
+
+
+def _get_fernet() -> Fernet:
+    """获取或创建 Fernet 加密实例（从应用 secret 派生密钥）。
+
+    如果 COOKIE_SECRET 未设置，抛出 RuntimeError 拒绝启动——
+    不允许使用硬编码回退密钥，那会使加密形同虚设。
+    """
+    global _fernet_instance
+    if _fernet_instance is not None:
+        return _fernet_instance
+    secret = settings.COOKIE_SECRET
+    if not secret:
+        raise RuntimeError(
+            "COOKIE_SECRET 环境变量未设置，无法初始化 API Key 加密模块。"
+            "请设置 COOKIE_SECRET 环境变量后重启应用。"
+        )
+    derived = hashlib.sha256(secret.encode()).digest()
+    fernet_key = base64.urlsafe_b64encode(derived)
+    _fernet_instance = Fernet(fernet_key)
+    return _fernet_instance
+
+
+def encrypt_api_key(plaintext: str) -> str:
+    """
+    加密 API Key。
+
+    空字符串不加密，直接返回空字符串。
+    加密失败时抛出异常（fail-secure：绝不允许明文静默落库）。
+    """
+    if not plaintext:
+        return ""
+    f = _get_fernet()
+    return f.encrypt(plaintext.encode()).decode()
+
+
+def decrypt_api_key(ciphertext: str) -> str:
+    """
+    解密 API Key。
+
+    空字符串直接返回。
+    如果解密失败（如旧数据为明文、密钥轮换等），返回原始值作为回退。
+    这确保了从明文到密文的平滑迁移。
+    """
+    if not ciphertext:
+        return ""
+    try:
+        f = _get_fernet()
+        return f.decrypt(ciphertext.encode()).decode()
+    except Exception:
+        # 解密失败：可能是旧明文数据，直接返回原值
+        return ciphertext
 
 
 # ── 审计日志 ───────────────────────────────────────────────────

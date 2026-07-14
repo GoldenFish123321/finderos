@@ -93,8 +93,12 @@ class ModelFormHandler(AdminBaseHandler):
 
         if model_id:
             model_id = int(model_id)
-            # 编辑时：如果 API Key 未填写，保留数据库中的旧值（表单提示"留空则不修改"）
-            if not api_key:
+            # 检查是否需要清除 API Key（管理员主动勾选"清除密钥"复选框）
+            clear_key = self.get_body_argument("clear_key", "0") == "1"
+            if clear_key:
+                api_key = ""  # 明确清除
+            elif not api_key:
+                # 编辑时：如果 API Key 未填写且未勾选清除，保留数据库中的旧值
                 existing = AiModelRepository.get_by_id(model_id)
                 if existing:
                     api_key = existing["api_key"]

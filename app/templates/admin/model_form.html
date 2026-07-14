@@ -42,8 +42,13 @@
             <div class="layui-form-item">
                 <label class="layui-form-label">API Key</label>
                 <div class="layui-input-block">
-                    <input type="password" name="api_key" class="layui-input"
+                    <input type="password" name="api_key" class="layui-input" id="api-key-input"
                            value="" placeholder="{{ '留空则不修改' if model else 'sk-...' }}">
+                    {% if model %}
+                    <div style="margin-top:6px;">
+                        <input type="checkbox" name="clear_key" value="1" id="clear-key-check" title="清除密钥（将 API Key 设为空）">
+                    </div>
+                    {% end %}
                 </div>
             </div>
             <div class="layui-form-item">

@@ -8,6 +8,12 @@ import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
 from app.models.user import UserRepository
 from app.models.role import RoleRepository
+from app.utils.security import write_audit_log
+
+# 密码修改速率限制（用户维度）
+_pwd_change_attempts: dict[str, list[float]] = {}
+_PWD_CHANGE_MAX = 5
+_PWD_CHANGE_WINDOW = 300  # 5分钟
 
 
 class UserListHandler(AdminBaseHandler):
@@ -184,3 +190,71 @@ class UserBatchToggleHandler(AdminBaseHandler):
             self.write({"code": 0, "msg": msg})
         except (ValueError, TypeError):
             self.write({"code": 1, "msg": "参数格式错误"})
+
+
+class ChangePasswordHandler(AdminBaseHandler):
+    """用户自助修改密码"""
+
+    @tornado.web.authenticated
+    def get(self):
+        self.render(
+            "admin/change_password.html",
+            title="修改密码 — 瞭望与问数系统",
+            username=self.current_user,
+        )
+
+    @tornado.web.authenticated
+    def post(self):
+        import time
+        old_password = self.get_body_argument("old_password", "").strip()
+        new_password = self.get_body_argument("new_password", "").strip()
+        confirm_password = self.get_body_argument("confirm_password", "").strip()
+
+        # 速率限制检查
+        rate_key = f"pwd:{self.current_user}"
+        now = time.time()
+        attempts = _pwd_change_attempts.get(rate_key, [])
+        attempts = [t for t in attempts if now - t < _PWD_CHANGE_WINDOW]
+        if len(attempts) >= _PWD_CHANGE_MAX:
+            self.write('<script>alert("操作过于频繁，请5分钟后再试");window.history.back();</script>')
+            return
+
+        if not old_password or not new_password:
+            self.write('<script>alert("请填写所有字段");window.history.back();</script>')
+            return
+        if new_password != confirm_password:
+            self.write('<script>alert("两次输入的新密码不一致");window.history.back();</script>')
+            return
+        if len(new_password) < 6:
+            self.write('<script>alert("新密码长度不能少于6个字符");window.history.back();</script>')
+            return
+
+        user = UserRepository.get_user_by_username(self.current_user)
+        if not user:
+            self.write('<script>alert("用户不存在");window.history.back();</script>')
+            return
+
+        ok, msg = UserRepository.update_password(user["id"], old_password, new_password)
+        if ok:
+            # 成功后清除速率记录
+            _pwd_change_attempts.pop(rate_key, None)
+            write_audit_log(
+                action="CHANGE_PASSWORD",
+                username=self.current_user,
+                target=f"user:{user['id']}",
+                detail="密码修改成功",
+                client_ip=self.request.remote_ip or "",
+            )
+            self.write(f'<script>alert("{msg}，请重新登录");location.href="/logout";</script>')
+        else:
+            # 记录失败尝试
+            attempts.append(now)
+            _pwd_change_attempts[rate_key] = attempts
+            write_audit_log(
+                action="CHANGE_PASSWORD_FAILED",
+                username=self.current_user,
+                target=f"user:{user['id']}",
+                detail=f"失败原因: {msg}",
+                client_ip=self.request.remote_ip or "",
+            )
+            self.write(f'<script>alert("{msg}");window.history.back();</script>')

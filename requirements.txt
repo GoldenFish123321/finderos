@@ -3,11 +3,18 @@
 # 核心依赖
 tornado>=6.4
 
+# 加密：API Key 存储加密
+cryptography>=41.0
+
+# 可选：AI 爬虫组件（深度采集增强）
+# crawl4ai>=0.4
+
 # 可选：如需异步 HTTP 客户端（提升 AI 对话并发性能）
 # aiohttp>=3.9
 
 # 说明：
 # - 项目主要使用 Python 标准库（sqlite3, urllib, hashlib, ssl 等）
 # - tornado 是唯一的必须外部依赖
+# - cryptography 用于 Fernet 对称加密 API Key 存储
 # - AI 模型对话通过 urllib.request 发起 HTTP 请求（纯标准库）
 # - 瞭望采集同样使用 urllib（零第三方爬虫依赖）

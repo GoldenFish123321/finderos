@@ -47,7 +47,7 @@ class UserRepository:
         if row["is_enabled"] == 0:
             return False
         expected = _hash_password(password, bytes.fromhex(row["salt"]))
-        return expected == row["password_hash"]
+        return secrets.compare_digest(expected, row["password_hash"])
 
     @staticmethod
     def get_user_by_username(username: str):
@@ -166,6 +166,32 @@ class UserRepository:
             )
             conn.commit()
             return new_status
+
+    @staticmethod
+    def update_password(user_id: int, old_password: str, new_password: str) -> tuple:
+        """更新用户密码。验证旧密码后更新为新密码。返回 (成功, 消息)。"""
+        if not new_password or len(new_password) < 6:
+            return False, "新密码长度不能少于6个字符"
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT password_hash, salt, is_enabled FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+            if not row:
+                return False, "用户不存在"
+            if row["is_enabled"] == 0:
+                return False, "用户已被禁用"
+            expected = _hash_password(old_password, bytes.fromhex(row["salt"]))
+            if not secrets.compare_digest(expected, row["password_hash"]):
+                return False, "旧密码不正确"
+            salt = secrets.token_bytes(16)
+            password_hash = _hash_password(new_password, salt)
+            conn.execute(
+                "UPDATE users SET password_hash=?, salt=? WHERE id=?",
+                (password_hash, salt.hex(), user_id),
+            )
+            conn.commit()
+        return True, "密码修改成功"
 
     @staticmethod
     def batch_delete(ids: list[int]) -> tuple[int, int]:
