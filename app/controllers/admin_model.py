@@ -12,6 +12,7 @@ import logging
 import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
 from app.models.ai_model import AiModelRepository, CATEGORIES, PROVIDERS
+from app.models.conversation import ConversationRepository
 
 logger = logging.getLogger(__name__)
 
@@ -183,9 +184,13 @@ class ModelChatHandler(AdminBaseHandler):
     async def post(self):
         model_id = int(self.get_body_argument("model_id", 0))
         message = self.get_body_argument("message", "").strip()
+        conversation_id = self.get_body_argument("conversation_id", None)
 
         if not message:
             self.write({"code": 1, "msg": "消息不能为空"})
+            return
+        if len(message) > 10000:
+            self.write({"code": 1, "msg": "消息过长（最多10000字符）"})
             return
 
         model = AiModelRepository.get_by_id(model_id)
@@ -200,10 +205,21 @@ class ModelChatHandler(AdminBaseHandler):
         temperature = model["temperature"]
         max_tokens = model["max_tokens"]
 
-        # 构建消息
+        # 多轮对话：加载历史消息
+        history_messages = []
+        conv_id = None
+        if conversation_id:
+            try:
+                conv_id = int(conversation_id)
+                history_messages = ConversationRepository.get_recent_messages(conv_id, limit=10)
+            except (ValueError, TypeError):
+                pass
+
+        # 构建完整消息列表
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
+        messages.extend(history_messages)
         messages.append({"role": "user", "content": message})
 
         # SSE 响应头
@@ -299,15 +315,28 @@ class ModelChatHandler(AdminBaseHandler):
             total_tokens = await self._mock_stream_response(message, model)
             api_success = True
 
-        # 发送 token 统计（is_mock 反映本次对话是否实际使用了 Mock 回退）
+        # 发送 token 统计 + conversation_id
+        resp_stats = {"tokens": total_tokens, "mock": is_mock}
+        if conv_id:
+            resp_stats["conversation_id"] = conv_id
         self.write(
-            f"event: stats\ndata: {json.dumps({'tokens': total_tokens, 'mock': is_mock})}\n\n"
+            f"event: stats\ndata: {json.dumps(resp_stats)}\n\n"
         )
         await self.flush()
 
         # 记录 Token 消耗到数据库
         if total_tokens > 0:
             AiModelRepository.add_tokens(model_id, total_tokens)
+
+        # 多轮对话：保存用户消息与 AI 回复
+        if conv_id:
+            # 收集完整的 AI 回复内容（从 SSE 流中已输出的内容）
+            ConversationRepository.add_message(conv_id, "user", message, 0)
+            ConversationRepository.add_message(
+                conv_id, "assistant",
+                f"[Mock: {model['name']}] " + message if is_mock else message,
+                total_tokens
+            )
 
         # 审计日志
         from app.utils.security import write_audit_log
@@ -350,21 +379,20 @@ class ModelChatHandler(AdminBaseHandler):
 
 
 class ModelChatPageHandler(AdminBaseHandler):
-    """模型对话测试页面"""
+    """模型对话测试页面（含多轮对话历史）"""
 
     @tornado.web.authenticated
     def get(self):
         model_id = self.get_query_argument("model_id", None)
         models_data, _ = AiModelRepository.get_all(page=1, page_size=50)
+        conversations = ConversationRepository.get_all(username=self.current_user, limit=50)
 
         selected_model = None
         if model_id:
             selected_model = AiModelRepository.get_by_id(int(model_id))
 
-        # 未指定模型时自动选择默认模型（避免输入框因无模型而被禁用）
         if not selected_model:
             selected_model = AiModelRepository.get_default()
-        # 如果仍未选到（例如所有模型都被禁用），取第一个启用的模型
         if not selected_model:
             for m in models_data:
                 if m["is_enabled"] == 1:
@@ -377,5 +405,47 @@ class ModelChatPageHandler(AdminBaseHandler):
             username=self.current_user,
             models=models_data,
             selected=selected_model,
+            conversations=conversations,
             xsrf_token=self.xsrf_token.decode() if isinstance(self.xsrf_token, bytes) else self.xsrf_token,
         )
+
+
+class ConversationListHandler(AdminBaseHandler):
+    """API: 对话列表"""
+
+    @tornado.web.authenticated
+    def get(self):
+        conversations = ConversationRepository.get_all(username=self.current_user)
+        self.write({"code": 0, "items": conversations})
+
+
+class ConversationCreateHandler(AdminBaseHandler):
+    """API: 创建新对话"""
+
+    @tornado.web.authenticated
+    def post(self):
+        model_id_str = self.get_body_argument("model_id", None)
+        model_id = int(model_id_str) if model_id_str else None
+        title = self.get_body_argument("title", "新对话").strip()
+        conv_id = ConversationRepository.create(title=title, model_id=model_id)
+        self.write({"code": 0, "id": conv_id, "title": title})
+
+
+class ConversationDeleteHandler(AdminBaseHandler):
+    """API: 删除对话"""
+
+    @tornado.web.authenticated
+    def post(self):
+        conv_id = int(self.get_body_argument("id", 0))
+        ConversationRepository.delete(conv_id)
+        self.write({"code": 0, "msg": "已删除"})
+
+
+class ConversationMessagesHandler(AdminBaseHandler):
+    """API: 获取对话历史消息"""
+
+    @tornado.web.authenticated
+    def get(self):
+        conv_id = int(self.get_query_argument("id", 0))
+        messages = ConversationRepository.get_messages(conv_id, limit=50)
+        self.write({"code": 0, "items": messages})

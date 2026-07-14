@@ -61,6 +61,16 @@
                 {% end %}
             </div>
         </div>
+        <!-- 对话历史 -->
+        <div class="layui-card" style="margin-top:12px;flex:1;">
+            <div class="layui-card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                <span><i class="layui-icon layui-icon-list"></i> 对话历史</span>
+                <a href="javascript:void(0)" onclick="newConversation()" class="layui-btn layui-btn-xs layui-btn-normal">+ 新对话</a>
+            </div>
+            <div class="layui-card-body" style="padding:0;overflow-y:auto;" id="conv-list">
+                <div class="empty-state"><p style="font-size:12px;">暂无对话记录</p></div>
+            </div>
+        </div>
     </div>
 
     <!-- 对话主区域 -->
@@ -100,10 +110,76 @@
 {% block admin_scripts %}
 <script>
 var currentModelId = {{ selected['id'] if selected else 0 }};
+var currentConversationId = null;
 var xsrf = '{% raw xsrf_token %}';
 
-function selectModel(mid) {
-    location.href = '/admin/model/chat?model_id=' + mid;
+function selectModel(mid) { location.href = '/admin/model/chat?model_id=' + mid; }
+
+function newConversation() {
+    var formData = new FormData();
+    formData.append('_xsrf', xsrf);
+    formData.append('model_id', currentModelId);
+    formData.append('title', '新对话 ' + new Date().toLocaleTimeString());
+    fetch('/admin/api/conversation/create', { method: 'POST', body: formData })
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+            currentConversationId = d.id;
+            document.getElementById('chat-messages').innerHTML = '';
+            loadConversationList();
+        });
+}
+
+function loadConversationList() {
+    fetch('/admin/api/conversation/list?_xsrf=' + xsrf)
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+            var list = document.getElementById('conv-list');
+            list.innerHTML = '';
+            (d.items || []).forEach(function(c){
+                var item = document.createElement('div');
+                item.className = 'model-select-item' + (c.id === currentConversationId ? ' active' : '');
+                item.innerHTML = '<div class="m-name">💬 ' + escapeHtml(c.title) + '</div>' +
+                    '<div class="m-info">' + (c.msg_count || 0) + ' 条消息 · ' + (c.updated_at || '').substring(0,16) +
+                    ' <a href="javascript:void(0)" onclick="event.stopPropagation();deleteConversation(' + c.id + ')" style="color:#f56c6c;font-size:11px;">删除</a></div>';
+                item.onclick = function(){ switchConversation(c.id); };
+                list.appendChild(item);
+            });
+        });
+}
+
+function switchConversation(convId) {
+    currentConversationId = convId;
+    document.getElementById('chat-messages').innerHTML = '';
+    fetch('/admin/api/conversation/messages?id=' + convId + '&_xsrf=' + xsrf)
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+            var container = document.getElementById('chat-messages');
+            (d.items || []).forEach(function(m){
+                var role = m.role === 'user' ? 'user' : 'assistant';
+                var avatar = m.role === 'user' ? '👤' : '🤖';
+                container.insertAdjacentHTML('beforeend',
+                    '<div class="chat-msg ' + role + '">' +
+                    (role === 'user' ? '' : '<div class="avatar">' + avatar + '</div>') +
+                    '<div class="bubble">' + escapeHtml(m.content) + '</div>' +
+                    (role === 'user' ? '<div class="avatar">' + avatar + '</div>' : '') +
+                    '</div>');
+            });
+            container.scrollTop = container.scrollHeight;
+            loadConversationList();
+        });
+}
+
+function deleteConversation(convId) {
+    if (!confirm('确认删除此对话？')) return;
+    var formData = new FormData();
+    formData.append('_xsrf', xsrf);
+    formData.append('id', convId);
+    fetch('/admin/api/conversation/delete', { method: 'POST', body: formData })
+        .then(function(){ loadConversationList(); });
+    if (currentConversationId === convId) {
+        currentConversationId = null;
+        document.getElementById('chat-messages').innerHTML = '';
+    }
 }
 
 function sendMessage() {
@@ -133,6 +209,8 @@ function sendMessage() {
     var xhr = new XMLHttpRequest();
     xhr.open('POST', '/admin/model/chat/stream', true);
     xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    var body = '_xsrf=' + encodeURIComponent(xsrf) + '&model_id=' + currentModelId + '&message=' + encodeURIComponent(msg);
+    if (currentConversationId) body += '&conversation_id=' + currentConversationId;
 
     var lastContent = '';
     var tokenCount = 0;
@@ -172,6 +250,10 @@ function sendMessage() {
                     try {
                         var stats = JSON.parse(dataStr);
                         tokenCount = stats.tokens || 0;
+                        if (stats.conversation_id && !currentConversationId) {
+                            currentConversationId = stats.conversation_id;
+                            loadConversationList();
+                        }
                         document.getElementById('token-stats').innerText = 'Tokens: ' + tokenCount;
                     } catch(e) {}
                     continue;
@@ -207,7 +289,7 @@ function sendMessage() {
         document.getElementById('btn-send').disabled = false;
     };
 
-    xhr.send('model_id=' + currentModelId + '&message=' + encodeURIComponent(msg) + '&_xsrf=' + xsrf);
+    xhr.send(body);
 }
 
 function escapeHtml(text) {
@@ -300,5 +382,8 @@ var mdParser = (function() {
         }
     };
 })();
+
+// 页面初始化：加载对话列表
+loadConversationList();
 </script>
 {% end %}

@@ -40,6 +40,8 @@ from app.controllers.admin_model import (
     ModelListHandler, ModelFormHandler, ModelDeleteHandler,
     ModelToggleHandler, ModelDefaultHandler, ModelApiListHandler,
     ModelChatHandler, ModelChatPageHandler,
+    ConversationListHandler, ConversationCreateHandler,
+    ConversationDeleteHandler, ConversationMessagesHandler,
 )
 from app.controllers.admin_employee import (
     EmployeeListHandler, EmployeeFormHandler, EmployeeDeleteHandler,
@@ -138,6 +140,12 @@ def make_app() -> tornado.web.Application:
             # 模型对话测试
             (r"/admin/model/chat", ModelChatPageHandler),
             (r"/admin/model/chat/stream", ModelChatHandler),
+
+            # 多轮对话管理 (v0.5.0)
+            (r"/admin/api/conversation/list", ConversationListHandler),
+            (r"/admin/api/conversation/create", ConversationCreateHandler),
+            (r"/admin/api/conversation/delete", ConversationDeleteHandler),
+            (r"/admin/api/conversation/messages", ConversationMessagesHandler),
 
             # ========== v0.3.0 新增模块 ==========
             # 数字化员工
