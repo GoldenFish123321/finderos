@@ -27,15 +27,36 @@ class DataWarehouseRepository:
     @staticmethod
     def create(result_id: int, title: str, link: str = "", summary: str = "",
                source_name: str = "", raw_data: str = "") -> bool:
-        """保存一条采集结果到数据仓库。link 唯一约束自动去重。"""
+        """保存一条采集结果到数据仓库。
+
+        去重策略：
+        - link 非空时，由数据库层 UNIQUE 索引自动去重
+        - link 为空时，按 title + source_name 组合应用层去重（因为部分唯一索引不覆盖空值）
+        """
         try:
             with get_db() as conn:
-                conn.execute(
-                    "INSERT OR IGNORE INTO data_warehouse "
-                    "(result_id, title, link, summary, source_name, raw_data) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
-                    (result_id, title, link, summary, source_name, raw_data),
-                )
+                if not link:
+                    # 空 link 时应用层去重：检查 title + source_name 是否已存在
+                    existing = conn.execute(
+                        "SELECT COUNT(*) as cnt FROM data_warehouse "
+                        "WHERE (link IS NULL OR link = '') AND title = ? AND source_name = ?",
+                        (title, source_name),
+                    ).fetchone()
+                    if existing and existing["cnt"] > 0:
+                        return False  # 已存在，跳过
+                    conn.execute(
+                        "INSERT INTO data_warehouse "
+                        "(result_id, title, link, summary, source_name, raw_data) "
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        (result_id, title, link, summary, source_name, raw_data),
+                    )
+                else:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO data_warehouse "
+                        "(result_id, title, link, summary, source_name, raw_data) "
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        (result_id, title, link, summary, source_name, raw_data),
+                    )
                 conn.commit()
                 return conn.total_changes > 0
         except Exception:
@@ -48,15 +69,37 @@ class DataWarehouseRepository:
         with get_db() as conn:
             for item in items:
                 try:
-                    conn.execute(
-                        "INSERT OR IGNORE INTO data_warehouse "
-                        "(result_id, title, link, summary, source_name, raw_data) "
-                        "VALUES (?, ?, ?, ?, ?, ?)",
-                        (item.get("result_id"), item.get("title"), item.get("link"),
-                         item.get("summary"), item.get("source_name"),
-                         json.dumps(item, ensure_ascii=False) if item else ""),
-                    )
-                    if conn.total_changes > 0:
+                    title = item.get("title", "")
+                    link = item.get("link", "")
+                    source_name = item.get("source_name", "")
+                    raw_data = json.dumps(item, ensure_ascii=False) if item else ""
+
+                    before = conn.total_changes
+                    if not link:
+                        # 空 link 应用层去重
+                        existing = conn.execute(
+                            "SELECT COUNT(*) as cnt FROM data_warehouse "
+                            "WHERE (link IS NULL OR link = '') AND title = ? AND source_name = ?",
+                            (title, source_name),
+                        ).fetchone()
+                        if existing and existing["cnt"] > 0:
+                            continue
+                        conn.execute(
+                            "INSERT INTO data_warehouse "
+                            "(result_id, title, link, summary, source_name, raw_data) "
+                            "VALUES (?, ?, ?, ?, ?, ?)",
+                            (item.get("result_id"), title, link,
+                             item.get("summary"), source_name, raw_data),
+                        )
+                    else:
+                        conn.execute(
+                            "INSERT OR IGNORE INTO data_warehouse "
+                            "(result_id, title, link, summary, source_name, raw_data) "
+                            "VALUES (?, ?, ?, ?, ?, ?)",
+                            (item.get("result_id"), title, link,
+                             item.get("summary"), source_name, raw_data),
+                        )
+                    if conn.total_changes > before:
                         count += 1
                 except Exception:
                     pass
