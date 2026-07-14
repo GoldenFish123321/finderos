@@ -154,9 +154,9 @@ class FunctionRepository:
         """Delete a function and its children."""
         with get_db() as conn:
             conn.execute("DELETE FROM functions WHERE parent_id = ?", (func_id,))
-            conn.execute("DELETE FROM functions WHERE id = ?", (func_id,))
+            cursor = conn.execute("DELETE FROM functions WHERE id = ?", (func_id,))
             conn.commit()
-            return conn.total_changes > 0
+            return cursor.rowcount > 0
 
     @staticmethod
     def toggle_enabled(func_id: int) -> int:

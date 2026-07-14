@@ -121,17 +121,17 @@ class UserRepository:
                 if password:
                     salt = secrets.token_bytes(16)
                     password_hash = _hash_password(password, salt)
-                    conn.execute(
+                    cursor = conn.execute(
                         "UPDATE users SET username=?, password_hash=?, salt=?, role_id=? WHERE id=?",
                         (username.strip(), password_hash, salt.hex(), role_id, user_id),
                     )
                 else:
-                    conn.execute(
+                    cursor = conn.execute(
                         "UPDATE users SET username=?, role_id=? WHERE id=?",
                         (username.strip(), role_id, user_id),
                     )
                 conn.commit()
-                result = conn.total_changes > 0
+                result = cursor.rowcount > 0
             return result
         except sqlite3.IntegrityError:
             return False
@@ -145,9 +145,9 @@ class UserRepository:
             ).fetchone()
             if not user or user["username"] == "admin":
                 return False
-            conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            cursor = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
             conn.commit()
-            return conn.total_changes > 0
+            return cursor.rowcount > 0
 
     @staticmethod
     def toggle_enabled(user_id: int) -> int:
