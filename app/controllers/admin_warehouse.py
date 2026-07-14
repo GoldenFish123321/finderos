@@ -23,11 +23,17 @@ class WarehouseHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def get(self):
-        page = int(self.get_query_argument("page", 1))
+        try:
+            page = int(self.get_query_argument("page", 1))
+        except (ValueError, TypeError):
+            page = 1
         keyword = self.get_query_argument("keyword", "").strip()
         source_id = self.get_query_argument("source_id", None)
         if source_id:
-            source_id = int(source_id)
+            try:
+                source_id = int(source_id)
+            except (ValueError, TypeError):
+                source_id = None
 
         rows, total = DataWarehouseRepository.get_all(
             page=page, page_size=20, keyword=keyword, source_id=source_id
@@ -54,7 +60,11 @@ class WarehouseDetailHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def get(self):
-        result_id = int(self.get_query_argument("id", 0))
+        try:
+            result_id = int(self.get_query_argument("id", 0))
+        except (ValueError, TypeError):
+            self.write('<script>alert("无效的记录ID");window.history.back();</script>')
+            return
         result = DataWarehouseRepository.get_by_id(result_id)
         if not result:
             self.write('<script>alert("记录不存在");window.history.back();</script>')
@@ -120,7 +130,11 @@ class WarehouseDeepCollectHandler(AdminBaseHandler):
     @tornado.web.authenticated
     def get(self):
         """查看深度采集结果。"""
-        dw_id = int(self.get_query_argument("id", 0))
+        try:
+            dw_id = int(self.get_query_argument("id", 0))
+        except (ValueError, TypeError):
+            self.write({"code": 1, "msg": "无效的记录ID"})
+            return
         record = DataWarehouseRepository.get_by_id(dw_id)
         if not record:
             self.write({"code": 1, "msg": "记录不存在"})

@@ -428,7 +428,10 @@ class ModelChatPageHandler(AdminBaseHandler):
 
         selected_model = None
         if model_id:
-            selected_model = AiModelRepository.get_by_id(int(model_id))
+            try:
+                selected_model = AiModelRepository.get_by_id(int(model_id))
+            except (ValueError, TypeError):
+                pass
 
         if not selected_model:
             selected_model = AiModelRepository.get_default()
