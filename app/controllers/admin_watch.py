@@ -30,10 +30,16 @@ class WatchHandler(AdminBaseHandler):
     @tornado.web.authenticated
     def get(self):
         keyword = self.get_query_argument("keyword", "").strip()
-        page = int(self.get_query_argument("page", 1))
+        try:
+            page = int(self.get_query_argument("page", 1))
+        except (ValueError, TypeError):
+            page = 1
         source_id = self.get_query_argument("source_id", None)
         if source_id:
-            source_id = int(source_id)
+            try:
+                source_id = int(source_id)
+            except (ValueError, TypeError):
+                source_id = None
 
         sources = WatchSourceRepository.get_enabled()
         rows, total = WatchResultRepository.get_all(

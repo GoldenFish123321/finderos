@@ -595,9 +595,11 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             self.write({"code": 1, "msg": "API 型员工未配置接口地址"})
             return
 
-        # 替换模板变量
+        # 替换模板变量（URL 中的 {message} 需要编码，参数模板中保持原文）
         try:
-            api_url = api_url.replace("{message}", message)
+            import urllib.parse
+            encoded_msg = urllib.parse.quote(message, safe="")
+            api_url = api_url.replace("{message}", encoded_msg)
             api_params = api_params.replace("{message}", message)
         except Exception:
             pass
@@ -685,7 +687,10 @@ class EmployeeTestPageHandler(AdminBaseHandler):
 
         selected = None
         if emp_id:
-            selected = DigitalEmployeeRepository.get_by_id(int(emp_id))
+            try:
+                selected = DigitalEmployeeRepository.get_by_id(int(emp_id))
+            except (ValueError, TypeError):
+                pass
 
         self.render(
             "admin/employee_test.html",
