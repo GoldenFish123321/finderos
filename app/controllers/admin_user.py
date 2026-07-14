@@ -67,13 +67,13 @@ class UserFormHandler(AdminBaseHandler):
 
         if user_id:  # 编辑
             user_id = int(user_id)
-            kwargs = {}
-            if username:
-                kwargs["username"] = username
-            if password:
-                kwargs["password"] = password
-            kwargs["role_id"] = role_id
-            ok = UserRepository.update_user(user_id, **kwargs)
+            existing = UserRepository.get_user_by_id(user_id)
+            if not existing:
+                self.write('<script>alert("用户不存在");window.history.back();</script>')
+                return
+            # 如果未提供用户名，保留原有用户名
+            update_username = username if username else existing["username"]
+            ok = UserRepository.update_user(user_id, update_username, password, role_id)
             if ok:
                 self.redirect("/admin/user?msg=更新成功")
             else:
