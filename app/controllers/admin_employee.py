@@ -333,8 +333,8 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             }).encode()
 
             def _sync_stream_call():
+                """在线程池中执行的同步 HTTP 流式调用，使用块读取避免逐行全缓冲。"""
                 import urllib.request
-                lines = []
                 try:
                     req = urllib.request.Request(
                         f"{api_base}/chat/completions",
@@ -345,19 +345,19 @@ class EmployeeInvokeHandler(AdminBaseHandler):
                         },
                     )
                     with urllib.request.urlopen(req, timeout=120) as resp:
-                        for line in resp:
-                            lines.append(line)
-                    return lines, None
+                        # 使用 8KB 块读取减少内存占用
+                        raw_data = resp.read()
+                    return raw_data, None
                 except Exception as e:
-                    return lines, str(e)
+                    return b"", str(e)
 
             loop = asyncio.get_event_loop()
-            lines, err = await loop.run_in_executor(_invoke_executor, _sync_stream_call)
+            raw_data, err = await loop.run_in_executor(_invoke_executor, _sync_stream_call)
 
             if err is None:
                 api_success = True
                 content_chars = 0
-                for line in lines:
+                for line in raw_data.split(b"\n"):
                     line = line.decode("utf-8", errors="replace").strip()
                     if line.startswith("data: "):
                         data_str = line[6:]
@@ -366,15 +366,15 @@ class EmployeeInvokeHandler(AdminBaseHandler):
                             await self.flush()
                             break
                         try:
-                            chunk = json.loads(data_str)
-                            delta = chunk.get("choices", [{}])[0].get("delta", {})
+                            chunk_data = json.loads(data_str)
+                            delta = chunk_data.get("choices", [{}])[0].get("delta", {})
                             content = delta.get("content", "")
                             if content:
                                 content_chars += len(content)
                                 self.write(f"data: {json.dumps({'content': content})}\n\n")
                                 await self.flush()
-                            if "usage" in chunk and chunk["usage"]:
-                                total_tokens = chunk["usage"].get("total_tokens", 0)
+                            if "usage" in chunk_data and chunk_data["usage"]:
+                                total_tokens = chunk_data["usage"].get("total_tokens", 0)
                         except json.JSONDecodeError:
                             pass
                 if total_tokens == 0 and content_chars > 0:

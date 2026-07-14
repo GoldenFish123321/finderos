@@ -117,7 +117,7 @@ class CollectionScheduler:
                         result_id, is_new = WatchResultRepository.create_if_not_exists(
                             source_id=source_id,
                             keyword=keyword,
-                            request_url=news.get("url", ""),
+                            request_url=news.get("link", ""),
                             response_status=status,
                             response_size=size,
                             result_data=json.dumps(news, ensure_ascii=False),

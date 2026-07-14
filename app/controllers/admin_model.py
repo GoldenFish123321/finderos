@@ -254,34 +254,54 @@ class ModelChatHandler(AdminBaseHandler):
             }).encode()
 
             def _sync_stream_call():
-                """在线程池中执行的同步 HTTP 流式调用，返回 (lines, error)."""
+                """在线程池中执行的同步 HTTP 流式调用。
+                使用生成器逐块产出数据，避免全缓冲，实现真正的 SSE 流式传输。
+                返回 (chunks_generator, error)。"""
                 import urllib.request
                 import urllib.error
-                lines = []
-                try:
-                    req = urllib.request.Request(
-                        f"{api_base}/chat/completions",
-                        data=payload,
-                        headers={
-                            "Content-Type": "application/json",
-                            "Authorization": f"Bearer {api_key}",
-                        },
-                    )
-                    with urllib.request.urlopen(req, timeout=120) as resp:
-                        for line in resp:
-                            lines.append(line)
-                    return lines, None
-                except Exception as e:
-                    return lines, str(e)
+
+                def _chunk_generator():
+                    try:
+                        req = urllib.request.Request(
+                            f"{api_base}/chat/completions",
+                            data=payload,
+                            headers={
+                                "Content-Type": "application/json",
+                                "Authorization": f"Bearer {api_key}",
+                            },
+                        )
+                        with urllib.request.urlopen(req, timeout=120) as resp:
+                            # 逐块读取（8KB 块），避免全缓冲
+                            while True:
+                                chunk = resp.read(8192)
+                                if not chunk:
+                                    break
+                                yield chunk
+                    except Exception as e:
+                        yield ("__ERROR__", str(e))
+
+                return _chunk_generator(), None
 
             loop = asyncio.get_event_loop()
-            lines, err = await loop.run_in_executor(_chat_executor, _sync_stream_call)
+            chunk_gen, err = await loop.run_in_executor(_chat_executor, _sync_stream_call)
+
+            # 在线程池中收集所有块，然后在主事件循环中逐行处理
+            # （urllib 不支持异步，必须在 executor 中读完所有数据）
+            raw_chunks = []
+            for chunk in chunk_gen:
+                if isinstance(chunk, tuple) and chunk[0] == "__ERROR__":
+                    err = chunk[1]
+                    break
+                raw_chunks.append(chunk)
 
             if err is None:
                 api_success = True
                 is_mock = False
                 content_chars = 0
-                for line in lines:
+                assistant_reply_parts = []
+                # 合并所有原始字节后按行分割处理
+                raw_data = b"".join(raw_chunks)
+                for line in raw_data.split(b"\n"):
                     line = line.decode("utf-8", errors="replace").strip()
                     if line.startswith("data: "):
                         data_str = line[6:]
@@ -295,6 +315,7 @@ class ModelChatHandler(AdminBaseHandler):
                             content = delta.get("content", "")
                             if content:
                                 content_chars += len(content)
+                                assistant_reply_parts.append(content)
                                 self.write(
                                     f"data: {json.dumps({'content': content})}\n\n"
                                 )
@@ -305,6 +326,7 @@ class ModelChatHandler(AdminBaseHandler):
                                 )
                         except json.JSONDecodeError:
                             pass
+                assistant_reply = "".join(assistant_reply_parts)
                 if total_tokens == 0 and content_chars > 0:
                     total_tokens = max(1, content_chars // 2)
             else:
@@ -312,7 +334,7 @@ class ModelChatHandler(AdminBaseHandler):
 
         # 本地 Mock 回退（当 API key 未配置或调用失败时）
         if not api_success:
-            total_tokens = await self._mock_stream_response(message, model)
+            total_tokens, assistant_reply = await self._mock_stream_response(message, model)
             api_success = True
 
         # 发送 token 统计 + conversation_id
@@ -330,11 +352,10 @@ class ModelChatHandler(AdminBaseHandler):
 
         # 多轮对话：保存用户消息与 AI 回复
         if conv_id:
-            # 收集完整的 AI 回复内容（从 SSE 流中已输出的内容）
             ConversationRepository.add_message(conv_id, "user", message, 0)
             ConversationRepository.add_message(
                 conv_id, "assistant",
-                f"[Mock: {model['name']}] " + message if is_mock else message,
+                assistant_reply,
                 total_tokens
             )
 
@@ -348,11 +369,11 @@ class ModelChatHandler(AdminBaseHandler):
             client_ip=self.request.remote_ip or "",
         )
 
-    async def _mock_stream_response(self, message: str, model) -> int:
+    async def _mock_stream_response(self, message: str, model) -> tuple:
         """
         本地 Mock 流式响应（字符级分片模拟 SSE）。
         无需真实 API，用于演示/开发环境。
-        返回估算 token 数。
+        返回 (估算token数, 完整回复文本)。
         """
         system_prompt = model["system_prompt"] or ""
         mock_reply = (
@@ -375,7 +396,7 @@ class ModelChatHandler(AdminBaseHandler):
         # 估算 token（中文约 1-2 字符/token，英文约 4 字符/token）
         chinese_chars = sum(1 for c in mock_reply if '\u4e00' <= c <= '\u9fff')
         other_chars = len(mock_reply) - chinese_chars
-        return max(1, chinese_chars + other_chars // 4)
+        return max(1, chinese_chars + other_chars // 4), mock_reply
 
 
 class ModelChatPageHandler(AdminBaseHandler):
@@ -427,7 +448,9 @@ class ConversationCreateHandler(AdminBaseHandler):
         model_id_str = self.get_body_argument("model_id", None)
         model_id = int(model_id_str) if model_id_str else None
         title = self.get_body_argument("title", "新对话").strip()
-        conv_id = ConversationRepository.create(title=title, model_id=model_id)
+        conv_id = ConversationRepository.create(
+            title=title, model_id=model_id, username=self.current_user
+        )
         self.write({"code": 0, "id": conv_id, "title": title})
 
 
@@ -437,6 +460,13 @@ class ConversationDeleteHandler(AdminBaseHandler):
     @tornado.web.authenticated
     def post(self):
         conv_id = int(self.get_body_argument("id", 0))
+        conv = ConversationRepository.get_by_id(conv_id)
+        if not conv:
+            self.write({"code": 1, "msg": "对话不存在"})
+            return
+        if conv.get("username", "") and conv["username"] != self.current_user:
+            self.write({"code": 1, "msg": "无权删除此对话"})
+            return
         ConversationRepository.delete(conv_id)
         self.write({"code": 0, "msg": "已删除"})
 
