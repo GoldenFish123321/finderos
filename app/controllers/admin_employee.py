@@ -516,7 +516,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         stats_keywords = ["统计", "概况", "有多少", "数量"]
         crawl_keywords = ["深度采集", "抓取", "采集网页", "爬取", "crawl", "fetch"]
 
-        # 检测意图
+        # 检测意图（crawl 需同时有关键词+URL，否则继续匹配其他意图）
         if any(kw in msg_lower for kw in crawl_keywords) and crawl4ai_on:
             # 提取 URL
             import re
@@ -524,23 +524,22 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             if url_match:
                 result["intent"] = "deep_collect"
                 result["url"] = url_match.group(0)
-            else:
-                result["intent"] = "general"
-        elif any(kw in msg_lower for kw in stats_keywords):
-            result["intent"] = "warehouse_stats"
-        elif any(kw in msg_lower for kw in search_keywords):
-            result["intent"] = "warehouse_query"
-            # 提取搜索关键词（去掉指令词）
-            keyword = message
-            for kw in search_keywords:
-                keyword = keyword.replace(kw, "")
-            result["keyword"] = keyword.strip() or message
-        elif any(kw in msg_lower for kw in list_keywords):
-            result["intent"] = "warehouse_list"
-        elif len(message) < 20 and not message.startswith("http"):
-            # 短消息可能是关键词搜索
-            result["intent"] = "warehouse_query"
-            result["keyword"] = message
+        if not result["intent"]:
+            if any(kw in msg_lower for kw in stats_keywords):
+                result["intent"] = "warehouse_stats"
+            elif any(kw in msg_lower for kw in search_keywords):
+                result["intent"] = "warehouse_query"
+                # 提取搜索关键词（去掉指令词）
+                keyword = message
+                for kw in search_keywords:
+                    keyword = keyword.replace(kw, "")
+                result["keyword"] = keyword.strip() or message
+            elif any(kw in msg_lower for kw in list_keywords):
+                result["intent"] = "warehouse_list"
+            elif len(message) < 20 and not message.startswith("http"):
+                # 短消息可能是关键词搜索
+                result["intent"] = "warehouse_query"
+                result["keyword"] = message
 
         # 执行工具
         try:

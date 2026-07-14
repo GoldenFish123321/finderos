@@ -332,6 +332,7 @@ class WatchDeepCollectHandler(AdminBaseHandler):
         ids = ids[:5]
 
         saved_dw_ids = []
+        saved_rids = set()  # 追踪哪些 rid 有数据成功写入 data_warehouse
         # 使用单个连接完成所有检查+写入，避免嵌套 get_db() 死锁
         from app.models.db import get_db
         with get_db() as conn:
@@ -375,7 +376,8 @@ class WatchDeepCollectHandler(AdminBaseHandler):
                             ).fetchone()
 
                         if existing:
-                            saved_dw_ids.append(existing["id"])
+                            if existing["id"] not in saved_dw_ids:
+                                saved_dw_ids.append(existing["id"])
                             continue
 
                         # 立即插入
@@ -400,14 +402,16 @@ class WatchDeepCollectHandler(AdminBaseHandler):
                                     (title, source_name),
                                 ).fetchone()
                             if new_row:
-                                saved_dw_ids.append(new_row["id"])
+                                if new_row["id"] not in saved_dw_ids:
+                                    saved_dw_ids.append(new_row["id"])
+                                saved_rids.add(rid)
                         except Exception as e:
                             logger.error(f"深度采集: 插入数据仓库记录失败 (rid={rid}): {e}", exc_info=True)
             conn.commit()
 
-        # 只有成功写入数据仓库后才标记 SAVED（防止数据解析失败导致虚假标记）
-        if saved_dw_ids:
-            WatchResultRepository.mark_saved_batch(ids)
+        # 只有成功写入数据仓库后才标记 SAVED（仅标记有数据成功入库的 rid）
+        if saved_rids:
+            WatchResultRepository.mark_saved_batch(list(saved_rids))
 
         if not saved_dw_ids:
             self.write({"code": 1, "msg": "保存到数据仓库失败，请检查数据"})
