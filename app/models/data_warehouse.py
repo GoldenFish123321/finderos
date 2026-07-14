@@ -126,7 +126,8 @@ class DataWarehouseRepository:
                 params,
             ).fetchone()["cnt"]
             rows = conn.execute(
-                f"SELECT dw.*, wr.keyword, wr.source_id, wr.response_status, wr.response_size, "
+                f"SELECT dw.*, wr.keyword, wr.source_id, wr.request_url, "
+                f"wr.response_status, wr.response_size, wr.result_data, "
                 f"ws.name as source_name "
                 f"FROM data_warehouse dw "
                 f"LEFT JOIN watch_results wr ON dw.result_id = wr.id "
@@ -141,7 +142,9 @@ class DataWarehouseRepository:
         """按ID获取数据仓库记录。"""
         with get_db() as conn:
             return conn.execute(
-                "SELECT dw.*, wr.keyword, wr.source_id, ws.name as source_name "
+                "SELECT dw.*, wr.keyword, wr.source_id, wr.request_url, "
+                "wr.response_status, wr.response_size, wr.result_data, "
+                "ws.name as source_name "
                 "FROM data_warehouse dw "
                 "LEFT JOIN watch_results wr ON dw.result_id = wr.id "
                 "LEFT JOIN watch_sources ws ON wr.source_id = ws.id "
