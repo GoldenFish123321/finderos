@@ -203,6 +203,32 @@ def init_db():
             )
         """)
 
+        # 对话管理表 (v0.5.0 新增 — 多轮对话支持)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS conversations (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                title       TEXT DEFAULT '新对话',
+                username    TEXT DEFAULT '',
+                model_id    INTEGER DEFAULT NULL,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (model_id) REFERENCES ai_models(id) ON DELETE SET NULL
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_messages (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL,
+                role            TEXT NOT NULL,
+                content         TEXT DEFAULT '',
+                token_count     INTEGER DEFAULT 0,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_msgs_conv ON conversation_messages(conversation_id)")
+
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_functions_parent ON functions(parent_id)")
