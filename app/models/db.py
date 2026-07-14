@@ -146,6 +146,13 @@ def init_db():
         except Exception:
             pass  # 列已存在
 
+        # 兼容旧表迁移：为已存在的 watch_sources 表添加 schedule_interval 列 (v0.6.0)
+        try:
+            conn.execute("ALTER TABLE watch_sources ADD COLUMN schedule_interval INTEGER DEFAULT 0")
+            logger.info("Database migration: added schedule_interval column to watch_sources")
+        except Exception:
+            pass  # 列已存在
+
         # 独立数据仓库表（v0.2.13 新增，借鉴郭家琪项目的独立设计）
         conn.execute("""
             CREATE TABLE IF NOT EXISTS data_warehouse (
