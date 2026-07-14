@@ -171,6 +171,11 @@ def make_app() -> tornado.web.Application:
 
 
 if __name__ == "__main__":
+    # 确保 COOKIE_SECRET 在数据库初始化之前已设置（加密模块依赖此密钥）
+    if not settings.COOKIE_SECRET:
+        settings.COOKIE_SECRET = secrets.token_hex(32)
+        logger.warning("COOKIE_SECRET 未设置，使用随机值（重启后所有会话失效）")
+
     # 初始化数据库（自动建表）
     init_db()
 
