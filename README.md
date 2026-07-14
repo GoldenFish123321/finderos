@@ -1,13 +1,14 @@
-# 🔭 瞭望与问数系统 (DataFinderAgentOS) v0.3
+# 🔭 瞭望与问数系统 (DataFinderAgentOS) v0.4
 
 > 基于 Tornado 异步 Web 框架构建的轻量级智能数据采集与 AI 问数一体化平台。  
-> **v0.3 新增**：用户前台智能问数（五区布局）、@数字员工、ECharts 报表、多轮对话历史。
+> **v0.4 新增**：MCP 协议工具调用、LLM Function Calling 智能意图识别、/tools 指令。
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Tornado](https://img.shields.io/badge/Tornado-6.4+-00ADD8?style=flat)](https://www.tornadoweb.org/)
 [![SQLite](https://img.shields.io/badge/SQLite-3-003B57?style=flat&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![Layui](https://img.shields.io/badge/Layui-2.x-1E9FFF?style=flat)](https://layui.dev/)
 [![ECharts](https://img.shields.io/badge/ECharts-5.x-AA344D?style=flat)](https://echarts.apache.org/)
+[![MCP](https://img.shields.io/badge/MCP-2024--11--05-6E3FF3?style=flat)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat)](LICENSE)
 
 ---
@@ -56,7 +57,7 @@
 �🔐 用户认证与 RBAC 权限管理          — 安全的密码存储、登录限速、审计日志
 🔭 瞭望采集 — 可配置的 Web 采集引擎    — 百度/搜狗新闻等多源采集 + SSRF 防护
 🗄️ 数据仓库 — 采集结果独立存储与检索   — 独立 data_warehouse 表，支持去重
-🤖 模型引擎 — 多 Provider AI 统一管理  — OpenAI/DeepSeek/智谱/文心 + SSE 流式对话
+🤖 模型引擎 — 多 Provider AI 统一管理  — OpenAI/DeepSeek/智谱/文心 + MCP 工具调用
 📊 管理后台 — Layui 精美 UI，开箱即用  — 仪表盘统计、树形菜单、批量操作
 🛡️ 安全防护 — OWASP Top 10 全覆盖     — CSP/XSRF/SSRF/SQL注入/XSS/限速/审计
 ```
@@ -92,6 +93,10 @@
 │  │  │ 采集引擎+HTML解析   │  │ SSRF校验+审计日志     │ │  │
 │  │  │ +SSRF防护+反爬      │  │ +CRLF检测            │ │  │
 │  │  └────────────────────┘  └──────────────────────┘ │  │
+│  │  ┌────────────────────────────────────────────┐   │  │
+│  │  │          MCP Layer (app/mcp/)               │   │  │
+│  │  │  Server · Client · Tools · OpenAI 格式适配  │   │  │
+│  │  └────────────────────────────────────────────┘   │  │
 │  └───────────────────────────────────────────────────┘  │
 │  ┌───────────────────────────────────────────────────┐  │
 │  │           Repository Layer (Models)                │  │
@@ -129,7 +134,8 @@
 | **密码学** | PBKDF2-SHA256 | 60 万轮迭代 + 16 字节随机盐（hex 存储） |
 | **数据采集** | Python 标准库 `urllib` | 零第三方爬虫依赖 |
 | **HTML 解析** | Python `re` 正则 | 内置解析器，无需 BeautifulSoup |
-| **AI 对话** | OpenAI 范式 SSE | 支持 OpenAI / DeepSeek / 智谱 AI / 百度文心 / 自定义 Provider |
+| **AI 对话** | OpenAI 范式 SSE + Function Calling | 支持 OpenAI / DeepSeek / 智谱 AI / 百度文心 / 自定义 Provider |
+| **工具协议** | MCP (Model Context Protocol) | 8 个标准化工具，LLM 自主决策调用，语义匹配回退 |
 
 ---
 
@@ -193,6 +199,12 @@ DataFinderAgentOS/
 │   │   ├── ai_model.py           # AiModelRepository — AI 模型仓储
 │   │   ├── conversation.py       # ConversationRepository — 对话管理仓储（v0.3）
 │   │   └── digital_employee.py   # DigitalEmployeeRepository — 数字员工仓储（v0.3）
+│   │
+│   ├── mcp/                      # MCP 协议模块（v0.4）
+│   │   ├── __init__.py           # 模块入口
+│   │   ├── server.py             # MCP Server（工具注册、MCP/OpenAI 格式互转）
+│   │   ├── client.py             # MCP Client（工具执行、智能语义匹配、上下文注入）
+│   │   └── tools.py              # 8 个 MCP 工具定义 + 处理函数
 │   │
 │   ├── services/                 # 业务服务层
 │   │   ├── __init__.py
@@ -293,7 +305,7 @@ python main.py
 
 ```
 ==================================================
-  瞭望与问数系统 (DataFinderAgentOS) v0.2
+  瞭望与问数系统 (DataFinderAgentOS) v0.4
   Server started: http://localhost:10010/
 ==================================================
 ```
@@ -616,11 +628,48 @@ limiter.clear(client_ip, username)
 
 ---
 
-### 5. AI 模型引擎
+### 5. AI 模型引擎（MCP 架构版）
 
 #### 5.1 概述
 
-模型引擎提供**多 Provider（6 种）AI 大模型**的统一管理平台，支持模型配置、流式对话（SSE）、Token 统计和对话审计。
+模型引擎提供**多 Provider AI 大模型**的统一管理平台，v0.4 升级为 **MCP（Model Context Protocol）架构**：
+
+- **有 API Key**：LLM Function Calling 自主决策工具调用，Tool → Execute → Reply 闭环
+- **无 API Key**：MCP 语义匹配智能回退，基于工具描述自动路由到最佳工具
+- **工具标准化**：8 个 MCP Tool，遵循 `tools/list` + `tools/call` JSON-RPC 协议
+- **OpenAI 兼容**：工具定义自动转换为 OpenAI Function Calling 格式，无缝对接主流 LLM
+
+**MCP 工具列表**：
+
+| 工具名 | 分类 | 功能说明 |
+|--------|------|---------|
+| `search_warehouse` | 数据仓库 | 在数据仓库中按关键词搜索，返回标题/摘要/来源/链接 |
+| `get_recent_warehouse_data` | 数据仓库 | 获取数据仓库最新入库记录 |
+| `get_warehouse_stats` | 数据仓库 | 获取数据仓库统计（总量/深度采集数/来源分布） |
+| `deep_collect_url` | 数据采集 | 对指定 URL 执行深度内容抓取和正文提取 |
+| `collect_web_data` | 数据采集 | 执行全网瞭望采集（从配置的瞭望源搜索关键词） |
+| `list_digital_employees` | 数字员工 | 列出所有可用的数字员工及能力描述 |
+| `list_conversations` | 对话管理 | 获取用户的历史对话列表 |
+| `get_conversation_messages` | 对话管理 | 获取指定对话的消息记录 |
+
+**对话流程（有 API Key）**：
+
+```
+用户消息 → POST /chat/stream
+  → 构建 messages + MCP tools (OpenAI 格式)
+  → LLM 返回 tool_calls 或 content
+  ├─ tool_calls → MCP Server.call_tool() → 结果追加到 messages → 继续 LLM 对话
+  └─ content → SSE 流式输出最终回复
+```
+
+**对话流程（无 API Key - MCP 回退）**：
+
+```
+用户消息 → MCP Client.match_tool_by_query()
+  → 基于工具描述语义评分匹配最佳工具
+  → 执行工具 → _format_tool_result_as_reply() → SSE 流式输出
+  → 无匹配 → 通用 Mock 回复
+```
 
 支持的 Provider：
 
@@ -671,16 +720,17 @@ limiter.clear(client_ip, username)
 
 ```
 用户选择模型 → 输入消息
-    ├── 有 API Key → 真实 OpenAI API SSE 流式调用
-    │       └── 解析 SSE 事件 → 逐字推送到前端
-    │       └── 提取 usage 信息 → Token 消耗统计
-    └── 无 API Key → 本地 Mock 字符级流式输出
-            └── 模拟打字机效果，逐字输出
-            └── 按字符数估算 Token 消耗
+    ├── 有 API Key → 真实 OpenAI API 调用
+    │       ├── 携带 MCP 工具定义 (tools 参数)
+    │       ├── LLM 返回 tool_calls → MCP Server 执行 → 结果回传
+    │       └── LLM 返回 content → SSE 逐字推送到前端
+    └── 无 API Key → MCP 语义匹配 + 本地 Mock 流式输出
+            ├── 匹配工具 → 执行 → 格式化结果 → 打字效果输出
+            └── 无匹配 → 通用 Mock 逐字输出
 
     → Token 消耗自动累加到 ai_models.total_tokens
     → 对话记录写入 audit_logs (action=CHAT)
-    → 客户端断开时自动中止服务端 HTTP 请求
+    → /tools 指令可查看所有可用 MCP 工具
 ```
 
 **SSE 事件格式**：
@@ -774,10 +824,10 @@ data: {"tokens": 42, "mock": false}
 | **D区** | 对话区 | Markdown 渲染气泡（marked.js），左 AI / 右用户 |
 | **E区** | 输入区 | 多行输入框 + `@` 数字员工菜单 + `/` 快捷指令 |
 
-#### 8.3 SSE 流式对话
+#### 8.3 MCP 工具调用与 SSE 流式对话
 
-- **真实 API 模式**：配置 API Key 后走 OpenAI 兼容 SSE 流式调用
-- **Mock 回退模式**：无 API Key 时本地逐字流式输出
+- **LLM Function Calling 模式**（有 API Key）：LLM 收到消息后自主判断是否需要调用工具，调用后基于真实数据生成回复
+- **MCP 语义匹配模式**（无 API Key）：基于 8 个 MCP 工具的名称和描述进行语义评分，自动选择最佳工具执行
 - **图表注入**：AI 回复中 `[CHART:...]` 标记自动渲染为 ECharts 图表
 - **表格注入**：`[TABLE:...]` 标记自动渲染为 HTML 数据表格
 - **元信息显示**：每条 AI 回复下方显示响应时间(s)和 Token 消耗
@@ -1326,6 +1376,16 @@ python -m pytest test/test_login_rate_limiter.py::TestLoginRateLimiter::test_rat
 ---
 
 ## 更新日志
+
+### v0.4 (2026-07) — MCP 协议架构重构
+
+- 🔌 **MCP 协议模块**：新增 `app/mcp/` 完整实现（Server / Client / Tools）
+- 🔧 **8 个 MCP 工具**：search_warehouse / get_recent_warehouse_data / get_warehouse_stats / deep_collect_url / collect_web_data / list_digital_employees / list_conversations / get_conversation_messages
+- 🤖 **LLM Function Calling**：有 API Key 时 LLM 自主决策工具调用（Tool → Execute → Reply 闭环，最多 3 轮）
+- 🧠 **MCP 语义匹配**：无 API Key 时基于工具描述的多维语义评分自动路由，替代旧关键词硬匹配
+- 🗑️ **废弃旧代码**：移除 `_detect_intent_and_query` 及 50+ 硬编码关键词意图识别逻辑
+- 🆕 **/tools 指令**：输入 `/tools` 查看所有可用 MCP 工具列表
+- 📝 **工具结果格式化**：`_format_tool_result_as_reply` 将工具 JSON 转为自然语言 Markdown 回复
 
 ### v0.3 (2026-07) — 前台智能问数系统
 
