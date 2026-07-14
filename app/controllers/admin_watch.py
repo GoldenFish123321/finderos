@@ -61,8 +61,13 @@ class WatchHandler(AdminBaseHandler):
     def post(self):
         """执行采集：关键词 → 按启用的瞭望源发起请求 → 解析 → 返回结构化结果"""
         keyword = self.get_body_argument("keyword", "").strip()
-        # 兼容 jQuery 数组序列化 (source_ids[]=1&source_ids[]=2)
-        source_ids_raw = self.get_body_argument("source_ids", "") or self.get_body_argument("source_ids[]", "")
+        # 兼容 jQuery 数组序列化 (source_ids[]=1&source_ids[]=2) 和逗号分隔格式
+        source_ids_raw_list = self.get_body_arguments("source_ids") or self.get_body_arguments("source_ids[]")
+        if source_ids_raw_list:
+            # 将多个值用逗号连接，再统一按逗号拆分
+            source_ids_raw = ",".join(source_ids_raw_list)
+        else:
+            source_ids_raw = self.get_body_argument("source_ids", "") or self.get_body_argument("source_ids[]", "")
         source_ids = [s.strip() for s in source_ids_raw.split(",") if s.strip()] if source_ids_raw else []
 
         if not keyword:
