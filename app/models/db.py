@@ -177,6 +177,32 @@ def init_db():
             )
         """)
 
+        # 数字化员工表 (v0.3.0 新增)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS digital_employees (
+                id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                name                    TEXT NOT NULL,
+                employee_type           TEXT NOT NULL DEFAULT 'llm',
+                description             TEXT DEFAULT '',
+                -- LLM 型字段
+                model_id                INTEGER DEFAULT NULL,
+                system_prompt           TEXT DEFAULT '',
+                skills                  TEXT DEFAULT '[]',
+                crawl4ai_enabled        INTEGER DEFAULT 0,
+                -- API 型字段
+                api_url                 TEXT DEFAULT '',
+                api_method              TEXT DEFAULT 'GET',
+                api_headers             TEXT DEFAULT '{}',
+                api_params_template     TEXT DEFAULT '',
+                response_render_template TEXT DEFAULT '',
+                api_secret              TEXT DEFAULT '',
+                -- 通用字段
+                is_enabled              INTEGER DEFAULT 1,
+                created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (model_id) REFERENCES ai_models(id) ON DELETE SET NULL
+            )
+        """)
+
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_functions_parent ON functions(parent_id)")
@@ -245,6 +271,8 @@ def seed_default_data():
                 (11, "模型引擎", "layui-icon-util", "/admin/model", None, 7, 1),
                 # 系统设置子项（新增，借鉴陈子墨丰富的种子数据设计）
                 (12, "AI对话", "layui-icon-dialogue", "/admin/model/chat", 3, 1, 1),
+                # 数字员工 (v0.3.0 新增)
+                (13, "数字员工", "layui-icon-user", "/admin/employee", None, 8, 1),
             ]
             conn.executemany(
                 "INSERT INTO functions (id, name, icon, route_path, parent_id, sort_order, is_enabled) "
@@ -266,6 +294,7 @@ def seed_default_data():
 
     _seed_default_sources()
     _seed_default_models()
+    _seed_default_employees()
 
 
 def _seed_default_sources():
@@ -349,3 +378,52 @@ def _seed_default_models():
                 (6, "Whisper-1", "openai", "https://api.openai.com/v1", "whisper-1", "audio", 1, 0),
             )
             print("[种子] 默认AI模型已创建（6个模型，覆盖6种分类）")
+
+
+def _seed_default_employees():
+    """种子：默认数字化员工（产业专员 + 天机助手）。"""
+    import json
+    with get_db() as conn:
+        existing = conn.execute("SELECT COUNT(*) as cnt FROM digital_employees").fetchone()
+        if existing["cnt"] == 0:
+            # 产业专员 — LLM 型数字员工
+            conn.execute(
+                "INSERT INTO digital_employees (id, name, employee_type, description, "
+                "model_id, system_prompt, skills, crawl4ai_enabled, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    1, "产业专员", "llm",
+                    "专注于产业分析和行业研究的AI助手，能够追踪行业动态、分析产业链结构、生成产业报告",
+                    None,  # 自动使用默认模型
+                    "你是一位专业的产业分析师，擅长：\n"
+                    "1. 产业链结构分析与上下游关系梳理\n"
+                    "2. 行业政策解读与趋势预判\n"
+                    "3. 竞品分析与市场格局评估\n"
+                    "4. 技术路线演进追踪\n"
+                    "请用专业但不晦涩的语言回答，引用数据时注明来源。",
+                    json.dumps(["产业分析", "政策解读", "竞品分析", "趋势预判"], ensure_ascii=False),
+                    1,  # 启用 Crawl4ai 采集能力
+                    1,
+                ),
+            )
+            # 天机助手 — LLM 型数字员工
+            conn.execute(
+                "INSERT INTO digital_employees (id, name, employee_type, description, "
+                "model_id, system_prompt, skills, crawl4ai_enabled, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    2, "天机助手", "llm",
+                    "通用智能助手，具备信息检索、数据分析、文案撰写、代码辅助等多维能力",
+                    None,
+                    "你是天机助手，一个多才多艺的AI助手。你能够：\n"
+                    "1. 快速检索和整理网络信息\n"
+                    "2. 进行数据分析和可视化建议\n"
+                    "3. 撰写各类文案（报告、邮件、方案等）\n"
+                    "4. 提供编程和技术问题解答\n"
+                    "请保持友好、高效的回答风格，根据用户需求灵活调整。",
+                    json.dumps(["信息检索", "数据分析", "文案撰写", "代码辅助"], ensure_ascii=False),
+                    0,
+                    1,
+                ),
+            )
+            print("[种子] 默认数字化员工已创建（产业专员 + 天机助手）")

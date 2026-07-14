@@ -1,0 +1,232 @@
+{% extends "base_layout.html" %}
+
+{% block admin_content %}
+<style>
+.emp-type-toggle { display:flex; gap:12px; margin-bottom:20px; }
+.emp-type-toggle label { padding:10px 20px; border-radius:6px; cursor:pointer; background:var(--card-bg,#1e2233); border:2px solid var(--border-color,#2a2f42); color:var(--text-secondary,#8892a4); transition:all 0.2s; font-size:14px; }
+.emp-type-toggle input[type="radio"] { display:none; }
+.emp-type-toggle input[type="radio"]:checked + label { border-color:var(--accent-blue,#409eff); color:#fff; background:rgba(64,158,255,0.1); }
+.llm-fields, .api-fields { display:none; }
+.llm-fields.active, .api-fields.active { display:block; }
+.skill-tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.skill-tag { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:12px; background:rgba(230,162,60,0.15); color:#e6a23c; font-size:12px; }
+.skill-tag .remove-skill { cursor:pointer; font-size:14px; margin-left:2px; }
+</style>
+
+<div class="layui-card">
+    <div class="layui-card-header">
+        <i class="layui-icon layui-icon-user"></i> {{ '编辑员工' if employee else '新增员工' }}
+    </div>
+    <div class="layui-card-body">
+        <form class="layui-form" action="/admin/employee/{{ 'edit' if employee else 'add' }}" method="post"
+              style="max-width:750px;" id="emp-form">
+            {% module xsrf_form_html() %}
+            {% if employee %}
+            <input type="hidden" name="id" value="{{ employee['id'] }}">
+            {% end %}
+
+            <!-- 类型切换 -->
+            <div class="emp-type-toggle">
+                {% for t in employee_types %}
+                <input type="radio" name="employee_type" value="{{ t['value'] }}" id="type-{{ t['value'] }}"
+                       {% if (employee and employee['employee_type'] == t['value']) or (not employee and t['value'] == 'llm') %}checked{% end %}>
+                <label for="type-{{ t['value'] }}">{{ t['name'] }}</label>
+                {% end %}
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">员工名称</label>
+                <div class="layui-input-block">
+                    <input type="text" name="name" class="layui-input" required
+                           value="{{ employee['name'] if employee else '' }}" placeholder="例如：产业专员">
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">描述</label>
+                <div class="layui-input-block">
+                    <textarea name="description" class="layui-textarea" rows="2"
+                              placeholder="简要描述员工的能力和用途">{{ employee['description'] if employee else '' }}</textarea>
+                </div>
+            </div>
+
+            <!-- === LLM 型字段 === -->
+            <div class="llm-fields {{ 'active' if not employee or employee['employee_type'] == 'llm' else '' }}">
+                <div class="layui-form-item">
+                    <label class="layui-form-label">关联模型</label>
+                    <div class="layui-input-block">
+                        <select name="model_id">
+                            <option value="">-- 自动选择默认模型 --</option>
+                            {% for m in models %}
+                            <option value="{{ m['id'] }}"
+                                {% if employee and employee['model_id'] == m['id'] %}selected{% end %}>
+                                {{ m['name'] }} ({{ m['provider'] }})
+                            </option>
+                            {% end %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="layui-form-item">
+                    <label class="layui-form-label">系统提示词</label>
+                    <div class="layui-input-block">
+                        <textarea name="system_prompt" class="layui-textarea" rows="5"
+                                  placeholder="定义员工的行为和角色...">{{ employee['system_prompt'] if employee else '' }}</textarea>
+                    </div>
+                </div>
+
+                <div class="layui-form-item">
+                    <label class="layui-form-label">技能标签</label>
+                    <div class="layui-input-block">
+                        <div style="display:flex;gap:8px;">
+                            <input type="text" id="skill-input" class="layui-input" placeholder="输入技能后按回车添加"
+                                   style="flex:1;">
+                            <button type="button" id="add-skill-btn" class="layui-btn layui-btn-sm">添加</button>
+                        </div>
+                        {% set skills = [] %}
+                        {% if employee %}{% try %}{% set skills = __import__('json').loads(employee.get('skills','[]')) %}{% except %}{% end %}{% end %}
+                        <div class="skill-tags" id="skill-tags">
+                            {% for s in skills %}
+                            <span class="skill-tag">{{ s }}<span class="remove-skill" onclick="this.parentElement.remove()">×</span></span>
+                            {% end %}
+                        </div>
+                        <input type="hidden" name="skills" id="skills-hidden" value='{{ employee.get("skills", "[]") if employee else "[]" }}'>
+                    </div>
+                </div>
+
+                <div class="layui-form-item">
+                    <label class="layui-form-label">Crawl4ai</label>
+                    <div class="layui-input-block">
+                        <input type="checkbox" name="crawl4ai_enabled" value="1" title="启用 Crawl4ai 网页采集能力"
+                               {% if employee and employee.get('crawl4ai_enabled') == 1 %}checked{% end %}>
+                    </div>
+                </div>
+            </div>
+
+            <!-- === API 型字段 === -->
+            <div class="api-fields {{ 'active' if employee and employee['employee_type'] == 'api' else '' }}">
+                <div class="layui-form-item">
+                    <label class="layui-form-label">API URL</label>
+                    <div class="layui-input-block">
+                        <input type="text" name="api_url" class="layui-input"
+                               value="{{ employee.get('api_url','') if employee else '' }}"
+                               placeholder="https://api.example.com/v1/query">
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">请求方法</label>
+                    <div class="layui-input-block">
+                        <select name="api_method">
+                            <option value="GET" {% if employee and employee.get('api_method')=='GET' %}selected{% end %}>GET</option>
+                            <option value="POST" {% if employee and employee.get('api_method')=='POST' %}selected{% end %}>POST</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">API Headers</label>
+                    <div class="layui-input-block">
+                        <textarea name="api_headers" class="layui-textarea" rows="3"
+                                  placeholder='{"Content-Type":"application/json"}'>{{ employee.get('api_headers','{}') if employee else '{}' }}</textarea>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">参数模板</label>
+                    <div class="layui-input-block">
+                        <textarea name="api_params_template" class="layui-textarea" rows="2"
+                                  placeholder="支持 {message} 占位符">{{ employee.get('api_params_template','') if employee else '' }}</textarea>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">响应模板</label>
+                    <div class="layui-input-block">
+                        <textarea name="response_render_template" class="layui-textarea" rows="3"
+                                  placeholder="JSON 渲染模板（可选）">{{ employee.get('response_render_template','') if employee else '' }}</textarea>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">API 密钥</label>
+                    <div class="layui-input-block">
+                        <input type="password" name="api_secret" class="layui-input"
+                               value="" placeholder="{{ '留空则不修改' if employee else 'API 认证密钥' }}">
+                    </div>
+                </div>
+            </div>
+
+            <div class="layui-form-item" style="margin-top:20px;">
+                <div class="layui-input-block">
+                    <button type="submit" class="layui-btn layui-btn-normal">
+                        <i class="layui-icon layui-icon-ok"></i> 保存
+                    </button>
+                    <a href="/admin/employee" class="layui-btn layui-btn-primary">返回</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+layui.use(['form'], function(){
+    var form = layui.form;
+    form.render();
+
+    // 类型切换
+    document.querySelectorAll('input[name="employee_type"]').forEach(function(radio){
+        radio.addEventListener('change', function(){
+            document.querySelector('.llm-fields').classList.toggle('active', this.value === 'llm');
+            document.querySelector('.api-fields').classList.toggle('active', this.value === 'api');
+        });
+    });
+
+    // 技能标签管理
+    var skillInput = document.getElementById('skill-input');
+    var skillTags = document.getElementById('skill-tags');
+    var skillsHidden = document.getElementById('skills-hidden');
+
+    function updateSkillsHidden(){
+        var tags = skillTags.querySelectorAll('.skill-tag');
+        var skills = [];
+        tags.forEach(function(tag){
+            skills.push(tag.textContent.replace('×','').trim());
+        });
+        skillsHidden.value = JSON.stringify(skills);
+    }
+
+    function addSkill(name){
+        name = name.trim();
+        if (!name) return;
+        var existing = skillTags.querySelectorAll('.skill-tag');
+        for (var i = 0; i < existing.length; i++){
+            if (existing[i].textContent.replace('×','').trim() === name) return;
+        }
+        var tag = document.createElement('span');
+        tag.className = 'skill-tag';
+        tag.innerHTML = name + '<span class="remove-skill" onclick="this.parentElement.remove();updateSkillsHidden();">×</span>';
+        skillTags.appendChild(tag);
+        updateSkillsHidden();
+    }
+
+    document.getElementById('add-skill-btn').addEventListener('click', function(){
+        addSkill(skillInput.value);
+        skillInput.value = '';
+        skillInput.focus();
+    });
+
+    skillInput.addEventListener('keypress', function(e){
+        if (e.key === 'Enter'){
+            e.preventDefault();
+            addSkill(skillInput.value);
+            skillInput.value = '';
+        }
+    });
+
+    // 初始化类型显示
+    var checkedType = document.querySelector('input[name="employee_type"]:checked');
+    if (checkedType){
+        document.querySelector('.llm-fields').classList.toggle('active', checkedType.value === 'llm');
+        document.querySelector('.api-fields').classList.toggle('active', checkedType.value === 'api');
+    }
+});
+</script>
+{% end %}
