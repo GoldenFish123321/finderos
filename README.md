@@ -1,6 +1,6 @@
 # 🔭 瞭望与问数系统 (DataFinderAgentOS) v0.2
 
-> 基于 Tornado 异步 Web 框架构建的轻量级智能数据采集与 AI 问数平台。
+> 基于 Tornado 异步 Web 框架构建的轻量级智能数据采集与 AI 问数一体化平台。
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Tornado](https://img.shields.io/badge/Tornado-6.4+-00ADD8?style=flat)](https://www.tornadoweb.org/)
@@ -17,6 +17,7 @@
 - [技术架构](#技术架构)
 - [项目结构](#项目结构)
 - [快速开始](#快速开始)
+- [工具脚本](#工具脚本)
 - [模块详解](#模块详解)
   - [1. 用户认证与安全](#1-用户认证与安全)
   - [2. RBAC 权限管理](#2-rbac-权限管理)
@@ -24,6 +25,7 @@
   - [4. 数据仓库](#4-数据仓库)
   - [5. AI 模型引擎](#5-ai-模型引擎)
   - [6. 菜单管理](#6-菜单管理)
+  - [7. 管理后台仪表盘](#7-管理后台仪表盘)
 - [API 接口一览](#api-接口一览)
 - [数据库设计](#数据库设计)
 - [安全设计](#安全设计)
@@ -41,22 +43,26 @@
 
 **瞭望与问数系统 (DataFinderAgentOS)** 是一个面向中小团队的智能数据采集与 AI 问数一体化平台。它将 **Web 数据采集（瞭望）** 和 **大语言模型对话（问数）** 两大核心能力整合于统一的 Web 管理后台中，并配备完整的 RBAC 权限体系。
 
+系统采用 **"零依赖"设计理念**：除 Tornado Web 框架外，所有功能均使用 Python 标准库实现（`sqlite3`、`urllib`、`hashlib`、`ssl`、`re` 等），无需安装第三方爬虫框架、ORM 或 HTML 解析器。
+
 ### 核心能力
 
 ```
-🔐 用户认证与 RBAC 权限管理
-🔭 瞭望采集 — 可配置的 Web 数据采集引擎
-🗄️ 数据仓库 — 采集结果的统一存储、检索与管理
-🤖 模型引擎 — OpenAI 范式 AI 模型的接入管理与流式对话
-📊 管理后台 — Layui 精美 UI，开箱即用
+🔐 用户认证与 RBAC 权限管理          — 安全的密码存储、登录限速、审计日志
+🔭 瞭望采集 — 可配置的 Web 采集引擎    — 百度/搜狗新闻等多源采集 + SSRF 防护
+🗄️ 数据仓库 — 采集结果独立存储与检索   — 独立 data_warehouse 表，支持去重
+🤖 模型引擎 — 多 Provider AI 统一管理  — OpenAI/DeepSeek/智谱/文心 + SSE 流式对话
+📊 管理后台 — Layui 精美 UI，开箱即用  — 仪表盘统计、树形菜单、批量操作
+🛡️ 安全防护 — OWASP Top 10 全覆盖     — CSP/XSRF/SSRF/SQL注入/XSS/限速/审计
 ```
 
 ### 适用场景
 
-- 新闻舆情监控与采集
+- 新闻舆情监控与自动采集
 - 企业内部知识库的数据沉淀
 - 多模型 AI 对话的统一管理入口
 - 轻量级 RBAC 后台管理系统的快速搭建
+- 学习 Tornado 全栈开发的教学参考项目
 
 ---
 
@@ -65,31 +71,34 @@
 ### 整体分层
 
 ```
-┌─────────────────────────────────────────────────┐
-│                   Browser (Layui 2.x)            │
-├─────────────────────────────────────────────────┤
-│                Tornado HTTP Server                │
-│  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │
-│  │ Auth     │ │ Admin    │ │ API / SSE Stream │ │
-│  │ Handlers │ │ Handlers │ │ Handlers         │ │
-│  └────┬─────┘ └────┬─────┘ └───────┬──────────┘ │
-│       │             │              │            │
-│  ┌────┴─────────────┴──────────────┴──────────┐ │
-│  │           Services Layer                    │ │
-│  │  ┌─────────────────┐  ┌──────────────────┐ │ │
-│  │  │ collector.py    │  │ security.py      │ │ │
-│  │  │ (采集+解析+SSRF) │  │ (审计+SSRF校验)   │ │ │
-│  │  └─────────────────┘  └──────────────────┘ │ │
-│  └────────────────────────────────────────────┘ │
-│  ┌────────────────────────────────────────────┐ │
-│  │         Repository Layer (Models)           │ │
-│  │  UserRepo / RoleRepo / FunctionRepo / ...  │ │
-│  └────────────────────┬───────────────────────┘ │
-│                       │                         │
-│              ┌────────┴────────┐                │
-│              │   SQLite (WAL)  │                │
-│              └─────────────────┘                │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                    Browser (Layui 2.x)                   │
+├─────────────────────────────────────────────────────────┤
+│                 Tornado HTTP Server                      │
+│  ┌────────────┐ ┌────────────┐ ┌──────────────────────┐ │
+│  │ Auth       │ │ Admin      │ │ API / SSE Stream     │ │
+│  │ Handlers   │ │ Handlers   │ │ Handlers             │ │
+│  └─────┬──────┘ └─────┬──────┘ └────────┬─────────────┘ │
+│        │              │                │                │
+│  ┌─────┴──────────────┴────────────────┴─────────────┐  │
+│  │              Services Layer                        │  │
+│  │  ┌────────────────────┐  ┌──────────────────────┐ │  │
+│  │  │ collector.py       │  │ security.py          │ │  │
+│  │  │ 采集引擎+HTML解析   │  │ SSRF校验+审计日志     │ │  │
+│  │  │ +SSRF防护+反爬      │  │ +CRLF检测            │ │  │
+│  │  └────────────────────┘  └──────────────────────┘ │  │
+│  └───────────────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │           Repository Layer (Models)                │  │
+│  │  UserRepo / RoleRepo / FunctionRepo /             │  │
+│  │  WatchSourceRepo / WatchResultRepo /              │  │
+│  │  DataWarehouseRepo / AiModelRepo                  │  │
+│  └──────────────────────┬────────────────────────────┘  │
+│                         │                               │
+│                ┌────────┴────────┐                      │
+│                │  SQLite (WAL)   │                      │
+│                └─────────────────┘                      │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ### 分层职责
@@ -97,29 +106,25 @@
 | 层 | 目录 | 职责 |
 |----|------|------|
 | **Controller** | `app/controllers/` | 请求路由、参数校验、视图渲染、SSE 流式响应 |
-| **Service** | `app/services/` | 核心业务逻辑（数据采集、HTML 解析、SSRF 防护） |
-| **Model/Repository** | `app/models/` | 数据访问封装，统一使用 Repository 模式 |
+| **Service** | `app/services/` | 核心业务逻辑（数据采集、HTML 解析、SSRF 防护、反爬策略） |
+| **Model/Repository** | `app/models/` | 数据访问封装，统一使用 Repository 模式（纯静态方法） |
 | **View** | `app/templates/` | Tornado 原生模板 + Layui 2.x 前端组件 |
-| **Utils** | `app/utils/` | 工具函数（密码学、SSRF 校验、审计日志） |
-| **Config** | `app/config/` | 全局配置中心，支持环境变量覆盖 |
+| **Utils** | `app/utils/` | 工具函数（密码学、SSRF 校验、CRLF 检测、审计日志） |
+| **Config** | `app/config/` | 全局配置中心，所有配置支持环境变量覆盖 |
 
----
-
-## 技术栈
+### 技术栈
 
 | 类别 | 技术 | 说明 |
 |------|------|------|
 | **语言** | Python 3.11+ | 类型注解、现代语法 |
 | **Web 框架** | Tornado 6.4+ | 异步非阻塞 HTTP 服务器 |
-| **数据库** | SQLite 3 (WAL 模式) | 零配置、嵌入式、单文件 |
+| **数据库** | SQLite 3 (WAL 模式) | 零配置、嵌入式、单文件，支持并发读 |
 | **前端框架** | Layui 2.x | 经典模块化 UI 框架 |
-| **前端其他** | 原生 HTML / CSS / JS | 无构建工具依赖 |
-| **密码学** | PBKDF2-SHA256 | 60 万轮迭代 + 16 字节随机盐 |
+| **前端其他** | 原生 HTML / CSS / JS | 无构建工具依赖，零前端编译 |
+| **密码学** | PBKDF2-SHA256 | 60 万轮迭代 + 16 字节随机盐（hex 存储） |
 | **数据采集** | Python 标准库 `urllib` | 零第三方爬虫依赖 |
 | **HTML 解析** | Python `re` 正则 | 内置解析器，无需 BeautifulSoup |
-| **AI 对话** | OpenAI 范式 SSE | 支持 OpenAI / DeepSeek / 智谱 等 |
-
-> **零依赖设计理念**：除 Tornado 外，所有功能均使用 Python 标准库实现（`sqlite3`、`urllib`、`hashlib`、`ssl`、`re` 等），最大化减少外部依赖。
+| **AI 对话** | OpenAI 范式 SSE | 支持 OpenAI / DeepSeek / 智谱 AI / 百度文心 / 自定义 Provider |
 
 ---
 
@@ -127,21 +132,26 @@
 
 ```
 DataFinderAgentOS/
-├── main.py                       # 程序主入口（路由注册 + 启动）
+├── main.py                       # 程序主入口（路由注册 + Tornado 启动）
+├── make_admin.py                 # 管理员账号创建/重置工具（命令行）
 ├── migrate_db.py                 # 数据库迁移脚本（向后兼容）
-├── requirements.txt              # Python 依赖清单
+├── requirements.txt              # Python 依赖清单（仅 tornado）
 ├── README.md                     # 项目文档（本文件）
-├── .gitignore                    # Git 忽略规则
 │
 ├── database/                     # SQLite 数据库文件目录
-│   └── finderos.db               # 主数据库文件（自动生成）
+│   └── finderos.db               # 主数据库文件（首次启动自动生成）
 │
 ├── docs/                         # 项目文档
 │   ├── design.md                 # 系统设计文档
 │   ├── requirement.md            # 需求文档
 │   ├── api.md                    # API 接口文档
-│   ├── constraint.md             # 全局开发约束
-│   └── test_case.md              # 测试用例清单
+│   ├── constraint.md             # 全局开发约束（DDL、安全规范等）
+│   └── test_case.md              # 测试用例清单（27 项）
+│
+├── test/                         # 单元测试
+│   ├── __init__.py
+│   ├── test_login_rate_limiter.py
+│   └── test_user_models.py
 │
 ├── app/
 │   ├── config/                   # 配置模块
@@ -150,43 +160,45 @@ DataFinderAgentOS/
 │   │
 │   ├── controllers/              # 控制器层（Handler）
 │   │   ├── __init__.py
-│   │   ├── auth.py               # 登录/登出 + 限速
+│   │   ├── auth.py               # 登录/登出/注册 + 频率限制器
 │   │   ├── base.py               # 公共基础 Handler（认证 + 安全响应头）
-│   │   ├── home.py               # 前台主页处理器
+│   │   ├── home.py               # 前台主页控制器
 │   │   ├── admin_base.py         # 管理后台基础 Handler（权限校验）
-│   │   ├── admin_home.py         # 管理后台仪表盘
-│   │   ├── admin_user.py         # 用户管理 CRUD
-│   │   ├── admin_role.py         # 角色管理 CRUD + 功能树联动
-│   │   ├── admin_function.py     # 功能管理 CRUD（树形结构）
-│   │   ├── admin_menu.py         # 菜单管理（角色→菜单预览）
-│   │   ├── admin_watch.py        # 瞭望采集 + 保存
-│   │   ├── admin_watch_source.py # 瞭源管理 CRUD
-│   │   ├── admin_warehouse.py    # 数据仓库列表/详情/删除
-│   │   └── admin_model.py        # 模型引擎 CRUD + SSE 流式对话
+│   │   ├── admin_home.py         # 管理后台仪表盘（统计卡片）
+│   │   ├── admin_user.py         # 用户管理 CRUD + 批量操作
+│   │   ├── admin_role.py         # 角色管理 CRUD + 功能权限树联动
+│   │   ├── admin_function.py     # 功能管理 CRUD（树形结构 + 启用/禁用）
+│   │   ├── admin_menu.py         # 菜单管理（角色→菜单预览 + 排序）
+│   │   ├── admin_watch.py        # 瞭望采集页 + 执行采集 + 保存仓库
+│   │   ├── admin_watch_source.py # 瞭望源管理 CRUD + 启用/禁用
+│   │   ├── admin_warehouse.py    # 数据仓库列表/详情/单删/批量删除
+│   │   └── admin_model.py        # 模型引擎 CRUD + SSE 流式对话 + API
 │   │
 │   ├── models/                   # 数据模型层（Repository 模式）
 │   │   ├── __init__.py
 │   │   ├── db.py                 # 数据库连接池 + 建表 + 种子数据
-│   │   ├── user.py               # 用户仓储
-│   │   ├── role.py               # 角色仓储
-│   │   ├── function.py           # 功能仓储
-│   │   ├── watch_source.py       # 瞭源仓储
-│   │   ├── watch_result.py       # 采集结果 / 数据仓库仓储
-│   │   └── ai_model.py           # AI 模型仓储
+│   │   ├── user.py               # UserRepository — 用户仓储
+│   │   ├── role.py               # RoleRepository — 角色仓储
+│   │   ├── function.py           # FunctionRepository — 功能仓储
+│   │   ├── watch_source.py       # WatchSourceRepository — 瞭望源仓储
+│   │   ├── watch_result.py       # WatchResultRepository — 采集结果仓储
+│   │   ├── data_warehouse.py     # DataWarehouseRepository — 数据仓库仓储
+│   │   └── ai_model.py           # AiModelRepository — AI 模型仓储
 │   │
 │   ├── services/                 # 业务服务层
 │   │   ├── __init__.py
-│   │   └── collector.py          # 采集引擎（HTTP + 解析 + SSRF）
+│   │   └── collector.py          # 采集引擎（HTTP 请求 + HTML 解析 + SSRF + 反爬）
 │   │
 │   ├── utils/                    # 工具模块
 │   │   ├── __init__.py
 │   │   └── security.py           # SSRF 校验 + 审计日志 + CRLF 检测
 │   │
 │   ├── templates/                # Tornado 模板
-│   │   ├── base.html             # 基础模板
+│   │   ├── base.html             # 基础布局模板
 │   │   ├── login.html            # 登录页
+│   │   ├── register.html         # 注册页
 │   │   └── admin/                # 管理后台模板
-│   │       ├── base_layout.html       # 后台布局模板（侧边栏 + 顶栏）
+│   │       ├── base_layout.html       # 后台布局（侧边栏 + 顶栏）
 │   │       ├── index.html             # 仪表盘首页
 │   │       ├── user_list.html         # 用户列表
 │   │       ├── user_form.html         # 用户新增/编辑表单
@@ -194,19 +206,20 @@ DataFinderAgentOS/
 │   │       ├── role_form.html         # 角色表单（含功能权限树）
 │   │       ├── function_list.html     # 功能列表（树形展示）
 │   │       ├── function_form.html     # 功能表单
-│   │       ├── menu.html              # 菜单预览
+│   │       ├── menu.html              # 菜单预览（按角色）
 │   │       ├── watch.html             # 瞭望采集页
-│   │       ├── watch_source_list.html # 瞭源列表
-│   │       ├── watch_source_form.html # 瞭源表单
+│   │       ├── watch_source_list.html # 瞭望源列表
+│   │       ├── watch_source_form.html # 瞭望源表单
 │   │       ├── warehouse.html         # 数据仓库列表
 │   │       ├── warehouse_detail.html  # 采集结果详情
 │   │       ├── model_list.html        # 模型引擎列表
 │   │       ├── model_form.html        # 模型表单
-│   │       └── model_chat.html        # AI 对话界面
+│   │       └── model_chat.html        # AI 流式对话界面
 │   │
 │   └── static/                   # 静态资源
 │       ├── css/
-│       │   └── base.css          # 全局样式
+│       │   ├── base.css          # 全局样式
+│       │   └── dark-theme.css    # 暗色主题样式
 │       └── js/
 │           └── base.js           # 全局脚本
 ```
@@ -217,16 +230,19 @@ DataFinderAgentOS/
 
 ### 环境要求
 
-- **Python**: 3.11 或更高版本
-- **操作系统**: Windows / macOS / Linux
-- **磁盘空间**: 约 50 MB（含虚拟环境）
+| 项目 | 最低版本 | 推荐版本 |
+|------|---------|---------|
+| **Python** | 3.11 | 3.13+ |
+| **操作系统** | Windows / macOS / Linux | — |
+| **磁盘空间** | ~50 MB（含虚拟环境和数据库） | — |
+| **内存** | 128 MB | 512 MB+ |
 
 ### 安装与运行
 
-#### 1. 克隆或解压项目
+#### 1. 进入项目目录
 
 ```bash
-cd 瞭望与问数系统v0.2源码
+cd "day6-2-个人-肖瑾瑜-瞭望与问数系统v0.2源码"
 ```
 
 #### 2. 创建虚拟环境
@@ -247,7 +263,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-> 唯一外部依赖为 `tornado>=6.4`，安装极快。
+> **唯一外部依赖为 `tornado>=6.4`，安装极快（约 2 秒）。**  
+> 所有其他功能（数据库、HTTP 采集、HTML 解析、加密）均使用 Python 标准库。
 
 #### 4. 启动服务
 
@@ -264,6 +281,12 @@ python main.py
 ==================================================
 ```
 
+> 首次启动时系统会自动：
+> 1. 创建 `database/` 目录和 `finderos.db` 数据库文件
+> 2. 执行 `CREATE TABLE IF NOT EXISTS` 建表（8 张表）
+> 3. 创建数据库索引（10+ 个索引）
+> 4. 插入种子数据（默认角色、管理员账户、功能菜单）
+
 #### 5. 访问系统
 
 打开浏览器，访问 **http://localhost:10010/**，使用默认账户登录：
@@ -272,11 +295,70 @@ python main.py
 |--------|------|------|----------|
 | `admin` | `admin888` | 系统管理员 | `/admin` 管理后台 |
 
-> 首次启动时系统会自动创建 SQLite 数据库文件 `database/finderos.db`，并插入种子数据（默认角色、管理员账户、功能菜单）。
+> ⚠️ **首次登录后请立即修改默认密码！**
 
-### 停止服务
+#### 6. 停止服务
 
 在终端按 `Ctrl + C` 即可停止服务。
+
+### 自定义端口
+
+```bash
+# Windows PowerShell
+$env:PORT = "8080"; python main.py
+
+# Linux / macOS
+PORT=8080 python main.py
+```
+
+---
+
+## 工具脚本
+
+项目提供了两个独立的命令行工具，无需启动 Web 服务即可使用。
+
+### `make_admin.py` — 管理员账号管理
+
+用于快速创建、重置或查看管理员账号。
+
+```bash
+# 交互式创建管理员
+python make_admin.py
+
+# 命令行指定用户名和密码
+python make_admin.py --username admin --password admin888
+
+# 指定角色 ID（1=系统管理员, 2=普通用户）
+python make_admin.py --username admin --password admin888 --role-id 1
+
+# 列出所有用户
+python make_admin.py --list
+
+# 重置已有用户的密码
+python make_admin.py --reset --username admin --password newpass
+```
+
+### `migrate_db.py` — 数据库迁移
+
+向后兼容地为现有数据库添加新列/新表，不破坏已有数据。
+
+```bash
+# 执行所有待处理的迁移
+python migrate_db.py
+
+# 查看迁移状态
+python migrate_db.py --status
+```
+
+迁移历史：
+
+| 版本 | 变更内容 |
+|------|---------|
+| v0.2.5 | 添加 `ai_models.total_tokens`（Token 累加统计） |
+| v0.2.5 | 添加 `audit_logs` 表（操作审计日志） |
+| v0.2.5 | 添加安全相关索引 |
+
+> 迁移脚本具有**幂等性**：重复执行不会破坏已有数据。
 
 ---
 
@@ -287,29 +369,61 @@ python main.py
 #### 1.1 登录流程
 
 ```
-用户输入凭证 → 频率限制检查 → PBKDF2 密码验证
-    → 成功: set_secure_cookie + 按角色跳转（管理员→/admin，普通用户→/index）
+用户输入凭证
+    → 频率限制检查（IP + 用户名维度，5 次/15 分钟）
+    → PBKDF2-SHA256 密码验证（60 万轮迭代）
+    → 检查 is_enabled 状态
+    → 成功: set_secure_cookie + 按角色跳转
+        ├── 系统管理员 → /admin（管理后台仪表盘）
+        └── 普通用户   → /index（前台主页）
     → 失败: 记录失败次数 + 返回错误提示
+    → 锁定: 超过阈值后返回"账户已锁定"提示
 ```
 
-#### 1.2 安全特性
+#### 1.2 安全特性汇总
 
-| 特性 | 实现方式 |
-|------|---------|
-| **密码存储** | PBKDF2-SHA256，60 万轮迭代，16 字节随机盐（hex 存储） |
-| **会话管理** | Tornado Secure Cookie（`set_secure_cookie` / `get_secure_cookie`） |
-| **CSRF 防护** | 全局 `xsrf_cookies=True`，模板中 `{% module xsrf_form_html() %}` |
-| **登录限速** | IP + 用户名维度，5 次失败 / 15 分钟锁定窗口 |
-| **安全响应头** | CSP、X-Frame-Options、X-Content-Type-Options、X-XSS-Protection 等 |
-| **审计日志** | 登录/登出/锁定等关键操作写入 `audit_logs` 表 |
+| 特性 | 实现方式 | 参考标准 |
+|------|---------|---------|
+| **密码存储** | PBKDF2-SHA256，60 万轮迭代，16 字节随机盐（hex 存储） | OWASP 2023 |
+| **会话管理** | Tornado Secure Cookie（`set_secure_cookie` / `get_secure_cookie`） | — |
+| **CSRF 防护** | 全局 `xsrf_cookies=True`，模板中 `{% module xsrf_form_html() %}` | OWASP A01:2021 |
+| **登录限速** | IP + 用户名维度，5 次失败 / 15 分钟锁定窗口 | OWASP A07:2021 |
+| **安全响应头** | CSP、X-Frame-Options、X-Content-Type-Options、X-XSS-Protection、Referrer-Policy、Permissions-Policy | OWASP |
+| **审计日志** | 登录/登出/锁定等关键操作写入 `audit_logs` 表 | OWASP A09:2021 |
+| **XSS 防护** | Tornado 模板默认 HTML 转义 + 采集内容清洗 | OWASP A03:2021 |
+| **SQL 注入防护** | 全参数化查询（`?` 占位符），杜绝字符串拼接 | OWASP A03:2021 |
+| **Header 注入防护** | CR/LF 字符检测（`has_crlf()`） | OWASP A03:2021 |
 
 #### 1.3 认证拦截链
 
 ```
 未登录请求
     → BaseHandler.get_current_user() 返回 None
-    → @tornado.web.authenticated 拦截
-    → 302 重定向到 login_url="/"
+    → @tornado.web.authenticated 装饰器拦截
+    → 302 重定向到 login_url="/"（登录页）
+
+已登录但角色无权限
+    → AdminBaseHandler.prepare() 校验
+    → 角色为"普通用户" → 403 权限不足页面
+    → 用户被禁用 → 清除 Cookie + 302 重定向
+
+已登录且角色有权限
+    → 正常进入管理后台页面
+```
+
+#### 1.4 登录频率限制器
+
+`LoginRateLimiter` 类位于 `app/controllers/auth.py`，支持独立作用域：
+
+```python
+# 创建限速器（支持不同作用域隔离计数）
+limiter = LoginRateLimiter(scope="admin")
+# 检查是否允许尝试
+allowed, msg = limiter.check(client_ip, username)
+# 记录失败
+limiter.record_failure(client_ip, username)
+# 成功后清除
+limiter.clear(client_ip, username)
 ```
 
 ---
@@ -325,39 +439,48 @@ python main.py
                                               （支持两级树形结构）
 ```
 
-- **用户 ↔ 角色**：每个用户绑定一个角色
+- **用户 ↔ 角色**：每个用户绑定一个角色（`users.role_id`）
 - **角色 ↔ 功能**：通过 `role_functions` 中间表实现多对多关联
-- **功能**：支持两级树形（parent_id 自引用），每项功能可配置图标、路由、排序
+- **功能**：支持两级树形（`parent_id` 自引用），每项功能可配置图标、路由、排序
+- **菜单生成**：角色 → `role_functions` → `functions` → 按 `parent_id` 构建树 → 过滤 `is_enabled=1` → 按 `sort_order` 排序
 
 #### 2.2 用户管理 (`/admin/user`)
 
-- 列表查看（20 条/页）、关键词搜索
-- 新增用户：用户名 + 密码 + 角色选择
-- 编辑用户：修改密码（留空不修改）、更换角色
-- 启用/禁用切换
-- 删除用户（软性保护：`admin` 不可删除/禁用自身）
-- 三区布局：上（搜索 + 操作按钮）、中（数据表格）、下（分页）
+| 功能 | 说明 |
+|------|------|
+| 列表查看 | 分页（20 条/页）、关键词搜索、三区布局（搜索+表格+分页） |
+| 新增用户 | 用户名 + 密码 + 角色选择 |
+| 编辑用户 | 修改密码（留空不修改）、更换角色 |
+| 启用/禁用 | 单个切换 + 批量切换 |
+| 删除用户 | 单个删除 + 批量删除 |
+| 安全保护 | `admin` 用户不可删除、不可禁用自身 |
 
 #### 2.3 角色管理 (`/admin/role`)
 
-- 新增/编辑/删除角色
-- **系统角色保护**：`is_system=1` 的角色（系统管理员、普通用户）不可编辑/删除
-- **功能权限联动**：通过 Layui 树形组件（`tree`）展示全部功能，勾选即授权
-- 自动同步 `role_functions` 中间表
+| 功能 | 说明 |
+|------|------|
+| 新增角色 | 角色名 + 描述 + 功能权限树勾选 |
+| 编辑角色 | 修改角色信息 + 更新功能权限关联 |
+| 删除角色 | 删除角色（自动清理 `role_functions` 关联） |
+| 系统角色保护 | `is_system=1` 的角色（系统管理员、普通用户）不可编辑/删除 |
+| 功能权限联动 | Layui 树形组件（`tree`）展示全部功能，勾选即授权，自动同步 `role_functions` 中间表 |
 
 #### 2.4 功能管理 (`/admin/function`)
 
-- 新增/编辑/删除/启用禁用功能
-- **禁用级联**：禁用某项功能后，自动清除所有角色对该功能的关联
-- 树形展示（一级 + 二级）
-- 支持配置图标（Layui 图标类名）、路由地址、排序
+| 功能 | 说明 |
+|------|------|
+| 树形展示 | 一级功能 + 二级子功能，Layui 树形表格 |
+| 新增功能 | 功能名 + 图标 + 路由 + 父级选择 + 排序 |
+| 编辑功能 | 修改功能属性 |
+| 启用/禁用 | 切换 + 禁用级联（禁用后自动清除所有角色对该功能的关联） |
+| 删除功能 | 删除功能节点（含子节点处理） |
 
 #### 2.5 默认权限体系
 
 | 角色 | 后台访问 | 说明 |
 |------|---------|------|
-| 系统管理员 (id=1) | ✅ 全部功能 | 拥有所有后台功能的访问权限 |
-| 普通用户 (id=2) | ❌ 仅前台 | 只能访问登录后的前台主页 |
+| 系统管理员 (id=1) | ✅ 全部功能 | 拥有所有后台功能的访问权限，不可删除/编辑 |
+| 普通用户 (id=2) | ❌ 仅前台 | 只能访问登录后的前台主页 `/index`，不可删除/编辑 |
 | 自定义角色 | 取决于配置 | 通过角色管理分配具体功能权限 |
 
 ---
@@ -366,51 +489,71 @@ python main.py
 
 #### 3.1 概述
 
-瞭望采集引擎是系统的核心数据入口，支持配置多个「瞭望源」（Watch Source），通过 URL 模板 + 关键词 + HTTP 请求的方式自动抓取并解析 Web 数据。
+瞭望采集引擎是系统的核心数据入口，支持配置多个「瞭望源」（Watch Source），通过 **URL 模板 + 关键词 + 自定义 HTTP Headers** 的方式自动抓取并解析 Web 数据。
 
 #### 3.2 采集流程
 
 ```
 用户输入关键词
     → 选择瞭望源（URL 模板 + 自定义 Headers）
-    → collector.py 拼装 URL（{keyword} / {page} 占位符替换）
-    → SSRF 安全校验（协议白名单 + 内网 IP 拦截 + DNS 解析校验）
-    → 发起 HTTP GET 请求（模拟 Chrome 138 TLS 指纹）
+    → collector.py 拼装 URL
+        ├── {keyword} → URL 编码后的关键词
+        ├── {page}    → 当前页码
+        └── 支持复杂表达式：{(page-1)*10}
+    → SSRF 安全校验
+        ├── 协议白名单: 仅 http / https
+        ├── CRLF 检测: 拒绝含 \r \n 的 URL
+        ├── DNS 解析: hostname → IP
+        └── IP 黑名单: 回环地址 + 内网地址段
+    → 发起 HTTP GET 请求
+        ├── 模拟 Chrome 138 TLS 指纹
+        ├── 全局 CookieJar 维持会话
+        └── 自定义 Request Headers
     → 响应解压（gzip / deflate）
     → 按 parser 类型解析 HTML
-    → 结构化结果返回
+    → 结构化结果返回（JSON）
     → 保存到 watch_results 表
-    → （可选）标记保存到数据仓库
+    → （可选）标记保存到 data_warehouse 独立表
 ```
 
 #### 3.3 内置解析器
 
-| 解析器 | 标识 | 适用场景 | 解析能力 |
-|--------|------|---------|---------|
-| `parse_baidu_news` | `baidu_news` | 百度新闻搜索 | 标题、链接、摘要、来源 |
-| `parse_sogou_news` | `sogou_news` | 搜狗新闻搜索 | 标题、链接、摘要 |
-| `generic_parse` | `generic` | 通用网页 | 提取 h2/h3 标签中的链接 |
+| 解析器 | 函数名 | 标识 | 适用场景 | 解析能力 |
+|--------|--------|------|---------|---------|
+| 百度新闻解析 | `parse_baidu_news` | `baidu_news` | 百度新闻搜索结果 | 标题、链接、摘要、来源 |
+| 搜狗新闻解析 | `parse_sogou_news` | `sogou_news` | 搜狗新闻搜索结果 | 标题、链接、摘要 |
+| 通用解析 | `generic_parse` | `generic` | 通用网页 | 提取 h2/h3 标签中的链接 |
 
-#### 3.4 瞭源管理 (`/admin/watch/source`)
+#### 3.4 瞭望源管理 (`/admin/watch/source`)
 
 瞭望源是可复用的数据采集配置，核心字段：
 
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| `name` | 瞭源名称 | 百度新闻 |
-| `url_template` | URL 模板 | `https://www.baidu.com/s?tn=news&word={keyword}&pn={(page-1)*10}` |
-| `request_headers` | 自定义 HTTP 请求头 (JSON) | `{"Referer":"https://www.baidu.com/"}` |
-| `sort_order` | 排序权重 | 数字越小越靠前 |
-| `is_enabled` | 启用状态 | 可随时禁用某个瞭源 |
+| 字段 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `name` | TEXT | 瞭源名称 | 百度新闻 |
+| `description` | TEXT | 瞭源描述 | 百度新闻搜索结果采集 |
+| `url_template` | TEXT | URL 模板（支持占位符） | `https://www.baidu.com/s?tn=news&word={keyword}&pn={(page-1)*10}` |
+| `request_headers` | TEXT(JSON) | 自定义 HTTP 请求头 | `{"Referer":"https://www.baidu.com/"}` |
+| `sort_order` | INTEGER | 排序权重 | 数字越小越靠前 |
+| `is_enabled` | INTEGER | 启用状态 | 1=启用, 0=禁用 |
 
-支持的操作：新增、编辑、删除、启用/禁用切换。
+支持的操作：**新增、编辑、删除、启用/禁用切换**。
 
 #### 3.5 百度反爬策略
 
-- 首次访问百度时会自动预热 Cookie（获取 `BAIDUID`）
-- 使用全局 CookieJar 维持会话
+- 首次访问百度时会自动预热 Cookie（先请求首页获取 `BAIDUID` 等关键 Cookie）
+- 使用全局 `CookieJar` 维持会话状态，避免每次请求都触发验证码
 - 模拟 Chrome 138 浏览器的 TLS 指纹和 User-Agent
-- 请求间隔建议 ≥ 3 秒
+- 自定义 HTTP Headers（Referer、Accept-Language 等）
+- 建议请求间隔 ≥ 3 秒以避免触发频率限制
+
+#### 3.6 URL 模板占位符
+
+| 占位符 | 说明 | 示例 |
+|--------|------|------|
+| `{keyword}` | URL 编码后的搜索关键词 | `人工智能` → `%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD` |
+| `{page}` | 当前页码 | `1`, `2`, `3`... |
+| `{(page-1)*10}` | 计算表达式（用于百度 `pn` 参数） | 第1页→0, 第2页→10, 第3页→20... |
 
 ---
 
@@ -418,16 +561,41 @@ python main.py
 
 #### 4.1 概述
 
-数据仓库 (`/admin/warehouse`) 是瞭望采集结果的统一存储与检索中心。所有采集到的新闻/数据都会保存在 `watch_results` 表中，支持关键词搜索、分页查看、详情预览、单条删除和批量删除。
+数据仓库 (`/admin/warehouse`) 是瞭望采集结果的**独立存储与检索中心**。v0.2.13 起采用独立的 `data_warehouse` 表（区别于原始采集结果表 `watch_results`），支持 URL 去重和深度采集扩展。
 
-#### 4.2 主要功能
+#### 4.2 两表设计
 
-- **列表浏览**：分页展示所有采集结果（20 条/页），含瞭源名称、关键词、采集时间
-- **关键词搜索**：按采集关键词模糊检索
-- **统计概览**：显示总采集条数、成功/失败统计
-- **详情查看**：点击查看单条记录的完整响应内容
-- **批量删除**：勾选多条后一键删除
-- **数据保存标记**：从瞭望采集页可将结果标记为"已保存到仓库"
+| 表 | 用途 | 特点 |
+|----|------|------|
+| `watch_results` | 原始采集结果 | 每次采集都保存，含 HTTP 状态码、响应大小等元信息 |
+| `data_warehouse` | 独立数据仓库 | 从采集结果中"标记保存"而来，含标题/链接/摘要/来源等结构化字段，支持 URL 去重 |
+
+#### 4.3 主要功能
+
+| 功能 | 说明 |
+|------|------|
+| **列表浏览** | 分页展示所有仓库数据（20 条/页），含标题、来源、采集时间 |
+| **关键词搜索** | 按标题或来源名称模糊检索 |
+| **统计概览** | 显示总采集条数、成功/失败统计 |
+| **详情查看** | 点击查看单条记录的完整信息（标题、链接、摘要、原始数据等） |
+| **批量删除** | 勾选多条后一键删除 |
+| **数据保存** | 从瞭望采集页可将结果标记"保存到仓库"，自动写入 `data_warehouse` 表 |
+| **URL 去重** | `link` 字段设唯一索引，重复 URL 自动跳过 |
+
+#### 4.4 数据仓库表结构
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | INTEGER PK | 自增主键 |
+| `result_id` | INTEGER FK | 关联原始采集结果 |
+| `title` | TEXT | 新闻标题 |
+| `link` | TEXT (UNIQUE) | 新闻链接（唯一索引去重） |
+| `summary` | TEXT | 摘要内容 |
+| `source_name` | TEXT | 来源名称 |
+| `raw_data` | TEXT | 原始数据（JSON） |
+| `is_deep_collected` | INTEGER | 是否已深度采集（预留字段） |
+| `deep_collected_at` | TIMESTAMP | 深度采集时间（预留字段） |
+| `created_at` | TIMESTAMP | 入库时间 |
 
 ---
 
@@ -435,50 +603,88 @@ python main.py
 
 #### 5.1 概述
 
-模型引擎提供多 Provider（OpenAI / DeepSeek / 智谱 AI / 百度文心 / 自定义）AI 大模型的统一管理平台，支持模型配置、流式对话（SSE）、Token 统计和对话审计。
+模型引擎提供**多 Provider（6 种）AI 大模型**的统一管理平台，支持模型配置、流式对话（SSE）、Token 统计和对话审计。
+
+支持的 Provider：
+
+| Provider | 标识 | API 范式 |
+|----------|------|---------|
+| OpenAI | `openai` | OpenAI Chat Completions |
+| DeepSeek | `deepseek` | OpenAI 兼容 |
+| 智谱 AI | `zhipu` | OpenAI 兼容 |
+| 百度文心 | `baidu` | OpenAI 兼容 |
+| 自定义 | `custom` | OpenAI 兼容（任意兼容端点） |
+
+支持的模型分类（6 种）：
+
+| 分类 | 标识 | 说明 |
+|------|------|------|
+| 文本 | `text` | 纯文本对话模型（如 GPT-4o、DeepSeek-V3） |
+| 图像 | `image` | 图像生成模型（如 DALL·E） |
+| 音频 | `audio` | 音频处理模型（如 Whisper） |
+| 视频 | `video` | 视频处理模型（如 Sora） |
+| 多模态 | `multimodal` | 多模态理解模型（如 GPT-4V） |
+| 嵌入 | `embedding` | 文本嵌入模型（如 text-embedding-3） |
 
 #### 5.2 模型管理 (`/admin/model`)
 
 每个模型支持完整的参数配置：
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `name` | 模型显示名称 | — |
-| `provider` | 提供商 | openai |
-| `api_base` | API 端点 URL | — |
-| `api_key` | API 密钥 | — |
-| `model_name` | 模型标识（如 `gpt-4o`） | — |
-| `category` | 分类 | text（文本）/ vision（视觉）/ embedding（嵌入） |
-| `system_prompt` | 系统提示词 | — |
-| `temperature` | 温度参数 | 0.7 |
-| `top_p` | Top-P 采样 | 1.0 |
-| `top_k` | Top-K 采样 | 50 |
-| `max_tokens` | 最大输出 Token | 4096 |
-| `context_size` | 上下文窗口大小 | 8192 |
-| `total_tokens` | Token 消耗累计（自动更新） | 0 |
-| `is_default` | 是否默认模型 | — |
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `name` | TEXT | — | 模型显示名称（如"GPT-4o"） |
+| `provider` | TEXT | `openai` | 提供商标识 |
+| `api_base` | TEXT | — | API 端点 URL（如 `https://api.openai.com/v1`） |
+| `api_key` | TEXT | — | API 密钥 |
+| `model_name` | TEXT | — | 模型标识（如 `gpt-4o`、`deepseek-chat`） |
+| `category` | TEXT | `text` | 模型分类 |
+| `system_prompt` | TEXT | — | 系统提示词 |
+| `temperature` | REAL | `0.7` | 温度参数（0~2） |
+| `top_p` | REAL | `1.0` | Top-P 采样 |
+| `top_k` | INTEGER | `50` | Top-K 采样 |
+| `max_tokens` | INTEGER | `4096` | 最大输出 Token |
+| `context_size` | INTEGER | `8192` | 上下文窗口大小 |
+| `total_tokens` | INTEGER | `0` | Token 消耗累计（自动更新） |
+| `is_enabled` | INTEGER | `1` | 启用状态 |
+| `is_default` | INTEGER | `0` | 是否默认模型（全局唯一） |
+
+支持的操作：**新增、编辑、删除、启用/禁用、设为默认、Token 清零**。
 
 #### 5.3 流式对话 (`/admin/model/chat`)
 
 ```
 用户选择模型 → 输入消息
-    ├── 有 API Key → 真实 OpenAI API SSE 流式调用 → 返回 Token 消耗
-    └── 无 API Key → 本地 Mock 字符级流式输出 → 估算 Token
+    ├── 有 API Key → 真实 OpenAI API SSE 流式调用
+    │       └── 解析 SSE 事件 → 逐字推送到前端
+    │       └── 提取 usage 信息 → Token 消耗统计
+    └── 无 API Key → 本地 Mock 字符级流式输出
+            └── 模拟打字机效果，逐字输出
+            └── 按字符数估算 Token 消耗
+
     → Token 消耗自动累加到 ai_models.total_tokens
-    → 对话记录写入 audit_logs (CHAT)
+    → 对话记录写入 audit_logs (action=CHAT)
+    → 客户端断开时自动中止服务端 HTTP 请求
 ```
 
-- **SSE 事件格式**：
-  ```
-  data: {"content": "你"}
-  data: {"content": "好"}
-  ...
-  data: [DONE]
-  event: stats
-  data: {"tokens": 42, "mock": false}
-  ```
-- **Mock 模式**：API Key 未配置时自动回退到本地模拟流式输出
-- **连接管理**：客户端断开时自动中止服务端请求
+**SSE 事件格式**：
+
+```
+data: {"content": "你"}
+data: {"content": "好"}
+data: {"content": "！"}
+...
+data: [DONE]
+event: stats
+data: {"tokens": 42, "mock": false}
+```
+
+**Mock 模式**：当 API Key 未配置时自动回退到本地模拟流式输出，方便开发调试。在对话页顶部会显示当前使用的模型名称和连接状态。
+
+#### 5.4 模型 API 接口
+
+| 端点 | 说明 |
+|------|------|
+| `GET /admin/api/model/list` | 返回已启用模型的 JSON 列表（供外部调用） |
 
 ---
 
@@ -486,101 +692,150 @@ python main.py
 
 #### 6.1 概述
 
-菜单管理 (`/admin/menu`) 提供按角色预览后台侧边栏菜单树的功能。选择角色后，系统根据 `roles → role_functions → functions` 的映射关系，动态构建该角色可见的菜单结构。
+菜单管理 (`/admin/menu`) 提供按角色**预览后台侧边栏菜单树**的功能，并支持菜单项排序。
 
 #### 6.2 菜单生成逻辑
 
 ```
-角色 → role_functions (中间表) → functions (按 parent_id 构建树)
-    → 过滤 is_enabled=1 的功能
+角色 → RoleRepository.get_function_ids(role_id)
+    → FunctionRepository.get_all() 获取全部功能
+    → 过滤: function_id 在角色权限内 且 is_enabled=1
+    → 按 parent_id 构建树形结构
     → 按 sort_order 排序
     → 渲染为 Layui 侧边栏菜单
+    → 同时以 JSON 格式展示原始结构（便于调试）
 ```
 
-支持以 JSON 格式展示菜单原始结构，便于调试和对接。
+#### 6.3 菜单排序 (`/admin/menu/sort`)
+
+支持菜单项的上移/下移操作（修改 `functions.sort_order`），实现侧边栏菜单的自定义排序。
+
+---
+
+### 7. 管理后台仪表盘
+
+管理后台首页 (`/admin`) 提供系统全局统计概览，以 Layui 卡片形式展示：
+
+| 统计项 | 数据来源 | 说明 |
+|--------|---------|------|
+| 用户总数 | `users` 表 COUNT | 系统注册用户数 |
+| 角色总数 | `roles` 表 COUNT | 已配置角色数 |
+| 功能总数 | `functions` 表 COUNT | 已注册功能节点数 |
+| 瞭望源数 | `watch_sources` 表 COUNT | 已配置采集源数 |
+| 采集总数 | `watch_results` 表 COUNT | 历史采集总次数 |
+| 仓库数据 | `data_warehouse` 表 COUNT | 已保存到仓库的记录数 |
+| 模型数量 | `ai_models` 表 COUNT | 已配置 AI 模型数 |
+| 采集统计 | 成功/失败/已保存 | 采集结果状态分布 |
+| Token 统计 | `ai_models.total_tokens` SUM | 所有模型累计 Token 消耗 |
 
 ---
 
 ## API 接口一览
 
-> 基础 URL: `http://localhost:10010` | 认证方式: Tornado Secure Cookie | CSRF: 所有 POST 需 `_xsrf` token
+> **基础 URL**: `http://localhost:10010`  
+> **认证方式**: Tornado Secure Cookie（`username` Cookie）  
+> **CSRF**: 所有 POST/PUT/DELETE 请求需携带 `_xsrf` token  
+> **Content-Type**: 表单提交为 `application/x-www-form-urlencoded`
 
 ### 认证
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET/POST | `/` | 登录页 / 登录提交 |
-| GET | `/logout` | 登出 |
+| GET | `/` | 登录页面 |
+| POST | `/` | 提交登录表单 |
+| GET | `/register` | 注册页面 |
+| POST | `/register` | 提交注册表单 |
+| GET | `/logout` | 登出（清除 Cookie，重定向到登录页） |
+| GET | `/index` | 前台首页（需登录，普通用户默认跳转） |
 
 ### 管理后台 (需管理员权限)
+
+#### 仪表盘
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin` | 管理后台仪表盘首页 |
 
 #### 用户管理
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/user` | 用户列表 (`?page=&search=`) |
-| GET/POST | `/admin/user/add` | 新增用户 |
-| GET/POST | `/admin/user/edit` | 编辑用户 (`?id=`) |
+| GET | `/admin/user` | 用户列表（`?page=&search=`） |
+| GET | `/admin/user/add` | 新增用户页面 |
+| POST | `/admin/user/add` | 提交新增用户 |
+| GET | `/admin/user/edit` | 编辑用户页面（`?id=`） |
+| POST | `/admin/user/edit` | 提交编辑用户 |
 | POST | `/admin/user/delete` | 删除用户 |
 | POST | `/admin/user/toggle` | 启用/禁用切换 |
+| POST | `/admin/user/batch-delete` | 批量删除 |
+| POST | `/admin/user/batch-toggle` | 批量启用/禁用 |
 
 #### 角色管理
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/admin/role` | 角色列表 |
-| GET/POST | `/admin/role/add` | 新增角色 |
-| GET/POST | `/admin/role/edit` | 编辑角色 |
+| GET | `/admin/role/add` | 新增角色页面 |
+| POST | `/admin/role/add` | 提交新增角色 |
+| GET | `/admin/role/edit` | 编辑角色页面（`?id=`） |
+| POST | `/admin/role/edit` | 提交编辑角色 |
 | POST | `/admin/role/delete` | 删除角色 |
 
 #### 功能管理
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/function` | 功能列表（树形） |
-| GET/POST | `/admin/function/add` | 新增功能 |
-| GET/POST | `/admin/function/edit` | 编辑功能 |
+| GET | `/admin/function` | 功能列表（树形展示） |
+| GET | `/admin/function/add` | 新增功能页面 |
+| POST | `/admin/function/add` | 提交新增功能 |
+| GET | `/admin/function/edit` | 编辑功能页面（`?id=`） |
+| POST | `/admin/function/edit` | 提交编辑功能 |
 | POST | `/admin/function/delete` | 删除功能 |
 | POST | `/admin/function/toggle` | 启用/禁用功能 |
 
 #### 菜单管理
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/menu` | 按角色预览菜单树 |
+| GET | `/admin/menu` | 按角色预览菜单树（`?role_id=`） |
+| POST | `/admin/menu/sort` | 菜单排序（上移/下移） |
 
 #### 瞭望采集
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/watch` | 瞭望采集页 + 历史查询 |
-| POST | `/admin/watch` | 执行采集（返回 JSON） |
-| POST | `/admin/watch/save` | 保存结果到数据仓库 |
+| GET | `/admin/watch` | 瞭望采集页 + 历史结果（`?keyword=&page=&source_id=`） |
+| POST | `/admin/watch` | 执行采集，返回 JSON（`keyword=&source_ids=&page=`） |
+| POST | `/admin/watch/save` | 保存采集结果到数据仓库 |
 
-#### 瞭源管理
+#### 瞭望源管理
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/watch/source` | 瞭源列表 |
-| GET/POST | `/admin/watch/source/add` | 新增瞭源 |
-| GET/POST | `/admin/watch/source/edit` | 编辑瞭源 |
-| POST | `/admin/watch/source/delete` | 删除瞭源 |
-| POST | `/admin/watch/source/toggle` | 启用/禁用瞭源 |
+| GET | `/admin/watch/source` | 瞭望源列表 |
+| GET | `/admin/watch/source/add` | 新增瞭望源页面 |
+| POST | `/admin/watch/source/add` | 提交新增瞭望源 |
+| GET | `/admin/watch/source/edit` | 编辑瞭望源页面（`?id=`） |
+| POST | `/admin/watch/source/edit` | 提交编辑瞭望源 |
+| POST | `/admin/watch/source/delete` | 删除瞭望源 |
+| POST | `/admin/watch/source/toggle` | 启用/禁用瞭望源 |
 
 #### 数据仓库
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/warehouse` | 数据列表 (`?page=&keyword=`) |
-| GET | `/admin/warehouse/detail` | 查看详情 (`?id=`) |
-| POST | `/admin/warehouse/delete` | 删除记录 |
+| GET | `/admin/warehouse` | 数据仓库列表（`?page=&keyword=&source_id=`） |
+| GET | `/admin/warehouse/detail` | 查看详情（`?id=`） |
+| POST | `/admin/warehouse/delete` | 删除单条记录 |
 | POST | `/admin/warehouse/batch-delete` | 批量删除 |
 
 #### 模型引擎
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/model` | 模型列表 (`?page=&category=`) |
-| GET/POST | `/admin/model/add` | 新增模型 |
-| GET/POST | `/admin/model/edit` | 编辑模型 |
+| GET | `/admin/model` | 模型列表（`?page=&category=`） |
+| GET | `/admin/model/add` | 新增模型页面 |
+| POST | `/admin/model/add` | 提交新增模型 |
+| GET | `/admin/model/edit` | 编辑模型页面（`?id=`） |
+| POST | `/admin/model/edit` | 提交编辑模型 |
 | POST | `/admin/model/delete` | 删除模型 |
-| POST | `/admin/model/toggle` | 启用/禁用 |
+| POST | `/admin/model/toggle` | 启用/禁用模型 |
 | POST | `/admin/model/default` | 设为默认模型 |
-| GET | `/admin/model/chat` | 对话页面 (`?model_id=`) |
-| POST | `/admin/model/chat/stream` | **SSE 流式对话** |
-| GET | `/admin/api/model/list` | 模型 JSON API |
+| POST | `/admin/model/clear-tokens` | Token 消耗清零 |
+| GET | `/admin/model/chat` | 对话页面（`?model_id=`） |
+| POST | `/admin/model/chat/stream` | **SSE 流式对话**（需设置 `Accept: text/event-stream`） |
+| GET | `/admin/api/model/list` | 模型 JSON API（返回已启用模型列表） |
 
 ---
 
@@ -595,6 +850,16 @@ erDiagram
     functions ||--o{ role_functions : "function_id"
     functions ||--o| functions : "parent_id"
     watch_sources ||--o{ watch_results : "source_id"
+    watch_results ||--o| data_warehouse : "result_id"
+    audit_logs {
+        int id PK
+        string action
+        string username
+        string target
+        string detail
+        string client_ip
+        timestamp created_at
+    }
     ai_models {
         int id PK
         string name
@@ -614,31 +879,43 @@ erDiagram
         int is_default
         timestamp created_at
     }
-    audit_logs {
+    data_warehouse {
         int id PK
-        string action
-        string username
-        string target
-        string detail
-        string client_ip
+        int result_id FK
+        string title
+        string link
+        string summary
+        string source_name
+        string raw_data
+        int is_deep_collected
+        timestamp deep_collected_at
         timestamp created_at
     }
 ```
 
 ### 核心表清单
 
-| 表名 | 说明 | 记录数级 |
-|------|------|---------|
-| `users` | 用户表 | 10~1000 |
-| `roles` | 角色表 | 3~50 |
-| `functions` | 功能/菜单项 | 10~100 |
-| `role_functions` | 角色-功能关联（中间表） | N×M |
-| `watch_sources` | 瞭望源配置 | 3~50 |
-| `watch_results` | 采集结果/数据仓库 | 100~100000 |
-| `ai_models` | AI 模型配置 | 3~50 |
-| `audit_logs` | 操作审计日志 | 自动增长 |
+| 表名 | 说明 | 预期记录数 | 主要索引 |
+|------|------|-----------|---------|
+| `users` | 用户表 | 10 ~ 1000 | `username`(UNIQUE), `role_id` |
+| `roles` | 角色表 | 3 ~ 50 | `name`(UNIQUE) |
+| `functions` | 功能/菜单项 | 10 ~ 100 | `parent_id` |
+| `role_functions` | 角色-功能关联（中间表） | N×M | `role_id`, `function_id` (联合主键) |
+| `watch_sources` | 瞭望源配置 | 3 ~ 50 | `is_enabled` |
+| `watch_results` | 原始采集结果 | 100 ~ 100000 | `source_id` |
+| `data_warehouse` | 独立数据仓库 | 100 ~ 100000 | `link`(UNIQUE) |
+| `ai_models` | AI 模型配置 | 3 ~ 50 | `is_default` |
+| `audit_logs` | 操作审计日志 | 自动增长 | `action`, `username`, `created_at` |
 
-> 完整 DDL 和字段说明请参考 `docs/constraint.md`。
+> 完整 DDL 和字段详细说明请参考 `docs/constraint.md`。
+
+### 数据库特性
+
+- **WAL 模式**：`PRAGMA journal_mode=WAL` — 支持并发读写，写入不阻塞读取
+- **外键约束**：`PRAGMA foreign_keys=ON` — 确保数据完整性
+- **自动建表**：`init_db()` 使用 `CREATE TABLE IF NOT EXISTS`，首次启动自动创建
+- **自动迁移**：兼容旧表结构，通过 `ALTER TABLE ADD COLUMN` 向后兼容添加新字段
+- **种子数据**：`seed_default_data()` 检查已有数据，幂等插入默认角色和管理员账户
 
 ---
 
@@ -648,36 +925,39 @@ erDiagram
 
 | 防护项 | 实现方式 | 参考标准 |
 |--------|---------|---------|
-| **密码存储** | PBKDF2-SHA256 (60 万轮 + 16字节随机盐) | OWASP 2023 |
-| **CSRF** | Tornado `xsrf_cookies=True` 全局开启 | OWASP A01:2021 |
-| **XSS** | Tornado 模板默认 HTML 转义 + 采集内容清洗 | OWASP A03:2021 |
-| **SQL 注入** | 全参数化查询 (`?` 占位符)，杜绝字符串拼接 | OWASP A03:2021 |
+| **密码存储** | PBKDF2-SHA256（60 万轮迭代 + 16 字节随机盐，hex 存储） | OWASP 2023 |
+| **CSRF** | Tornado `xsrf_cookies=True` 全局开启 + 模板 `{% module xsrf_form_html() %}` | OWASP A01:2021 |
+| **XSS** | Tornado 模板默认 HTML 转义 + 采集内容清洗（`unescape` + 标签剥离） | OWASP A03:2021 |
+| **SQL 注入** | 全参数化查询（`?` 占位符），0 处字符串拼接 SQL | OWASP A03:2021 |
 | **SSRF** | URL 协议白名单 + 内网 IP 段拦截 + DNS 解析校验 + CRLF 检测 | OWASP A10:2021 |
-| **Header 注入** | CR/LF 字符检测（`has_crlf()`） | OWASP A03:2021 |
-| **安全响应头** | CSP / X-Frame-Options / X-Content-Type-Options / X-XSS-Protection / Referrer-Policy / Permissions-Policy / HSTS | OWASP |
-| **登录限速** | IP + 用户名维度，5 次失败 / 15 分钟锁定 | OWASP A07:2021 |
-| **审计日志** | 关键操作全量写入 `audit_logs` 表 | OWASP A09:2021 |
+| **Header 注入** | CR/LF 字符检测（`has_crlf()`），拒绝含 `\r` `\n` 的输入 | OWASP A03:2021 |
+| **安全响应头** | CSP / X-Frame-Options / X-Content-Type-Options / X-XSS-Protection / Referrer-Policy / Permissions-Policy | OWASP |
+| **登录限速** | IP + 用户名维度，5 次失败 / 15 分钟锁定窗口 | OWASP A07:2021 |
+| **审计日志** | 关键操作全量写入 `audit_logs` 表（含时间、IP、操作详情） | OWASP A09:2021 |
+| **Clickjacking** | `X-Frame-Options: DENY` + CSP `frame-ancestors 'none'` | OWASP A05:2021 |
 
 ### SSRF 防护详情
 
 ```
 validate_url_safe(url)
-    ├── 协议白名单: 仅允许 http / https
-    ├── CRLF 检测: 拒绝含 \r \n 的 URL
-    ├── DNS 解析: hostname → IP
-    └── IP 黑名单检查:
-        ├── 127.0.0.1 / localhost / 0.0.0.0 / ::1
-        ├── 10.0.0.0/8 (A 类私有)
-        ├── 172.16.0.0/12 (B 类私有)
-        ├── 192.168.0.0/16 (C 类私有)
-        ├── 169.254.0.0/16 (链路本地)
-        └── 100.64.0.0/10 (运营商级 NAT)
+    ├── 协议白名单检查: 仅允许 http / https
+    ├── CRLF 检测: 拒绝含 \r \n 的 URL（防止 HTTP Request Smuggling）
+    ├── DNS 解析: hostname → IP 地址
+    └── IP 黑名单检查 (CIDR):
+        ├── 127.0.0.1 / localhost / 0.0.0.0 / ::1     （回环地址）
+        ├── 10.0.0.0/8                                 （A 类私有）
+        ├── 172.16.0.0/12                              （B 类私有）
+        ├── 192.168.0.0/16                             （C 类私有）
+        ├── 169.254.0.0/16                             （链路本地）
+        └── 100.64.0.0/10                              （运营商级 NAT）
 ```
 
 ### 安全响应头
 
+实际发送的 HTTP 响应头：
+
 ```
-Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; ...
+Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; font-src 'self' https://cdn.jsdelivr.net; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
 X-Frame-Options: DENY
 X-Content-Type-Options: nosniff
 X-XSS-Protection: 1; mode=block
@@ -691,40 +971,47 @@ Permissions-Policy: camera=(), microphone=(), geolocation=()
 
 ### 配置文件
 
-所有配置集中在 `app/config/settings.py`，支持**环境变量覆盖**，无需修改代码即可适配不同环境。
+所有配置集中在 `app/config/settings.py` 的 `Settings` 类中，**全部支持环境变量覆盖**，无需修改代码即可适配开发/测试/生产环境。
 
 ### 配置项速查
 
 | 环境变量 | 默认值 | 说明 |
 |---------|--------|------|
-| `COOKIE_SECRET` | 随机生成 | 安全 Cookie 签名密钥（生产环境**必须**设置） |
-| `DB_PATH` | `database/finderos.db` | SQLite 数据库文件路径 |
+| `COOKIE_SECRET` | 随机生成 | 安全 Cookie 签名密钥（**生产环境必须设置**，否则重启后所有会话失效） |
+| `DB_PATH` | `database/finderos.db` | SQLite 数据库文件路径（相对路径基于项目根目录） |
 | `PORT` | `10010` | HTTP 服务监听端口 |
-| `BIND_ADDRESS` | `127.0.0.1` | 监听地址 |
-| `DEBUG` | `false` | 调试模式（`true` 开启） |
-| `PBKDF2_ITERATIONS` | `600000` | 密码哈希迭代次数 |
+| `DEBUG` | `false` | 调试模式（`true` 时开启 Tornado 调试功能和自动重载） |
+| `PBKDF2_ITERATIONS` | `600000` | PBKDF2-SHA256 密码哈希迭代次数（OWASP 2023 推荐 ≥ 600,000） |
 | `PAGE_SIZE` | `20` | 列表默认分页大小 |
-| `LOGIN_MAX_FAILURES` | `5` | 登录失败次数上限 |
-| `LOGIN_LOCKOUT_SECONDS` | `900` | 登录锁定时间（秒） |
-| `AUDIT_ENABLED` | `true` | 是否启用审计日志 |
+| `LOGIN_MAX_FAILURES` | `5` | 登录失败次数上限（同一 IP + 用户名组合） |
+| `LOGIN_LOCKOUT_SECONDS` | `900` | 登录锁定时间（秒），默认 15 分钟 |
 
 ### 生产环境启动示例
 
 ```bash
-# Linux/macOS
-export COOKIE_SECRET="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+# Linux / macOS
+export COOKIE_SECRET="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
 export DEBUG=false
-export BIND_ADDRESS="0.0.0.0"
 python main.py
 
 # Windows PowerShell
 $env:COOKIE_SECRET = -join ((48..57)+(65..90)+(97..122) | Get-Random -Count 64 | ForEach-Object {[char]$_})
 $env:DEBUG = "false"
-$env:BIND_ADDRESS = "0.0.0.0"
 python main.py
 ```
 
-> ⚠️ **安全警告**：生产环境必须通过环境变量设置 `COOKIE_SECRET`，否则每次重启会生成随机密钥导致所有用户会话失效。
+> ⚠️ **安全警告**：生产环境**必须**通过环境变量设置 `COOKIE_SECRET`，否则每次重启会生成随机密钥导致所有用户会话失效。`DEBUG` 模式在生产环境必须关闭，否则会在前端暴露 Python 堆栈跟踪。
+
+### 生产环境推荐配置
+
+```bash
+export COOKIE_SECRET="<生成的64位随机字符串>"
+export DEBUG=false
+export PBKDF2_ITERATIONS=600000
+export LOGIN_MAX_FAILURES=3
+export LOGIN_LOCKOUT_SECONDS=1800
+python main.py
+```
 
 ---
 
@@ -744,11 +1031,12 @@ python migrate_db.py --status
 
 | 版本 | 变更内容 |
 |------|---------|
-| v0.2.5 | 添加 `ai_models.total_tokens`（Token 累加统计） |
-| v0.2.5 | 添加 `audit_logs` 表（操作审计日志） |
-| v0.2.5 | 添加安全相关索引 |
+| v0.2.5 | 添加 `ai_models.total_tokens` 列（Token 消耗累加统计） |
+| v0.2.5 | 添加 `audit_logs` 表（操作审计日志，含 3 个索引） |
+| v0.2.5 | 添加安全相关索引（`audit_logs.action`、`audit_logs.username`、`audit_logs.created_at`） |
+| v0.2.13 | 添加 `data_warehouse` 独立表（标题/链接/摘要/来源 + URL 去重索引） |
 
-> 迁移脚本具有**幂等性**：重复执行不会破坏已有数据。
+> 迁移脚本具有**幂等性**：重复执行不会破坏已有数据。使用 `ALTER TABLE ADD COLUMN`（列不存在时静默跳过）和 `CREATE TABLE IF NOT EXISTS` 确保安全。
 
 ---
 
@@ -756,22 +1044,27 @@ python migrate_db.py --status
 
 ### 添加新业务模块
 
-以添加一个新模块为例，需要创建/修改以下文件：
+以添加一个新模块（例如"公告管理"）为例，需要创建/修改以下文件：
 
-1. **Model (Repository)**：在 `app/models/` 新建文件，定义数据访问类（静态方法）
-2. **Controller (Handler)**：在 `app/controllers/` 新建文件，继承 `AdminBaseHandler`
-3. **Template**：在 `app/templates/admin/` 新建模板，继承 `base_layout.html`
-4. **路由注册**：在 `main.py` 的 `make_app()` 中添加路由
-5. **数据库表**：在 `app/models/db.py` 的 `init_db()` 中添加建表语句
-6. **菜单功能项**：在后台功能管理中新增功能节点
+| 步骤 | 文件 | 操作 |
+|------|------|------|
+| 1 | `app/models/announcement.py` | 新建 Repository 类（静态方法：CRUD + 分页查询） |
+| 2 | `app/models/db.py` → `init_db()` | 添加 `CREATE TABLE IF NOT EXISTS announcements (...)` |
+| 3 | `app/controllers/admin_announcement.py` | 新建 Handler，继承 `AdminBaseHandler` |
+| 4 | `app/templates/admin/announcement_list.html` | 新建模板，`{% extends "admin/base_layout.html" %}` |
+| 5 | `main.py` → `make_app()` | 添加路由 `(r"/admin/announcement", AnnouncementListHandler)` |
+| 6 | 后台 → 功能管理 | 新增功能节点（名称 + 图标 + 路由 + 排序） |
+| 7 | 后台 → 角色管理 | 为管理员角色勾选新功能的访问权限 |
 
 ### 代码规范
 
-- **Controller 层**：参数校验 → 业务调用 → 视图渲染，保持简洁
-- **Model 层**：纯数据访问，使用 Repository 模式，方法为 `@staticmethod`
-- **Service 层**：复杂业务逻辑（如采集引擎），可复用组件
-- **数据库操作**：必须使用参数化查询（`?` 占位符），**严禁字符串拼接 SQL**
-- **模板继承**：后台页面继承 `admin/base_layout.html`，自动包含侧边栏和顶栏
+- **Controller 层**：参数校验 → 业务调用 → 视图渲染，保持简洁。不包含复杂业务逻辑。
+- **Model 层**：纯数据访问，使用 Repository 模式，所有方法为 `@staticmethod`。不包含业务逻辑。
+- **Service 层**：复杂业务逻辑（如采集引擎 `collector.py`），可复用的独立组件。
+- **数据库操作**：**必须**使用参数化查询（`?` 占位符），**严禁**字符串拼接 SQL。
+- **模板继承**：后台页面**必须**继承 `admin/base_layout.html`，自动包含侧边栏和顶栏布局。
+- **安全校验**：后台 Handler **必须**继承 `AdminBaseHandler`（自动进行权限校验），前台 Handler 继承 `BaseHandler`。
+- **命名规范**：Handler 类名使用 `XxxHandler` 后缀，Repository 类名使用 `XxxRepository` 后缀。
 
 ### 常用命令
 
@@ -779,31 +1072,56 @@ python migrate_db.py --status
 # 激活虚拟环境 (Windows)
 .venv\Scripts\activate
 
+# 激活虚拟环境 (macOS/Linux)
+source .venv/bin/activate
+
 # 安装依赖
 pip install -r requirements.txt
 
-# 运行数据库迁移
-python migrate_db.py
-
-# 启动开发服务器
+# 启动开发服务器（默认端口 10010）
 python main.py
 
-# 切换端口 (默认 10010)
+# 切换端口启动
 # Windows PowerShell:
 $env:PORT = "8080"; python main.py
 # Linux/macOS:
 PORT=8080 python main.py
+
+# 开启调试模式（自动重载 + 详细错误）
+# Windows PowerShell:
+$env:DEBUG = "true"; python main.py
+# Linux/macOS:
+DEBUG=true python main.py
+
+# 运行数据库迁移
+python migrate_db.py
+
+# 创建/重置管理员账号
+python make_admin.py --username admin --password mypassword
+
+# 列出所有用户
+python make_admin.py --list
+
+# 重置管理员密码
+python make_admin.py --reset --username admin --password newpassword
 ```
+
+### 调试技巧
+
+1. **查看 Tornado 日志**：终端直接输出结构化日志（时间戳 + 级别 + 消息）
+2. **数据库调试**：使用任意 SQLite 客户端打开 `database/finderos.db`，如 [DB Browser for SQLite](https://sqlitebrowser.org/)
+3. **前端调试**：浏览器 F12 → Network 面板可查看 SSE 事件流
+4. **审计追踪**：查询 `audit_logs` 表可追溯所有关键操作
 
 ---
 
 ## 默认账户
 
-| 用户名 | 密码 | 角色 | 后台权限 |
-|--------|------|------|---------|
-| `admin` | `admin888` | 系统管理员 | 全部功能 |
+| 用户名 | 密码 | 角色 | 后台权限 | 说明 |
+|--------|------|------|---------|------|
+| `admin` | `admin888` | 系统管理员 | ✅ 全部功能 | 不可删除/禁用自身 |
 
-> ⚠️ **首次登录后请立即修改默认密码！**
+> ⚠️ **首次登录后请立即修改默认密码！** 可使用管理后台的用户编辑功能或 `make_admin.py --reset` 命令。
 
 ---
 
@@ -813,33 +1131,65 @@ PORT=8080 python main.py
 
 | 模块 | 测试项数 | 覆盖要点 |
 |------|---------|---------|
-| 认证模块 | 6 | 正确/错误登录、空表单、限速、未登录拦截、登出 |
-| 用户管理 | 6 | 新增/编辑/禁用/删除/搜索/admin 保护 |
-| 角色管理 | 3 | 新增角色、系统角色编辑/删除保护 |
-| 瞭望采集 | 5 | 关键词采集、瞭源选择、保存仓库、SSRF 防护、空关键词 |
-| 模型引擎 | 6 | 新增模型、默认设置、Mock 对话、真实 API、Token 统计、审计日志 |
-| 安全测试 | 5 | XSS、SQL 注入、CSRF、密码哈希、安全响应头 |
+| **认证模块** | 6 | 正确登录、错误密码、空表单、登录限速触发、未登录拦截、登出 |
+| **用户管理** | 6 | 新增用户、编辑用户、禁用/启用、删除、关键词搜索、admin 账号保护 |
+| **角色管理** | 3 | 新增角色+功能授权、系统角色编辑保护（is_system）、系统角色删除保护 |
+| **瞭望采集** | 5 | 关键词采集、瞭望源选择、保存到数据仓库、SSRF 防护（内网地址拦截）、空关键词 |
+| **模型引擎** | 6 | 新增模型、设为默认、Mock 对话（无 API Key）、真实 API 流式对话、Token 统计、审计日志记录 |
+| **安全测试** | 5 | XSS 注入（采集内容）、SQL 注入（参数化查询验证）、CSRF Token 校验、密码哈希强度、安全响应头存在性 |
+
+### 运行测试
+
+```bash
+# 运行全部测试
+python -m pytest test/ -v
+
+# 运行单个测试文件
+python -m pytest test/test_user_models.py -v
+
+# 运行单个测试方法
+python -m pytest test/test_login_rate_limiter.py::TestLoginRateLimiter::test_rate_limit -v
+```
 
 ---
 
 ## 更新日志
 
-### v0.2 (2026-07)
-- ✅ **Day6-2 扩展模块**：瞭望采集引擎、瞭源管理、数据仓库、AI 模型引擎
-- ✅ **模型引擎**：多 Provider 支持（OpenAI / DeepSeek / 智谱 / 百度文心 / 自定义）
-- ✅ **SSE 流式对话**：真实 API + 本地 Mock 回退，Token 消耗统计
-- ✅ **瞭望采集**：百度新闻 / 搜狗新闻 / 通用解析器，URL 模板占位符
-- ✅ **数据仓库**：采集结果统一存储、检索、批量管理
-- ✅ **SSRF 防护**：协议白名单 + 内网 IP 拦截 + DNS 解析校验 + CRLF 检测
-- ✅ **审计日志**：`audit_logs` 表，关键操作全量记录
-- ✅ **安全增强**：OWASP 推荐安全响应头、Cookie 预热反爬、Token 统计
+### v0.2.x (2026-07) — 当前版本
 
-### v0.1 (2026-07)
-- ✅ **Day6-1 权限管理子系统**：用户/角色/功能/菜单完整 CRUD
-- ✅ **RBAC 权限模型**：用户→角色→功能，树形功能结构
-- ✅ **登录认证**：PBKDF2-SHA256 + 登录限速 + 审计日志
-- ✅ **管理后台**：Layui 2.x 精美 UI，三区布局
-- ✅ **系统保护**：admin 账号保护、系统角色保护、功能禁用级联
+**v0.2.13** — 数据仓库独立化
+- ✅ 新增独立 `data_warehouse` 表（标题/链接/摘要/来源 + URL 去重索引）
+- ✅ `DataWarehouseRepository` 仓储层实现
+- ✅ 仓库详情页使用字典访问替代 `sqlite3.Row.get()` 方法
+
+**v0.2.12** — 菜单排序与审计增强
+- ✅ 菜单排序功能（上移/下移，修改 `sort_order`）
+- ✅ 审计日志表索引优化（`action` / `username` / `created_at`）
+
+**v0.2.5** — 安全与统计增强
+- ✅ `ai_models.total_tokens` 列（Token 消耗累加统计）
+- ✅ `audit_logs` 审计日志表（含 3 个索引）
+- ✅ 登录/登出/锁定/对话等关键操作审计记录
+
+**v0.2.0** — Day6-2 扩展模块
+- ✅ **瞭望采集引擎**：百度新闻/搜狗新闻/通用解析器，URL 模板占位符，Cookie 预热反爬
+- ✅ **瞭望源管理**：CRUD + 启用/禁用，自定义 Request Headers
+- ✅ **数据仓库**：采集结果统一存储、关键词检索、批量管理
+- ✅ **AI 模型引擎**：多 Provider（OpenAI/DeepSeek/智谱/文心/自定义），6 大分类
+- ✅ **SSE 流式对话**：真实 API + 本地 Mock 回退，Token 消耗追踪
+- ✅ **SSRF 防护**：协议白名单 + 内网 IP 段拦截 + DNS 解析校验 + CRLF 检测
+- ✅ **安全响应头**：OWASP 推荐全量响应头（CSP/X-Frame/HSTS 等）
+- ✅ **模型 JSON API**：`GET /admin/api/model/list` 供外部调用
+
+### v0.1 (2026-07) — 基础框架
+
+- ✅ **权限管理子系统**：用户/角色/功能/菜单完整 CRUD
+- ✅ **RBAC 权限模型**：用户→角色→功能，两级树形功能结构
+- ✅ **登录认证**：PBKDF2-SHA256 60 万轮 + 登录频率限速
+- ✅ **管理后台**：Layui 2.x UI，三区布局（搜索+表格+分页）
+- ✅ **系统保护**：admin 账号保护、系统角色保护（is_system）、功能禁用级联
+- ✅ **安全基础**：CSRF 防护、SQL 注入防护、XSS 防护
+- ✅ **种子数据**：自动建表 + 默认角色/管理员/功能菜单
 
 ---
 
@@ -849,68 +1199,9 @@ PORT=8080 python main.py
 
 ---
 
-> 📖 更多技术细节请参阅 `docs/` 目录下的设计文档、API 文档、开发约束和测试用例清单。
-│   │       ├── function_list.html # 功能列表
-│   │       ├── function_form.html # 功能新增/编辑表单
-│   │       └── menu.html          # 菜单管理
-│   └── static/               # 静态资源
-│       ├── css/base.css
-│       └── js/base.js
-├── database/                 # SQLite 数据库文件目录
-└── docs/
-    └── constraint.md         # 开发规范文档
-```
-
-## 快速开始
-
-### 1. 创建虚拟环境并安装依赖
-
-```bash
-python -m venv venv
-
-# Windows
-venv\Scripts\activate
-pip install -r requirements.txt
-
-# Linux/macOS
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 2. 启动服务
-
-```bash
-# Windows
-venv\Scripts\activate
-python main.py
-
-# Linux/macOS
-source venv/bin/activate
-python main.py
-```
-
-### 3. 访问系统
-
-浏览器打开 http://localhost:10010/
-
-- 首次启动会自动创建 SQLite 数据库和所有表结构
-- 种子数据自动创建默认管理员账号：
-  - 用户名：`admin`
-  - 密码：`admin888`
-
-## 功能特性
-
-- ✅ 用户登录/登出（PBKDF2-SHA256 密码哈希 + 随机盐）
-- ✅ 基于 Secure Cookie 的会话管理
-- ✅ XSRF 跨站请求伪造防护
-- ✅ SQL 参数化查询防注入
-- ✅ 已登录用户自动跳转后台
-- ✅ 未登录访问拦截（自动重定向到登录页）
-- ✅ Layui 后台管理框架
-- ✅ Repository 模式数据访问层
-
-## 安全说明
-
-本项目为原型框架版本，生产环境部署前需：
-
-1. 定期备份 `database/finderos.db`
+> 📚 **相关文档**：  
+> - 系统设计：`docs/design.md`  
+> - 需求文档：`docs/requirement.md`  
+> - API 文档：`docs/api.md`  
+> - 开发约束：`docs/constraint.md`  
+> - 测试用例：`docs/test_case.md`
