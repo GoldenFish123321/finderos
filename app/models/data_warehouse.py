@@ -38,28 +38,12 @@ class DataWarehouseRepository:
         """
         try:
             with get_db() as conn:
-                if not link:
-                    # 空 link 时应用层去重：检查 title + source_name 是否已存在
-                    existing = conn.execute(
-                        "SELECT COUNT(*) as cnt FROM data_warehouse "
-                        "WHERE (link IS NULL OR link = '') AND title = ? AND source_name = ?",
-                        (title, source_name),
-                    ).fetchone()
-                    if existing and existing["cnt"] > 0:
-                        return False  # 已存在，跳过
-                    conn.execute(
-                        "INSERT INTO data_warehouse "
-                        "(result_id, title, link, summary, source_name, raw_data) "
-                        "VALUES (?, ?, ?, ?, ?, ?)",
-                        (result_id, title, link, summary, source_name, raw_data),
-                    )
-                else:
-                    conn.execute(
-                        "INSERT OR IGNORE INTO data_warehouse "
-                        "(result_id, title, link, summary, source_name, raw_data) "
-                        "VALUES (?, ?, ?, ?, ?, ?)",
-                        (result_id, title, link, summary, source_name, raw_data),
-                    )
+                conn.execute(
+                    "INSERT OR IGNORE INTO data_warehouse "
+                    "(result_id, title, link, summary, source_name, raw_data) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (result_id, title, link, summary, source_name, raw_data),
+                )
                 conn.commit()
                 return conn.total_changes > 0
         except Exception as e:
@@ -79,30 +63,13 @@ class DataWarehouseRepository:
                     raw_data = json.dumps(item, ensure_ascii=False) if item else ""
 
                     before = conn.total_changes
-                    if not link:
-                        # 空 link 应用层去重
-                        existing = conn.execute(
-                            "SELECT COUNT(*) as cnt FROM data_warehouse "
-                            "WHERE (link IS NULL OR link = '') AND title = ? AND source_name = ?",
-                            (title, source_name),
-                        ).fetchone()
-                        if existing and existing["cnt"] > 0:
-                            continue
-                        conn.execute(
-                            "INSERT INTO data_warehouse "
-                            "(result_id, title, link, summary, source_name, raw_data) "
-                            "VALUES (?, ?, ?, ?, ?, ?)",
-                            (item.get("result_id"), title, link,
-                             item.get("summary"), source_name, raw_data),
-                        )
-                    else:
-                        conn.execute(
-                            "INSERT OR IGNORE INTO data_warehouse "
-                            "(result_id, title, link, summary, source_name, raw_data) "
-                            "VALUES (?, ?, ?, ?, ?, ?)",
-                            (item.get("result_id"), title, link,
-                             item.get("summary"), source_name, raw_data),
-                        )
+                    conn.execute(
+                        "INSERT OR IGNORE INTO data_warehouse "
+                        "(result_id, title, link, summary, source_name, raw_data) "
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        (item.get("result_id"), title, link,
+                         item.get("summary"), source_name, raw_data),
+                    )
                     if conn.total_changes > before:
                         count += 1
                 except Exception as e:
@@ -132,7 +99,7 @@ class DataWarehouseRepository:
             rows = conn.execute(
                 f"SELECT dw.*, wr.keyword, wr.source_id, wr.request_url, "
                 f"wr.response_status, wr.response_size, wr.result_data, "
-                f"ws.name as source_name "
+                f"ws.name as watch_source_name "
                 f"FROM data_warehouse dw "
                 f"LEFT JOIN watch_results wr ON dw.result_id = wr.id "
                 f"LEFT JOIN watch_sources ws ON wr.source_id = ws.id "
@@ -148,7 +115,7 @@ class DataWarehouseRepository:
             return conn.execute(
                 "SELECT dw.*, wr.keyword, wr.source_id, wr.request_url, "
                 "wr.response_status, wr.response_size, wr.result_data, "
-                "ws.name as source_name "
+                "ws.name as watch_source_name "
                 "FROM data_warehouse dw "
                 "LEFT JOIN watch_results wr ON dw.result_id = wr.id "
                 "LEFT JOIN watch_sources ws ON wr.source_id = ws.id "
@@ -241,7 +208,7 @@ class DataWarehouseRepository:
                 "SELECT COUNT(*) as cnt FROM data_warehouse WHERE is_deep_collected = 1"
             ).fetchone()["cnt"]
             rows = conn.execute(
-                "SELECT dw.*, wr.keyword, ws.name as source_name "
+                "SELECT dw.*, wr.keyword, ws.name as watch_source_name "
                 "FROM data_warehouse dw "
                 "LEFT JOIN watch_results wr ON dw.result_id = wr.id "
                 "LEFT JOIN watch_sources ws ON wr.source_id = ws.id "

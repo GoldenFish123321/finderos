@@ -184,6 +184,11 @@ def init_db():
         """)
         # link 唯一索引用于去重
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_dw_link ON data_warehouse(link) WHERE link != ''")
+        # 无 link 记录去重：title + source_name 组合唯一（防止并发竞态写入重复数据）
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_dw_title_source "
+            "ON data_warehouse(title, source_name) WHERE (link IS NULL OR link = '')"
+        )
 
         # 审计日志表
         conn.execute("""
