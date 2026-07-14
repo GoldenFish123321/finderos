@@ -59,11 +59,8 @@ document.body.classList.add('dark-theme');
             </div>
             <div class="nav-group-title">AI 引擎</div>
             <div class="nav-group">
-                <a href="/admin/model" class="{{ 'active' if handler.request.path == '/admin/model' and 'chat' not in handler.request.path else '' }}">
+                <a href="/admin/model" class="{{ 'active' if handler.request.path == '/admin/model' else '' }}">
                     <span class="nav-icon">🤖</span> <span>模型引擎</span>
-                </a>
-                <a href="/admin/model/chat" class="{{ 'active' if '/admin/model/chat' in handler.request.path else '' }}">
-                    <span class="nav-icon">💬</span> <span>AI 对话</span>
                 </a>
             </div>
             <div class="nav-group-title">数字员工</div>
