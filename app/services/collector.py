@@ -27,6 +27,24 @@ _global_cookie_jar: Optional[CookieJar] = None
 _global_cookie_lock = threading.Lock()
 _global_ssl_ctx = ssl.create_default_context()
 
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """禁止 HTTP 重定向跟随，防止 SSRF 绕过（重定向到内网地址）。"""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # 不跟随任何重定向
+
+    # 将 3xx 响应视为正常响应返回，而非抛出异常
+    http_error_301 = http_error_302 = http_error_303 = http_error_307 = http_error_308 = (
+        lambda self, req, fp, code, msg, hdrs: fp
+    )
+
+
+# 预构建不跟随重定向的 opener（线程安全，可复用）
+_no_redirect_opener = urllib.request.build_opener(
+    _NoRedirectHandler(),
+    urllib.request.HTTPSHandler(context=_global_ssl_ctx),
+)
+
 # 预定义的 Chrome 138 TLS 指纹 header
 _BASE_HEADERS = {
     "User-Agent": (
@@ -317,7 +335,9 @@ def fetch_and_parse(
         # 局部引用避免全局变量在检查和使用之间被修改
         cookie_jar = _global_cookie_jar
         if cookie_jar is not None and "baidu.com" in url:
+            # 百度需 Cookie，但仍禁止重定向（SSRF 防护）
             opener = urllib.request.build_opener(
+                _NoRedirectHandler(),
                 urllib.request.HTTPCookieProcessor(cookie_jar),
                 urllib.request.HTTPSHandler(context=_global_ssl_ctx),
             )
@@ -325,7 +345,7 @@ def fetch_and_parse(
             resp = opener.open(req, timeout=timeout)
         else:
             req = urllib.request.Request(url, headers=headers)
-            resp = urllib.request.urlopen(req, timeout=timeout, context=_global_ssl_ctx)
+            resp = _no_redirect_opener.open(req, timeout=timeout)
 
         try:
             raw = resp.read()
@@ -342,7 +362,7 @@ def fetch_and_parse(
     except Exception:
         text = data.decode("gbk", errors="replace")
 
-    size = len(text)
+    size = len(raw)  # 使用原始字节数作为响应大小（而非字符数）
     # 清洗 HTML（移除 script/style 等潜在危险标签）
     safe_text = _clean_html(text)
     parse_fn = PARSERS.get(parser, generic_parse)
