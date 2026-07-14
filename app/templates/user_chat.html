@@ -714,7 +714,8 @@ function loadConversation(cid) {
         .then(function(d) {
             if (d.code === 0) {
                 d.items.forEach(function(msg) {
-                    appendMessage(msg.role, msg.content, 0, msg.token_count || 0);
+                    // 历史消息：传递 token_count，不显示耗时（elapsed=null）
+                    appendMessage(msg.role, msg.content, msg.token_count || 0, null);
                 });
                 scrollToBottom();
             }
@@ -1052,8 +1053,13 @@ function appendMessage(role, content, tokens, elapsed, isPlaceholder) {
 
     const metaDiv = document.createElement('div');
     metaDiv.className = 'msg-meta';
+    // 历史消息：仅显示 token；实时消息：显示耗时 + token
     if (tokens > 0) {
-        metaDiv.innerHTML = `⏱ ${elapsed || '?'}s · 🔤 ${tokens} tokens`;
+        if (elapsed !== null && elapsed !== undefined) {
+            metaDiv.innerHTML = '⏱ ' + (elapsed || '?') + 's · 🔤 ' + tokens + ' tokens';
+        } else {
+            metaDiv.innerHTML = '🔤 ' + tokens + ' tokens';
+        }
     }
 
     bubble.appendChild(metaDiv);

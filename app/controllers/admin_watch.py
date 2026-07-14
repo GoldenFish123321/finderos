@@ -105,7 +105,7 @@ class WatchHandler(AdminBaseHandler):
 
             # 构建请求 URL（教学视频方式: 用 {keyword}/{page} 模板参数）
             url_template = source["url_template"]
-            encoded_kw = urllib.parse.quote(keyword)
+            encoded_kw = urllib.parse.quote(keyword, encoding="utf-8")
             request_url = url_template.replace("{keyword}", encoded_kw).replace("{page}", "0")
 
             # 获取请求头并过滤不需要的字段，同时校验 CRLF 注入

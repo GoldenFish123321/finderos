@@ -103,7 +103,7 @@ async def _collect_web_data(keyword: str, source_ids: Optional[List[int]] = None
         all_news = []
         for source in sources:
             url_template = source["url_template"]
-            encoded_kw = urllib.parse.quote(keyword)
+            encoded_kw = urllib.parse.quote(keyword, encoding="utf-8")
             request_url = url_template.replace("{keyword}", encoded_kw).replace("{page}", "0")
 
             raw_headers = WatchSourceRepository.get_headers(source["id"])

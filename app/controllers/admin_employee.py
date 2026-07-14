@@ -604,9 +604,16 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         # 替换模板变量（URL 编码防止参数注入）
         try:
             import urllib.parse
-            encoded_msg = urllib.parse.quote(message, safe="")
+            encoded_msg = urllib.parse.quote(message, safe="", encoding="utf-8")
             api_url = api_url.replace("{message}", encoded_msg)
             api_params = api_params.replace("{message}", encoded_msg)
+        except Exception as e:
+            logger.warning(f"URL 模板替换失败: {e}，使用原始 URL")
+
+        # 确保 URL 不含未编码的非 ASCII 字符
+        try:
+            import urllib.parse
+            api_url = urllib.parse.quote(api_url, safe=":/?#[]@!$&'()*+,;=%-", encoding="utf-8")
         except Exception:
             pass
 
