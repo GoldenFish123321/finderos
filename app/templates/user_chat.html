@@ -856,32 +856,73 @@ function appendMessage(role, content, tokens, elapsed, isPlaceholder) {
 }
 
 // ============================================================
-// ECharts 图表检测与渲染
+// ECharts 图表检测与渲染（支持多图表 + 表格）
 // ============================================================
 function detectAndRenderChart(aiContent, totalContent) {
-    // 检测 [CHART:...] 标记
-    const chartMatch = totalContent.match(/\[CHART:({[^}]+(?:{[^}]*})*[^}]*})\]/);
-    if (chartMatch) {
-        try {
-            const chartConfig = JSON.parse(chartMatch[1]);
-            const chartId = 'chart-' + Date.now();
-            // 移除标记文本，替换为图表容器
-            const cleaned = totalContent.replace(chartMatch[0],
-                `<div class="chart-container" id="${chartId}"></div>`);
-            aiContent.innerHTML = marked.parse(cleaned);
+    let html = totalContent;
 
-            setTimeout(() => {
-                const chartDom = document.getElementById(chartId);
-                if (chartDom && typeof echarts !== 'undefined') {
-                    const chart = echarts.init(chartDom);
-                    chart.setOption(chartConfig);
-                    window.addEventListener('resize', () => chart.resize());
-                }
-            }, 100);
+    // 1. 检测 [TABLE:...] 标记 — 渲染为 HTML 表格
+    html = html.replace(/\[TABLE:({[^}]+(?:{[^}]*})*[^}]*})\]/g, (match, jsonStr) => {
+        try {
+            const cfg = JSON.parse(jsonStr);
+            const columns = cfg.columns || [];
+            const rows = cfg.rows || [];
+            let tableHtml = '<div class="info-card"><div class="card-title">' +
+                (cfg.title || '数据表格') + '</div><table>';
+            tableHtml += '<thead><tr>' +
+                columns.map(c => `<th>${escapeHtml(String(c))}</th>`).join('') +
+                '</tr></thead><tbody>';
+            rows.forEach(row => {
+                tableHtml += '<tr>' +
+                    (Array.isArray(row) ? row : columns.map(c => row[c] || ''))
+                        .map(v => `<td>${escapeHtml(String(v))}</td>`).join('') +
+                    '</tr>';
+            });
+            tableHtml += '</tbody></table></div>';
+            return tableHtml;
+        } catch(e) {
+            return match;
+        }
+    });
+
+    // 2. 检测 [CHART:...] 标记 — 渲染为 ECharts 图表
+    const chartRegex = /\[CHART:({(?:[^{}]|{(?:[^{}]|{[^{}]*})*})*})\]/g;
+    const chartMatches = [...html.matchAll(chartRegex)];
+    const chartIds = [];
+    let chartIndex = 0;
+
+    for (const cm of chartMatches) {
+        try {
+            const chartConfig = JSON.parse(cm[1]);
+            const chartId = 'chart-' + Date.now() + '-' + (chartIndex++);
+            chartIds.push({id: chartId, config: chartConfig});
+            html = html.replace(cm[0],
+                `<div class="chart-container" id="${chartId}"></div>`);
         } catch(e) {
             console.warn('图表配置解析失败:', e);
         }
     }
+
+    aiContent.innerHTML = marked.parse(html);
+
+    // 延迟渲染图表（等 DOM 就绪）
+    chartIds.forEach(({id, config}) => {
+        setTimeout(() => {
+            const chartDom = document.getElementById(id);
+            if (chartDom && typeof echarts !== 'undefined') {
+                const chart = echarts.init(chartDom);
+                // 注入默认样式
+                const defaultOpts = {
+                    tooltip: { trigger: 'axis' },
+                    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                };
+                chart.setOption(Object.assign({}, defaultOpts, config));
+                // 响应式缩放
+                const resizeObserver = new ResizeObserver(() => chart.resize());
+                resizeObserver.observe(chartDom);
+            }
+        }, 150);
+    });
 }
 
 // ============================================================

@@ -257,10 +257,24 @@ class UserChatStreamHandler(BaseHandler):
             except (ValueError, TypeError):
                 pass
 
+        # 图表能力注入：教 AI 如何输出 ECharts 图表和表格
+        chart_instruction = (
+            "\n\n[系统功能说明]\n"
+            "你具备数据可视化能力。当用户询问统计数据、趋势分析、对比排名等问题时，"
+            "可以在回复末尾附加图表标记，前端将自动渲染为交互式图表。\n\n"
+            "图表标记格式：\n"
+            "1. ECharts图表: [CHART:{\"title\":{\"text\":\"标题\"},\"xAxis\":{\"type\":\"category\",\"data\":[\"A\",\"B\",\"C\"]},\"yAxis\":{\"type\":\"value\"},\"series\":[{\"data\":[10,20,30],\"type\":\"bar\"}]}]\n"
+            "   支持类型: bar(柱状图), line(折线图), pie(饼图), scatter(散点图)\n"
+            "2. 数据表格: [TABLE:{\"title\":\"表名\",\"columns\":[\"列1\",\"列2\"],\"rows\":[[\"v1\",\"v2\"],[\"v3\",\"v4\"]]}]\n\n"
+            "要求：图表数据必须基于真实查询结果；JSON 必须合法；图表标记放在回复末尾。"
+        )
+
         # 构建消息
         messages = []
         if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "system", "content": system_prompt + chart_instruction})
+        else:
+            messages.append({"role": "system", "content": chart_instruction})
         messages.extend(history_messages)
         messages.append({"role": "user", "content": message})
 
