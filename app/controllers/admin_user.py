@@ -84,9 +84,10 @@ class UserFormHandler(AdminBaseHandler):
             if not existing:
                 self.write('<script>alert("用户不存在");window.history.back();</script>')
                 return
-            # 如果未提供用户名，保留原有用户名
+            # 如果未提供用户名/角色，保留原有值（避免静默清空）
             update_username = username if username else existing["username"]
-            ok = UserRepository.update_user(user_id, update_username, password, role_id)
+            update_role_id = role_id if role_id_str else existing["role_id"]
+            ok = UserRepository.update_user(user_id, update_username, password, update_role_id)
             if ok:
                 self.redirect("/admin/user?msg=更新成功")
             else:
