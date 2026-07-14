@@ -156,18 +156,20 @@ async def _deep_collect_url(url: str) -> Dict[str, Any]:
     from app.services.deep_collector import deep_fetch
 
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, lambda: deep_fetch(url, timeout=30))
-    if result.get("success"):
+    status, title, content, error = await loop.run_in_executor(
+        None, lambda: deep_fetch(url, timeout=30)
+    )
+    if status == 200:
         return {
             "success": True,
-            "title": result.get("title", ""),
-            "content": (result.get("content", "") or "")[:3000],
-            "content_size": result.get("content_size", 0),
+            "title": title or "",
+            "content": (content or "")[:3000],
+            "content_size": len(content) if content else 0,
         }
     else:
         return {
             "success": False,
-            "error": result.get("error", "深度采集失败"),
+            "error": error or "深度采集失败",
         }
 
 
