@@ -115,12 +115,11 @@ class CollectionScheduler:
                     )
                     for news in parsed_news:
                         link = news.get("link", "")
-                        # 空 link 降级使用 title 作为去重键，避免重复入库
-                        dedup_url = link if link else news.get("title", "")
+                        # request_url 优先存新闻链接（用于去重），空则回退到搜索URL
                         result_id, is_new = WatchResultRepository.create_if_not_exists(
                             source_id=source_id,
                             keyword=keyword,
-                            request_url=dedup_url,
+                            request_url=link or request_url,
                             response_status=status,
                             response_size=size,
                             result_data=json.dumps(news, ensure_ascii=False),

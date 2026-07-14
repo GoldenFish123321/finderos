@@ -333,6 +333,11 @@ class ModelChatHandler(AdminBaseHandler):
                 assistant_reply = "".join(assistant_reply_parts)
                 if total_tokens == 0 and content_chars > 0:
                     total_tokens = max(1, content_chars // 2)
+                # API 返回空响应：回退到 Mock，避免保存空消息污染对话历史
+                if not assistant_reply:
+                    logger.warning("API 返回空响应，回退到本地 Mock")
+                    api_success = False
+                    is_mock = True
             else:
                 logger.warning(f"API 调用失败: {err}，回退到本地 Mock")
 
