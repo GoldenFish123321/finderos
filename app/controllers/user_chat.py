@@ -540,6 +540,13 @@ class UserEmployeeInvokeHandler(BaseHandler):
         self.set_header("Connection", "keep-alive")
         self.set_header("X-Accel-Buffering", "no")
 
+        # 发送员工名称事件（供前端显示名称而非 🤖）
+        emp_name = emp.get("name", "数字员工")
+        self.write(
+            f"event: employee\ndata: {json.dumps({'name': emp_name, 'type': emp.get('employee_type', 'llm')})}\n\n"
+        )
+        await self.flush()
+
         total_tokens = 0
         api_success = False
 
@@ -832,22 +839,29 @@ class UserEmployeeInvokeHandler(BaseHandler):
         return result
 
     async def _invoke_api_employee(self, emp: dict, message: str):
-        """API 型员工调用。"""
+        """API 型员工调用 — SSE 流式返回。"""
+        import time as _time
+        _start = _time.time()
+
         api_url = emp.get("api_url", "")
         api_method = emp.get("api_method", "GET")
         api_headers_raw = emp.get("api_headers", "{}")
         api_params = emp.get("api_params_template", "")
         api_secret = emp.get("api_secret", "")
+        response_template = emp.get("response_render_template", "")
 
         if not api_url:
-            self.write({"code": 1, "msg": "API 型员工未配置接口地址"})
+            self.set_header("Content-Type", "text/event-stream")
+            self.set_header("Cache-Control", "no-cache")
+            self.write(f"data: {json.dumps({'error': 'API 型员工未配置接口地址'})}\n\n")
+            self.write(f"data: [DONE]\n\n")
+            await self.flush()
             return
 
         try:
             import urllib.parse
             encoded_msg = urllib.parse.quote(message, safe="")
             api_url = api_url.replace("{message}", encoded_msg)
-            # URL 编码防止参数注入（&、= 等特殊字符不能直接拼入查询串）
             api_params = api_params.replace("{message}", encoded_msg)
         except Exception:
             pass
@@ -863,8 +877,25 @@ class UserEmployeeInvokeHandler(BaseHandler):
         from app.utils.security import validate_url_safe
         safe, reason = validate_url_safe(api_url)
         if not safe:
-            self.write({"code": 1, "msg": f"API URL 不安全: {reason}"})
+            self.set_header("Content-Type", "text/event-stream")
+            self.set_header("Cache-Control", "no-cache")
+            self.write(f"data: {json.dumps({'error': f'API URL 不安全: {reason}'})}\n\n")
+            self.write(f"data: [DONE]\n\n")
+            await self.flush()
             return
+
+        # SSE 响应头
+        self.set_header("Content-Type", "text/event-stream")
+        self.set_header("Cache-Control", "no-cache")
+        self.set_header("Connection", "keep-alive")
+        self.set_header("X-Accel-Buffering", "no")
+
+        # 发送员工名称事件
+        emp_name = emp.get("name", "数字员工")
+        self.write(
+            f"event: employee\ndata: {json.dumps({'name': emp_name, 'type': 'api'})}\n\n"
+        )
+        await self.flush()
 
         import urllib.request
 
@@ -897,18 +928,94 @@ class UserEmployeeInvokeHandler(BaseHandler):
         )
 
         if err:
-            self.write({"code": 1, "msg": f"API 调用失败: {err}"})
+            self.write(f"data: {json.dumps({'content': f'❌ API 调用失败: {err}'})}\n\n")
+            self.write(f"data: [DONE]\n\n")
+            await self.flush()
         else:
+            # 尝试解析 card 模板
+            card_data = None
+            if response_template:
+                try:
+                    result_json = json.loads(body)
+                    card_data = self._build_card_from_template(
+                        response_template, result_json, emp_name
+                    )
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            # 流式输出 API 返回内容
+            content_text = body
             try:
-                result = json.loads(body)
-                self.write({"code": 0, "data": result, "status": status})
-            except json.JSONDecodeError:
-                self.write({"code": 0, "data": {"raw": body}, "status": status})
+                parsed = json.loads(body)
+                content_text = json.dumps(parsed, ensure_ascii=False, indent=2)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+            # 分块发送内容
+            chunk_size = 50
+            for i in range(0, len(content_text), chunk_size):
+                chunk = content_text[i:i + chunk_size]
+                self.write(f"data: {json.dumps({'content': chunk})}\n\n")
+                await self.flush()
+                await asyncio.sleep(0.01)
+
+            self.write(f"data: [DONE]\n\n")
+            await self.flush()
+
+            # 发送卡片（如果有）
+            if card_data:
+                self.write(
+                    f"event: card\ndata: {json.dumps(card_data, ensure_ascii=False)}\n\n"
+                )
+                await self.flush()
+
+        # 发送统计
+        elapsed = round(_time.time() - _start, 2)
+        self.write(
+            f"event: stats\ndata: {json.dumps({'tokens': 0, 'mock': False, 'elapsed': elapsed})}\n\n"
+        )
+        await self.flush()
 
         write_audit_log(
             action="USER_EMPLOYEE_INVOKE",
             username=self.current_user,
             target=f"employee:{emp['id']}",
-            detail=f"type=api, status={status}",
+            detail=f"type=api, status={status}, elapsed={elapsed}s",
             client_ip=self.request.remote_ip or "",
         )
+
+    def _build_card_from_template(
+        self, template_str: str, api_result: dict, emp_name: str
+    ) -> dict:
+        """根据 response_render_template 构建卡片数据。"""
+        card = {"title": emp_name, "type": "default", "data": {}}
+        try:
+            tmpl = json.loads(template_str)
+        except (json.JSONDecodeError, TypeError):
+            # 非 JSON 模板，直接放入原始数据
+            card["data"] = api_result
+            return card
+
+        card["title"] = tmpl.get("title", emp_name)
+        card["type"] = tmpl.get("type", "default")
+
+        # 按映射提取字段
+        mapping = tmpl.get("mapping", {})
+        if mapping:
+            extracted = {}
+            for target_key, source_path in mapping.items():
+                # 支持点号路径如 "data.temp" 或 "weather.temperature"
+                value = api_result
+                for part in source_path.split("."):
+                    if isinstance(value, dict) and part in value:
+                        value = value[part]
+                    else:
+                        value = None
+                        break
+                if value is not None:
+                    extracted[target_key] = value
+            card["data"] = extracted
+        else:
+            card["data"] = api_result
+
+        return card

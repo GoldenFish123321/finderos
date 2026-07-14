@@ -805,6 +805,26 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
                         continue;
                     }
 
+                    // 处理 employee 事件（更新头像为员工名称）
+                    if (currentEvent === 'employee') {
+                        try {
+                            const empInfo = JSON.parse(dataStr);
+                            if (empInfo.name) {
+                                // 从 aiContent 导航到消息容器 → 头像
+                                const msgDiv = aiContent.closest('.chat-msg');
+                                if (msgDiv) {
+                                    const avatar = msgDiv.querySelector('.avatar');
+                                    if (avatar) {
+                                        avatar.textContent = empInfo.name.substring(0, 2);
+                                        avatar.title = empInfo.name;
+                                    }
+                                }
+                            }
+                        } catch(e) {}
+                        currentEvent = '';
+                        continue;
+                    }
+
                     // 处理 content / error
                     try {
                         const data = JSON.parse(dataStr);
