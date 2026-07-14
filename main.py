@@ -41,6 +41,11 @@ from app.controllers.admin_model import (
     ModelToggleHandler, ModelDefaultHandler, ModelApiListHandler,
     ModelChatHandler, ModelChatPageHandler,
 )
+from app.controllers.admin_employee import (
+    EmployeeListHandler, EmployeeFormHandler, EmployeeDeleteHandler,
+    EmployeeToggleHandler, EmployeeInvokeHandler, EmployeeApiListHandler,
+    EmployeeTestPageHandler,
+)
 from app.models.db import init_db, seed_default_data
 
 # 配置结构化日志
@@ -60,6 +65,7 @@ def make_app() -> tornado.web.Application:
     cookie_secret = settings.COOKIE_SECRET
     if not cookie_secret:
         cookie_secret = secrets.token_hex(32)
+        settings.COOKIE_SECRET = cookie_secret  # 回写 settings，供加密模块使用
         logger.warning("COOKIE_SECRET 未设置，使用随机值（重启后所有会话失效）")
 
     return tornado.web.Application(
@@ -132,6 +138,19 @@ def make_app() -> tornado.web.Application:
             # 模型对话测试
             (r"/admin/model/chat", ModelChatPageHandler),
             (r"/admin/model/chat/stream", ModelChatHandler),
+
+            # ========== v0.3.0 新增模块 ==========
+            # 数字化员工
+            (r"/admin/employee", EmployeeListHandler),
+            (r"/admin/employee/add", EmployeeFormHandler),
+            (r"/admin/employee/edit", EmployeeFormHandler),
+            (r"/admin/employee/delete", EmployeeDeleteHandler),
+            (r"/admin/employee/toggle", EmployeeToggleHandler),
+            # 员工调用（SSE 流式 / JSON 响应）
+            (r"/admin/employee/invoke", EmployeeInvokeHandler),
+            (r"/admin/api/employee/list", EmployeeApiListHandler),
+            # 员工测试对话页
+            (r"/admin/employee/test", EmployeeTestPageHandler),
         ],
         template_path="app/templates",
         static_path="app/static",
