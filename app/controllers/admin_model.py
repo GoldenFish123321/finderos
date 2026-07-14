@@ -92,8 +92,14 @@ class ModelFormHandler(AdminBaseHandler):
             return
 
         if model_id:
+            model_id = int(model_id)
+            # 编辑时：如果 API Key 未填写，保留数据库中的旧值（表单提示"留空则不修改"）
+            if not api_key:
+                existing = AiModelRepository.get_by_id(model_id)
+                if existing:
+                    api_key = existing["api_key"]
             ok = AiModelRepository.update(
-                int(model_id), name, provider, api_base, api_key, model_name,
+                model_id, name, provider, api_base, api_key, model_name,
                 category, system_prompt, temperature, top_p, top_k, max_tokens, context_size
             )
             msg = "更新成功" if ok else "更新失败"
