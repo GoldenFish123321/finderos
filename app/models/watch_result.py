@@ -145,15 +145,26 @@ class WatchResultRepository:
                               result_data: str = "") -> tuple:
         """
         Create a collection result if URL doesn't already exist.
+        Uses a single connection to avoid TOCTOU race condition.
         Returns (new_id, is_new) — is_new is True if created, False if duplicate skipped.
         """
-        if request_url and WatchResultRepository.check_url_exists(request_url):
-            return 0, False
-        new_id = WatchResultRepository.create(
-            source_id, keyword, request_url,
-            response_status, response_size, result_data
-        )
-        return new_id, True
+        with get_db() as conn:
+            if request_url:
+                existing = conn.execute(
+                    "SELECT id FROM watch_results WHERE request_url = ?",
+                    (request_url,),
+                ).fetchone()
+                if existing:
+                    return existing["id"], False
+            cur = conn.execute(
+                "INSERT INTO watch_results (source_id, keyword, request_url, "
+                "response_status, response_size, result_data) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (source_id, keyword, request_url,
+                 response_status, response_size, result_data),
+            )
+            conn.commit()
+            return cur.lastrowid, True
 
     @staticmethod
     def mark_saved_batch(result_ids: list) -> tuple:
