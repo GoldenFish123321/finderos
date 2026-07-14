@@ -357,6 +357,16 @@ class ModelChatPageHandler(AdminBaseHandler):
         if model_id:
             selected_model = AiModelRepository.get_by_id(int(model_id))
 
+        # 未指定模型时自动选择默认模型（避免输入框因无模型而被禁用）
+        if not selected_model:
+            selected_model = AiModelRepository.get_default()
+        # 如果仍未选到（例如所有模型都被禁用），取第一个启用的模型
+        if not selected_model:
+            for m in models_data:
+                if m["is_enabled"] == 1:
+                    selected_model = m
+                    break
+
         self.render(
             "admin/model_chat.html",
             title="模型测试 — 瞭望与问数系统",
