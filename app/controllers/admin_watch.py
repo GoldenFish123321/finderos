@@ -110,28 +110,30 @@ class WatchHandler(AdminBaseHandler):
 
             if parsed_news:
                 for news in parsed_news:
-                    result_id = WatchResultRepository.create(
+                    news_link = news.get("link", "")
+                    result_id, is_new = WatchResultRepository.create_if_not_exists(
                         source_id=sid,
                         keyword=keyword,
-                        request_url=news.get("link", request_url),
+                        request_url=news_link or request_url,
                         response_status=status,
                         response_size=len(news.get("summary", "")),
                         result_data=json.dumps(news, ensure_ascii=False),
                     )
-                    all_news.append({
-                        "id": result_id,
-                        "title": news.get("title", ""),
-                        "link": news.get("link", ""),
-                        "summary": news.get("summary", ""),
-                        "source_name": news.get("source_name", source["name"]),
-                    })
+                    if is_new:
+                        all_news.append({
+                            "id": result_id,
+                            "title": news.get("title", ""),
+                            "link": news_link,
+                            "summary": news.get("summary", ""),
+                            "source_name": news.get("source_name", source["name"]),
+                        })
                 collect_results.append({
                     "source_name": source["name"],
                     "status": status,
                     "news_count": len(parsed_news),
                 })
             else:
-                result_id = WatchResultRepository.create(
+                result_id, is_new = WatchResultRepository.create_if_not_exists(
                     source_id=sid,
                     keyword=keyword,
                     request_url=request_url,
