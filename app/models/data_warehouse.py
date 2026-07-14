@@ -217,3 +217,56 @@ class DataWarehouseRepository:
                 (page_size, (page - 1) * page_size),
             ).fetchall()
         return rows, total
+
+    @staticmethod
+    def search(keyword: str, limit: int = 10) -> list:
+        """FTS5 全文检索数据仓库。返回匹配记录列表。"""
+        if not keyword or not keyword.strip():
+            return []
+        with get_db() as conn:
+            # 使用 FTS5 全文检索，支持多关键词和前缀匹配
+            # 将用户输入拆分为多个词，每个词后加 * 做前缀匹配
+            terms = keyword.strip().split()
+            fts_query = " AND ".join(f'"{t}"' for t in terms) if len(terms) > 1 else f'"{keyword.strip()}"'
+            try:
+                rows = conn.execute(
+                    "SELECT dw.* FROM data_warehouse_fts fts "
+                    "JOIN data_warehouse dw ON fts.rowid = dw.id "
+                    "WHERE data_warehouse_fts MATCH ? "
+                    "ORDER BY rank LIMIT ?",
+                    (fts_query, limit),
+                ).fetchall()
+                if rows:
+                    return [dict(r) for r in rows]
+            except Exception:
+                pass
+
+            # FTS5 回退：使用 LIKE 模糊匹配
+            like_pattern = f"%{keyword.strip()}%"
+            rows = conn.execute(
+                "SELECT * FROM data_warehouse "
+                "WHERE title LIKE ? OR summary LIKE ? OR source_name LIKE ? "
+                "ORDER BY id DESC LIMIT ?",
+                (like_pattern, like_pattern, like_pattern, limit),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    @staticmethod
+    def get_stats() -> dict:
+        """获取数据仓库统计信息。"""
+        with get_db() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) as cnt FROM data_warehouse"
+            ).fetchone()["cnt"]
+            deep = conn.execute(
+                "SELECT COUNT(*) as cnt FROM data_warehouse WHERE is_deep_collected = 1"
+            ).fetchone()["cnt"]
+            sources = conn.execute(
+                "SELECT source_name, COUNT(*) as cnt FROM data_warehouse "
+                "WHERE source_name != '' GROUP BY source_name ORDER BY cnt DESC LIMIT 10"
+            ).fetchall()
+            return {
+                "total": total,
+                "deep_collected": deep,
+                "top_sources": [{"name": s["source_name"], "count": s["cnt"]} for s in sources],
+            }

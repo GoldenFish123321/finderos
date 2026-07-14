@@ -190,6 +190,40 @@ def init_db():
             "ON data_warehouse(title, source_name) WHERE (link IS NULL OR link = '')"
         )
 
+        # FTS5 全文检索虚拟表（v0.3 — 智能问数增强）
+        conn.execute("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS data_warehouse_fts USING fts5(
+                title, summary, source_name, content=data_warehouse,
+                content_rowid=id
+            )
+        """)
+        # 触发器：INSERT 时同步到 FTS
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS dw_fts_insert AFTER INSERT ON data_warehouse
+            BEGIN
+                INSERT INTO data_warehouse_fts(rowid, title, summary, source_name)
+                VALUES (new.id, new.title, new.summary, new.source_name);
+            END
+        """)
+        # 触发器：DELETE 时从 FTS 移除
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS dw_fts_delete AFTER DELETE ON data_warehouse
+            BEGIN
+                INSERT INTO data_warehouse_fts(data_warehouse_fts, rowid, title, summary, source_name)
+                VALUES ('delete', old.id, old.title, old.summary, old.source_name);
+            END
+        """)
+        # 触发器：UPDATE 时同步 FTS
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS dw_fts_update AFTER UPDATE ON data_warehouse
+            BEGIN
+                INSERT INTO data_warehouse_fts(data_warehouse_fts, rowid, title, summary, source_name)
+                VALUES ('delete', old.id, old.title, old.summary, old.source_name);
+                INSERT INTO data_warehouse_fts(rowid, title, summary, source_name)
+                VALUES (new.id, new.title, new.summary, new.source_name);
+            END
+        """)
+
         # 审计日志表
         conn.execute("""
             CREATE TABLE IF NOT EXISTS audit_logs (
