@@ -610,8 +610,36 @@ function switchModel() {
 // ============================================================
 // 对话管理
 // ============================================================
+
+// 重置聊天区到欢迎界面（保留/重建欢迎 div，仅清除消息气泡）
+function resetChatToWelcome() {
+    const container = document.getElementById('chat-messages');
+    // 移除所有消息气泡
+    container.querySelectorAll('.chat-msg').forEach(function(el) { el.remove(); });
+    // 显示或重建欢迎页
+    var welcome = document.getElementById('chat-welcome');
+    if (!welcome) {
+        welcome = document.createElement('div');
+        welcome.className = 'chat-welcome';
+        welcome.id = 'chat-welcome';
+        welcome.innerHTML =
+            '<div class="welcome-icon">💬</div>' +
+            '<h2>欢迎使用智能问数系统</h2>' +
+            '<p>AI 对话 · 数据报表 · 数字员工 · 深度采集</p>' +
+            '<div class="quick-actions">' +
+            '<span class="quick-action" onclick="setInput(\'查看数据仓库最新内容\')">📊 查看数据仓库</span>' +
+            '<span class="quick-action" onclick="setInput(\'搜索人工智能相关数据\')">🔍 搜索数据</span>' +
+            '<span class="quick-action" onclick="setInput(\'数据仓库概况统计\')">📈 数据统计</span>' +
+            '<span class="quick-action" onclick="setInput(\'@天气 成都\')">🌤 @天气</span>' +
+            '<span class="quick-action" onclick="setInput(\'@采集专员 搜索科技新闻\')">🕷 @采集专员</span>' +
+            '</div>';
+        container.insertBefore(welcome, container.firstChild);
+    }
+    welcome.style.display = 'flex';
+}
+
 function newConversation() {
-    const formData = new URLSearchParams();
+    var formData = new URLSearchParams();
     formData.append('_xsrf', XSRF);
     formData.append('title', '新对话');
     formData.append('model_id', currentModelId);
@@ -621,12 +649,13 @@ function newConversation() {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData
     })
-    .then(r => r.json())
-    .then(d => {
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
         if (d.code === 0) {
             currentConversationId = d.id;
-            document.getElementById('chat-messages').innerHTML = '';
-            document.getElementById('chat-welcome').style.display = 'flex';
+            // 取消所有任务高亮
+            document.querySelectorAll('.task-item').forEach(function(el) { el.classList.remove('active'); });
+            resetChatToWelcome();
             refreshTaskList();
         }
     });
@@ -634,19 +663,24 @@ function newConversation() {
 
 function loadConversation(cid) {
     currentConversationId = cid;
-    document.getElementById('chat-welcome').style.display = 'none';
+    // 隐藏欢迎页（不销毁）
+    var welcome = document.getElementById('chat-welcome');
+    if (welcome) welcome.style.display = 'none';
 
     // 高亮选中
-    document.querySelectorAll('.task-item').forEach(el => el.classList.remove('active'));
-    document.querySelector(`.task-item[data-cid="${cid}"]`)?.classList.add('active');
+    document.querySelectorAll('.task-item').forEach(function(el) { el.classList.remove('active'); });
+    var taskItem = document.querySelector('.task-item[data-cid="' + cid + '"]');
+    if (taskItem) taskItem.classList.add('active');
 
-    fetch(`/api/chat/conversation/messages?id=${cid}&_xsrf=${XSRF}`)
-        .then(r => r.json())
-        .then(d => {
+    // 清除现有消息气泡
+    var container = document.getElementById('chat-messages');
+    container.querySelectorAll('.chat-msg').forEach(function(el) { el.remove(); });
+
+    fetch('/api/chat/conversation/messages?id=' + cid + '&_xsrf=' + XSRF)
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
             if (d.code === 0) {
-                const container = document.getElementById('chat-messages');
-                container.innerHTML = '';
-                d.items.forEach(msg => {
+                d.items.forEach(function(msg) {
                     appendMessage(msg.role, msg.content, 0, msg.token_count || 0);
                 });
                 scrollToBottom();
@@ -656,7 +690,7 @@ function loadConversation(cid) {
 
 function deleteConversation(cid) {
     if (!confirm('确定删除此对话？')) return;
-    const formData = new URLSearchParams();
+    var formData = new URLSearchParams();
     formData.append('_xsrf', XSRF);
     formData.append('id', cid);
 
@@ -665,13 +699,14 @@ function deleteConversation(cid) {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData
     })
-    .then(r => r.json())
-    .then(d => {
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
         if (d.code === 0) {
             if (currentConversationId === cid) {
                 currentConversationId = null;
-                document.getElementById('chat-messages').innerHTML = '';
-                document.getElementById('chat-welcome').style.display = 'flex';
+                // 取消所有任务高亮
+                document.querySelectorAll('.task-item').forEach(function(el) { el.classList.remove('active'); });
+                resetChatToWelcome();
             }
             refreshTaskList();
         }
@@ -723,7 +758,8 @@ function sendMessage() {
     }
 
     // 隐藏欢迎页
-    document.getElementById('chat-welcome').style.display = 'none';
+    var welcomeEl = document.getElementById('chat-welcome');
+    if (welcomeEl) welcomeEl.style.display = 'none';
 
     // 添加用户消息
     appendMessage('user', message, 0, 0);
@@ -870,9 +906,9 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
                         try {
                             const act = JSON.parse(dataStr);
                             if (act.action === 'clear') {
-                                document.getElementById('chat-messages').innerHTML = '';
-                                document.getElementById('chat-welcome').style.display = 'flex';
                                 currentConversationId = null;
+                                document.querySelectorAll('.task-item').forEach(function(el) { el.classList.remove('active'); });
+                                resetChatToWelcome();
                             }
                         } catch(e) {}
                         currentEvent = '';
@@ -897,7 +933,8 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
         }
 
         function read() {
-            reader.read().then(({done, value}) => {
+            reader.read().then(function(result) {
+                var done = result.done, value = result.value;
                 if (done) {
                     // 流结束
                     isStreaming = false;
@@ -907,8 +944,8 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
 
                     // 优先使用服务端 stats，回退到前端估算
                     if (!statsData) {
-                        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-                        const tokenEstimate = Math.max(1, Math.round(totalContent.length / 2));
+                        var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                        var tokenEstimate = Math.max(1, Math.round(totalContent.length / 2));
                         aiMeta.innerHTML = '⏱ ' + elapsed + 's · 🔤 ~' + tokenEstimate + ' tokens';
                     }
 
@@ -916,10 +953,20 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
                     return;
                 }
                 buffer += decoder.decode(value, {stream: true});
-                const lines = buffer.split('\n');
+                var lines = buffer.split('\n');
                 buffer = lines.pop() || '';
                 processLines(lines);
                 read();
+            }).catch(function(err) {
+                // 流读取失败时，确保输入框恢复可用
+                console.error('Stream read error:', err);
+                isStreaming = false;
+                document.getElementById('btn-send').disabled = false;
+                document.getElementById('chat-input').disabled = false;
+                if (!aiContent.textContent || aiContent.textContent.trim() === '') {
+                    aiContent.innerHTML = marked.parse('❌ **网络错误**: 连接中断，请重试');
+                }
+                refreshTaskList();
             });
         }
         read();
@@ -1118,8 +1165,10 @@ function setInput(text) {
     // 如果是快捷指令，直接处理
     if (text.startsWith('/')) {
         if (text === '/clear') {
-            document.getElementById('chat-messages').innerHTML = '';
-            document.getElementById('chat-welcome').style.display = 'flex';
+            currentConversationId = null;
+            // 取消所有任务高亮
+            document.querySelectorAll('.task-item').forEach(function(el) { el.classList.remove('active'); });
+            resetChatToWelcome();
             input.value = '';
             return;
         }
