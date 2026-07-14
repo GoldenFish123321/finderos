@@ -262,7 +262,14 @@ class UserChatStreamHandler(BaseHandler):
             except (ValueError, TypeError):
                 pass
 
-        # 图表能力注入：教 AI 如何输出 ECharts 图表和表格
+        # 系统身份 + 图表能力注入
+        system_identity = (
+            "你是「瞭望与问数系统」(DataFinderAgentOS) 的 AI 助手，"
+            "一个集成了 Web 数据采集、数据仓库管理和 AI 对话的智能平台。"
+            "你可以帮用户查询数据仓库中的采集数据、生成统计图表、调用数字员工等。"
+            "当用户询问数据相关问题时，请基于系统注入的数据仓库查询结果回答，"
+            "不要建议用户使用外部工具（如 Snowflake、Redshift 等）。"
+        )
         chart_instruction = (
             "\n\n[系统功能说明]\n"
             "你具备数据可视化能力。当用户询问统计数据、趋势分析、对比排名等问题时，"
@@ -279,12 +286,15 @@ class UserChatStreamHandler(BaseHandler):
         if warehouse_ctx:
             chart_instruction += warehouse_ctx
 
-        # 构建消息
-        messages = []
+        # 构建消息：system_prompt(用户的) + system_identity(系统) + chart_instruction + warehouse_ctx
+        full_system = system_identity + chart_instruction
         if system_prompt:
-            messages.append({"role": "system", "content": system_prompt + chart_instruction})
-        else:
-            messages.append({"role": "system", "content": chart_instruction})
+            full_system = system_prompt + "\n\n" + full_system
+        if warehouse_ctx:
+            full_system += warehouse_ctx
+
+        messages = []
+        messages.append({"role": "system", "content": full_system})
         messages.extend(history_messages)
         messages.append({"role": "user", "content": message})
 
@@ -422,7 +432,8 @@ class UserChatStreamHandler(BaseHandler):
         """意图识别 + 数据仓库查询。返回 (intent, warehouse_context_string)。
 
         意图分类：
-        - data_query:   搜索/查找数据仓库内容
+        - data_query:   搜索/查找/查看数据仓库内容
+        - data_latest:  查看最新数据
         - data_stats:   请求统计信息
         - chart_request: 要求生成图表
         - general:      普通对话
@@ -433,24 +444,36 @@ class UserChatStreamHandler(BaseHandler):
         # 统计类关键词
         stats_kw = ["统计", "概况", "多少", "总量", "有多少条", "一共", "共计",
                      "分布", "占比", "排行", "top", "排名"]
-        # 搜索类关键词
+        # 搜索/查看类关键词
         search_kw = ["搜索", "查找", "查询", "找", "有没有", "搜一下",
-                     "帮我查", "帮我搜", "帮我找"]
+                     "帮我查", "帮我搜", "帮我找", "查看", "看看", "看",
+                     "列出", "显示", "展示", "浏览", "有什么", "有哪些"]
+        # 最新数据类关键词
+        latest_kw = ["最新", "最近", "近期", "新数据", "最新内容", "最近更新"]
         # 图表类关键词
         chart_kw = ["图表", "报表", "画图", "作图", "柱状图", "折线图", "饼图",
                     "可视化", "echarts", "生成图", "做个图"]
 
+        # 同时检测"数据仓库"或"数据"等词，确认用户想查询的是系统数据
+        data_kw = ["数据仓库", "数据", "仓库", "采集", "瞭望"]
+
         # 意图判定
-        if any(kw in msg_lower for kw in search_kw):
+        is_about_data = any(kw in msg_lower for kw in data_kw)
+        if any(kw in msg_lower for kw in latest_kw):
+            result["intent"] = "data_latest"
+        elif any(kw in msg_lower for kw in search_kw):
             result["intent"] = "data_query"
         elif any(kw in msg_lower for kw in stats_kw):
             result["intent"] = "data_stats"
         elif any(kw in msg_lower for kw in chart_kw):
             result["intent"] = "chart_request"
+        elif is_about_data:
+            # 提到了"数据仓库/数据"但无明确动作词 → 视为查询
+            result["intent"] = "data_latest"
 
         # 提取搜索关键词：剔除意图关键词
         import re
-        all_intent_words = set(stats_kw + search_kw + chart_kw)
+        all_intent_words = set(stats_kw + search_kw + chart_kw + latest_kw + data_kw)
         clean_msg = message
         for w in sorted(all_intent_words, key=len, reverse=True):
             clean_msg = re.sub(re.escape(w), "", clean_msg, flags=re.IGNORECASE)
@@ -459,16 +482,20 @@ class UserChatStreamHandler(BaseHandler):
         # 查询数据仓库
         warehouse_items = []
         warehouse_count = 0
-        if result["intent"] in ("data_query", "data_stats"):
+        if result["intent"] in ("data_query", "data_stats", "data_latest"):
             try:
-                warehouse_items = DataWarehouseRepository.search(keyword, limit=8)
+                if result["intent"] == "data_latest":
+                    # 查询最新记录
+                    warehouse_items = DataWarehouseRepository.get_recent(limit=8)
+                else:
+                    warehouse_items = DataWarehouseRepository.search(keyword, limit=8)
                 warehouse_count = len(warehouse_items)
             except Exception:
                 pass
 
         # 获取统计信息
         stats = None
-        if result["intent"] == "data_stats":
+        if result["intent"] in ("data_stats", "data_latest"):
             try:
                 stats = DataWarehouseRepository.get_stats()
             except Exception:
@@ -478,6 +505,10 @@ class UserChatStreamHandler(BaseHandler):
         ctx_parts = []
         if warehouse_items:
             ctx_parts.append("\n\n[系统注入：数据仓库查询结果]")
+            ctx_parts.append(
+                "你正在使用「瞭望与问数系统」(DataFinderAgentOS)，一个智能数据采集与AI问数平台。"
+                "以下是系统数据仓库中的真实数据，请基于这些数据回答用户问题："
+            )
             for i, item in enumerate(warehouse_items, 1):
                 ctx_parts.append(
                     f"{i}. 标题: {item.get('title', '')}\n"
@@ -487,7 +518,7 @@ class UserChatStreamHandler(BaseHandler):
                 )
             ctx_parts.append(
                 f"\n共查询到 {warehouse_count} 条相关数据。"
-                f"请基于以上真实数据回答用户问题。"
+                f"请基于以上真实数据回答用户问题，不要编造数据。"
                 f"{'如数据量适合做图表，请在回复末尾附加 [CHART:...] 标记。' if result['intent'] in ('data_stats', 'chart_request') else ''}"
             )
 
@@ -503,6 +534,14 @@ class UserChatStreamHandler(BaseHandler):
             ctx_parts.append(
                 "\n\n[系统提示] 用户请求生成图表，但当前数据仓库中无匹配数据。"
                 "请告知用户数据不足，建议先执行数据采集。"
+            )
+
+        # 无数据时也要告诉 AI 系统身份
+        if not ctx_parts and is_about_data:
+            ctx_parts.append(
+                "\n\n[系统说明] 你正在使用「瞭望与问数系统」(DataFinderAgentOS)，"
+                "一个智能数据采集与AI问数平台。当前数据仓库中暂无匹配的数据。"
+                "请告知用户数据仓库为空，建议先在后台执行数据采集。不要建议用户使用 Snowflake/Redshift 等外部工具。"
             )
 
         return result["intent"], "\n".join(ctx_parts) if ctx_parts else ""
