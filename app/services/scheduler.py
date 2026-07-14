@@ -4,6 +4,7 @@ scheduler.py — 定时采集调度器
 基于 Tornado PeriodicCallback 实现的轻量级定时任务调度。
 零额外依赖，符合项目设计理念。
 """
+import concurrent.futures
 import logging
 import threading
 import time
@@ -33,6 +34,8 @@ class CollectionScheduler:
         self._lock = threading.Lock()
         self._last_run: dict[int, float] = {}  # source_id → 上次执行时间戳
         self._running = False
+        # 专用线程池，避免阻塞 IOLoop
+        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="scheduler")
 
     def start(self):
         """启动调度器。"""
@@ -49,6 +52,7 @@ class CollectionScheduler:
         if self._callback:
             self._callback.stop()
             self._callback = None
+        self._executor.shutdown(wait=False)
         logger.info("定时采集调度器已停止")
 
     def _tick(self):
@@ -73,7 +77,8 @@ class CollectionScheduler:
                 with self._lock:
                     self._last_run[source_id] = now
 
-                self._collect_source(source)
+                # 在线程池中执行采集，避免阻塞 IOLoop
+                self._executor.submit(self._collect_source, source)
 
         except Exception as e:
             logger.error(f"定时采集调度器 tick 异常: {e}")
