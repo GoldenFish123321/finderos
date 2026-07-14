@@ -5,6 +5,7 @@ admin_employee.py — 数字化员工控制器
 参考 admin_model.py 的 Handler 模式。
 """
 import asyncio
+import atexit
 import concurrent.futures
 import json
 import logging
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 # SSE 对话线程池（复用模型引擎的线程池模式）
 _invoke_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="emp")
+atexit.register(_invoke_executor.shutdown, wait=True)
 
 
 def _sync_deep_collect(url: str, timeout: int = 30):

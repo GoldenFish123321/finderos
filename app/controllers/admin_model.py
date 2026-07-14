@@ -6,6 +6,7 @@ admin_model.py — 模型引擎控制器
 支持：SSE 流式对话（真实 API + Token 追踪 + 本地 Mock 回退）。
 """
 import asyncio
+import atexit
 import concurrent.futures
 import json
 import logging
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 # 全局线程池（复用，避免每个请求创建销毁）
 _chat_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="chat")
+atexit.register(_chat_executor.shutdown, wait=True)
 
 
 class ModelListHandler(AdminBaseHandler):
@@ -161,12 +163,11 @@ class ModelApiListHandler(AdminBaseHandler):
         page = int(self.get_query_argument("page", 1))
         limit = int(self.get_query_argument("limit", 6))
         category = self.get_query_argument("category", "").strip()
-        rows, total = AiModelRepository.get_all(page=page, page_size=limit, category=category)
+        rows, total = AiModelRepository.get_all(
+            page=page, page_size=limit, category=category, enabled_only=True
+        )
         items = []
         for r in rows:
-            # API 接口仅返回已启用的模型
-            if r.get("is_enabled") != 1:
-                continue
             items.append({
                 "id": r["id"],
                 "name": r["name"],
@@ -177,7 +178,7 @@ class ModelApiListHandler(AdminBaseHandler):
                 "is_enabled": r["is_enabled"],
                 "has_key": bool(r["api_key"]),
             })
-        self.write({"code": 0, "total": len(items), "items": items})
+        self.write({"code": 0, "total": total, "items": items})
 
 
 class ModelChatHandler(AdminBaseHandler):
