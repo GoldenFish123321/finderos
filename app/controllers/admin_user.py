@@ -147,6 +147,7 @@ class UserBatchDeleteHandler(AdminBaseHandler):
     def post(self):
         ids_str = self.get_body_argument("ids", "")
         if not ids_str:
+            self.set_header("Content-Type", "application/json")
             self.write({"code": 1, "msg": "请选择要删除的用户"})
             return
         try:
@@ -159,8 +160,17 @@ class UserBatchDeleteHandler(AdminBaseHandler):
             msg = f"成功删除 {count} 个用户"
             if skipped_admin > 0:
                 msg += f"（跳过 {skipped_admin} 个受保护的管理员账号）"
+            write_audit_log(
+                action="USER_BATCH_DELETE",
+                username=self.current_user,
+                target=f"users:{','.join(str(x) for x in ids[:10])}",
+                detail=f"deleted={count}, skipped_admin={skipped_admin}",
+                client_ip=self.request.remote_ip or "",
+            )
+            self.set_header("Content-Type", "application/json")
             self.write({"code": 0, "msg": msg})
         except (ValueError, TypeError):
+            self.set_header("Content-Type", "application/json")
             self.write({"code": 1, "msg": "参数格式错误"})
 
 
@@ -172,6 +182,7 @@ class UserBatchToggleHandler(AdminBaseHandler):
         ids_str = self.get_body_argument("ids", "")
         enable_str = self.get_body_argument("enable", "1")
         if not ids_str:
+            self.set_header("Content-Type", "application/json")
             self.write({"code": 1, "msg": "请选择要操作的用户"})
             return
         try:
@@ -187,8 +198,17 @@ class UserBatchToggleHandler(AdminBaseHandler):
             msg = f"成功{action} {count} 个用户"
             if skipped_admin > 0:
                 msg += f"（跳过 {skipped_admin} 个受保护的管理员账号）"
+            write_audit_log(
+                action="USER_BATCH_TOGGLE",
+                username=self.current_user,
+                target=f"users:{','.join(str(x) for x in ids[:10])}",
+                detail=f"action={action}, count={count}, skipped_admin={skipped_admin}",
+                client_ip=self.request.remote_ip or "",
+            )
+            self.set_header("Content-Type", "application/json")
             self.write({"code": 0, "msg": msg})
         except (ValueError, TypeError):
+            self.set_header("Content-Type", "application/json")
             self.write({"code": 1, "msg": "参数格式错误"})
 
 
