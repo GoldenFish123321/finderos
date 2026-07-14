@@ -277,7 +277,7 @@ class ModelChatHandler(AdminBaseHandler):
                 "temperature": temperature,
                 "max_tokens": max_tokens,
                 "stream": True,
-            }).encode()
+            }).encode('utf-8')
 
             def _sync_stream_call():
                 """在线程池中执行的同步 HTTP 流式调用。
