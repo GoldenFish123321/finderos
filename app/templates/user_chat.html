@@ -757,6 +757,17 @@ function sendMessage() {
         if (emp) employeeId = emp.id;
     }
 
+    // 当 @员工名 存在但未匹配到注册员工时，保留完整原始消息传给 AI
+    // （包含 @name 上下文），让 AI 通过 MCP 工具尝试处理
+    var sendMsg = message;
+    if (employeeId) {
+        // 已匹配员工：发送剥离 @name 后的纯消息
+        sendMsg = employeeMsg || message;
+    } else if (employeeName) {
+        // 未匹配员工但有 @name：保留完整消息（含上下文），让 AI 理解意图
+        sendMsg = message;
+    }
+
     // 隐藏欢迎页
     var welcomeEl = document.getElementById('chat-welcome');
     if (welcomeEl) welcomeEl.style.display = 'none';
@@ -785,13 +796,13 @@ function sendMessage() {
             if (d.code === 0) {
                 currentConversationId = d.id;
                 refreshTaskList();
-                doSend(employeeId, employeeMsg || message, employeeName);
+                doSend(employeeId, sendMsg, employeeName);
             } else {
-                doSend(employeeId, employeeMsg || message, employeeName);
+                doSend(employeeId, sendMsg, employeeName);
             }
         });
     } else {
-        doSend(employeeId, employeeMsg || message, employeeName);
+        doSend(employeeId, sendMsg, employeeName);
     }
 }
 
