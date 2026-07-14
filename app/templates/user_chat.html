@@ -760,18 +760,57 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
         const decoder = new TextDecoder();
         let buffer = '';
         let totalContent = '';
+        let currentEvent = '';       // 跟踪当前 SSE event 类型
+        let statsData = null;        // 保存服务端返回的 stats
 
         function processLines(lines) {
             for (const line of lines) {
+                // 检测 event 类型行
+                if (line.startsWith('event: ')) {
+                    currentEvent = line.substring(7).trim();
+                    continue;
+                }
+                // 空行表示一个事件结束
+                if (line === '') {
+                    currentEvent = '';
+                    continue;
+                }
                 if (line.startsWith('data: ')) {
                     const dataStr = line.substring(6);
                     if (dataStr === '[DONE]') continue;
+
+                    // 处理 stats 事件
+                    if (currentEvent === 'stats') {
+                        try {
+                            statsData = JSON.parse(dataStr);
+                            if (statsData.tokens !== undefined) {
+                                const elapsed = statsData.elapsed || ((Date.now() - startTime) / 1000).toFixed(1);
+                                aiMeta.innerHTML = '⏱ ' + elapsed + 's · 🔤 ' + statsData.tokens + ' tokens';
+                                if (statsData.mock) {
+                                    aiMeta.innerHTML += ' · ⚠️ Mock';
+                                }
+                            }
+                        } catch(e) {}
+                        currentEvent = '';
+                        continue;
+                    }
+
+                    // 处理 card 事件（数字员工卡片渲染）
+                    if (currentEvent === 'card') {
+                        try {
+                            const card = JSON.parse(dataStr);
+                            renderInfoCard(aiContent, card);
+                        } catch(e) {}
+                        currentEvent = '';
+                        continue;
+                    }
+
+                    // 处理 content / error
                     try {
                         const data = JSON.parse(dataStr);
                         if (data.content) {
                             totalContent += data.content;
                             aiContent.innerHTML = marked.parse(totalContent);
-                            // ECharts 检测
                             detectAndRenderChart(aiContent, totalContent);
                             scrollToBottom();
                         }
@@ -779,8 +818,6 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
                             aiContent.innerHTML = marked.parse('❌ **错误**: ' + data.error);
                         }
                     } catch(e) {}
-                } else if (line.startsWith('event: stats')) {
-                    // stats 在下一个 data 行
                 }
             }
         }
@@ -794,9 +831,12 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
                     document.getElementById('chat-input').disabled = false;
                     document.getElementById('chat-input').focus();
 
-                    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-                    const tokenEstimate = Math.max(1, Math.round(totalContent.length / 2));
-                    aiMeta.innerHTML = `⏱ ${elapsed}s · 🔤 ~${tokenEstimate} tokens`;
+                    // 优先使用服务端 stats，回退到前端估算
+                    if (!statsData) {
+                        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                        const tokenEstimate = Math.max(1, Math.round(totalContent.length / 2));
+                        aiMeta.innerHTML = '⏱ ' + elapsed + 's · 🔤 ~' + tokenEstimate + ' tokens';
+                    }
 
                     refreshTaskList();
                     return;
@@ -1024,6 +1064,57 @@ function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+}
+
+// 渲染信息卡片（天气、新闻等数字员工返回的卡片）
+function renderInfoCard(container, card) {
+    // 移除占位的打字指示器
+    const typingEl = container.querySelector('.typing-indicator');
+    if (typingEl) typingEl.remove();
+
+    const cardDiv = document.createElement('div');
+    cardDiv.className = 'info-card';
+
+    // 卡片类型图标映射
+    const typeIcons = {
+        weather: '🌤', news: '📰', music: '🎵',
+        movie: '🎬', science: '🔬', default: '📋'
+    };
+    const icon = typeIcons[card.type] || typeIcons.default;
+
+    let cardHtml = '<div class="card-title">' + icon + ' ' + escapeHtml(card.title || '信息卡片') + '</div>';
+    cardHtml += '<div class="card-content">';
+
+    if (card.type === 'weather' && card.data) {
+        // 天气卡片特殊渲染
+        const d = card.data;
+        cardHtml += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
+        cardHtml += '<span style="font-size:32px;">' + escapeHtml(d.temp || '?') + '°</span>';
+        cardHtml += '<div><div>' + escapeHtml(d.weather || '') + '</div>';
+        cardHtml += '<div style="font-size:12px;color:#6b7280;">' + escapeHtml(d.city || '') + ' · ' + escapeHtml(d.date || '') + '</div></div>';
+        cardHtml += '</div>';
+        if (d.detail) {
+            cardHtml += '<div style="margin-top:8px;font-size:12px;color:#6b7280;">' + escapeHtml(d.detail) + '</div>';
+        }
+    } else if (card.data && card.data.items && Array.isArray(card.data.items)) {
+        // 列表型卡片
+        cardHtml += '<ul style="margin:0;padding-left:18px;">';
+        card.data.items.forEach(function(item) {
+            cardHtml += '<li style="margin-bottom:4px;">' + escapeHtml(typeof item === 'string' ? item : (item.title || item.name || JSON.stringify(item))) + '</li>';
+        });
+        cardHtml += '</ul>';
+    } else if (card.data && card.data.text) {
+        cardHtml += escapeHtml(card.data.text);
+    } else if (card.content) {
+        cardHtml += escapeHtml(card.content);
+    } else if (card.data) {
+        cardHtml += '<pre style="font-size:11px;white-space:pre-wrap;">' + escapeHtml(JSON.stringify(card.data, null, 2)) + '</pre>';
+    }
+
+    cardHtml += '</div>';
+    cardDiv.innerHTML = cardHtml;
+    container.appendChild(cardDiv);
+    scrollToBottom();
 }
 
 // 点击空白关闭 @ 菜单
