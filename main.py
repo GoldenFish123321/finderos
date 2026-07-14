@@ -14,6 +14,9 @@ from tornado.httpserver import HTTPServer
 
 from app.config.settings import settings
 
+# ── 模块级日志（必须在任何使用 logger 的函数之前定义）──
+logger = logging.getLogger(__name__)
+
 # ── COOKIE_SECRET 持久化文件路径 ──
 _SECRET_KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".secret_key")
 
@@ -103,7 +106,6 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
-logger = logging.getLogger(__name__)
 
 
 def make_app() -> tornado.web.Application:

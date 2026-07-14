@@ -125,6 +125,7 @@ def _decompress(data: bytes, encoding: str) -> bytes:
         except Exception as e:
             logger.error(f"Brotli 解压失败: {e}，内容将丢失")
             return b""
+    return data
 
 
 def _extract_title(html: str) -> str:
