@@ -210,8 +210,8 @@ class WatchSaveHandler(AdminBaseHandler):
                         ):
                             dw_count += 1
 
-        if saved > 0 or dw_count > 0:
-            msg = f"成功保存 {saved} 条结果到数据仓库"
+        if dw_count > 0:
+            msg = f"成功保存 {dw_count} 条结果到数据仓库"
             if skipped > 0:
                 msg += f"（跳过 {skipped} 条重复/已保存）"
         else:
