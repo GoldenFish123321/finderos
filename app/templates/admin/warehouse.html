@@ -3,9 +3,9 @@
 {% block admin_content %}
 <style>
 /* 深色主题覆盖 */
-.wh-stat { text-align: center; padding: 20px 10px; background: var(--bg-card) !important; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); transition: all var(--transition-smooth); }
+.wh-stat { text-align: center; padding: 20px 16px; background: var(--bg-card) !important; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); transition: all var(--transition-smooth); }
 .wh-stat:hover { border-color: var(--border-active); transform: translateY(-2px); }
-.wh-stat .num { font-size: 32px; font-weight: 700; }
+.wh-stat .num { font-size: 34px; font-weight: 700; }
 .wh-stat .lbl { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
 .wh-search { display: flex; gap: 10px; align-items: center; margin: 16px 0; flex-wrap: wrap; }
 .wh-search input { width: 240px; }
@@ -25,7 +25,7 @@
     </div>
 
     <!-- 统计卡片 -->
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px;">
         <div class="wh-stat"><div class="num" style="background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">{{ stats['total'] }}</div><div class="lbl">采集总数</div></div>
         <div class="wh-stat"><div class="num" style="color:var(--accent-green);">{{ stats['success'] }}</div><div class="lbl">成功次数</div></div>
         <div class="wh-stat"><div class="num" style="color:var(--accent-orange);">{{ "%.1f" % (stats['total_size'] / 1024 / 1024) if stats['total_size'] and stats['total_size'] > 1048576 else ("%.1f" % (stats['total_size'] / 1024) if stats['total_size'] else '0') }}</div><div class="lbl">{{ 'MB' if stats['total_size'] and stats['total_size'] > 1048576 else 'KB' }}</div></div>

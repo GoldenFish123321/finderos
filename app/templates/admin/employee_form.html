@@ -3,13 +3,13 @@
 {% block admin_content %}
 <style>
 .emp-type-toggle { display:flex; gap:12px; margin-bottom:20px; }
-.emp-type-toggle label { padding:10px 20px; border-radius:6px; cursor:pointer; background:var(--card-bg,#1e2233); border:2px solid var(--border-color,#2a2f42); color:var(--text-secondary,#8892a4); transition:all 0.2s; font-size:14px; }
+.emp-type-toggle label { padding:8px 18px; border-radius:8px; cursor:pointer; background:var(--bg-card); border:2px solid var(--border-subtle); color:var(--text-secondary); transition:all var(--transition-fast); font-size:14px; }
 .emp-type-toggle input[type="radio"] { display:none; }
-.emp-type-toggle input[type="radio"]:checked + label { border-color:var(--accent-blue,#409eff); color:#fff; background:rgba(64,158,255,0.1); }
+.emp-type-toggle input[type="radio"]:checked + label { border-color:var(--accent-blue); color:var(--text-primary); background:rgba(94,163,255,0.1); }
 .llm-fields, .api-fields { display:none; }
 .llm-fields.active, .api-fields.active { display:block; }
 .skill-tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-.skill-tag { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:12px; background:rgba(230,162,60,0.15); color:#e6a23c; font-size:12px; }
+.skill-tag { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:12px; background:rgba(255,184,0,0.15); color:var(--accent-orange); font-size:12px; }
 .skill-tag .remove-skill { cursor:pointer; font-size:14px; margin-left:2px; }
 </style>
 
@@ -19,7 +19,7 @@
     </div>
     <div class="layui-card-body">
         <form class="layui-form" action="/admin/employee/{{ 'edit' if employee else 'add' }}" method="post"
-              style="max-width:750px;" id="emp-form">
+              style="max-width:700px;" id="emp-form">
             {% module xsrf_form_html() %}
             {% if employee %}
             <input type="hidden" name="id" value="{{ employee['id'] }}">

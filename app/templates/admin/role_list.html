@@ -29,8 +29,8 @@
                 {% for r in roles %}
                 <tr>
                     <td>{{ r["id"] }}</td>
-                    <td>{{ r["name"] }}</td>
-                    <td>{{ r["description"] or "—" }}</td>
+                    <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ r['name'] }}">{{ r["name"] }}</td>
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ r.get('description', '') }}">{{ r["description"] or "—" }}</td>
                     <td>
                         {% if r["is_system"] %}
                         <span class="layui-badge layui-bg-blue">系统角色</span>
