@@ -21,13 +21,11 @@ class IndexHandler(BaseHandler):
 
     @tornado.web.authenticated
     def get(self):
-        # 有管理权限的用户直接跳转管理后台
-        role = UserRepository.get_user_role(self.current_user)
-        if role and role["name"] != "普通用户":
-            funcs = UserRepository.get_user_functions(self.current_user)
-            if funcs:
-                self.redirect("/admin")
-                return
+        # 有管理权限的用户直接跳转管理后台（根据功能权限判断，避免硬编码角色名）
+        funcs = UserRepository.get_user_functions(self.current_user)
+        if funcs:
+            self.redirect("/admin")
+            return
 
         # 普通用户显示独立前台页面（不渲染 admin 模板）
         source_count = WatchSourceRepository.get_count()

@@ -139,12 +139,7 @@ class LoginHandler(BaseHandler):
             self.redirect("/index")
             return
 
-        # 普通用户只能去前台
-        if role["name"] == "普通用户":
-            self.redirect("/index")
-            return
-
-        # 系统管理员或有功能权限的角色的用户去后台
+        # 根据是否有后台功能权限决定跳转（避免硬编码角色名）
         funcs = UserRepository.get_user_functions(username)
         if funcs:
             self.redirect("/admin")

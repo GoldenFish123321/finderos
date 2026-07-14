@@ -45,20 +45,6 @@ class AdminBaseHandler(BaseHandler):
             self.finish()
             return
 
-        # 普通用户角色不能登录后台
-        if role["name"] == "普通用户":
-            self.set_status(403)
-            self.write("""
-            <div style="text-align:center;padding:60px 20px;">
-                <i class="layui-icon layui-icon-close-fill" style="font-size:60px;color:#FF5722;"></i>
-                <h2 style="margin-top:20px;">403 权限不足</h2>
-                <p style="color:#999;margin-top:10px;">您没有权限访问管理后台，请联系系统管理员。</p>
-                <a href="/logout" style="margin-top:20px;display:inline-block;">返回登录</a>
-            </div>
-            """)
-            self.finish()
-            return
-
         # 检查角色是否有关联的功能（系统管理员或自定义管理员角色）
         funcs = UserRepository.get_user_functions(self.current_user)
         if not funcs:
