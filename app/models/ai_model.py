@@ -91,27 +91,20 @@ class AiModelRepository:
                system_prompt: str = "", temperature: float = 0.7,
                top_p: float = 1.0, top_k: int = 50,
                max_tokens: int = 4096, context_size: int = 8192) -> bool:
-        """Update an AI model."""
+        """Update an AI model.
+
+        注意: api_key 传空字符串会清空数据库中已有的 API Key（允许用户清除敏感凭证）。
+        """
         try:
             with get_db() as conn:
-                if api_key:
-                    conn.execute(
-                        "UPDATE ai_models SET name=?, provider=?, api_base=?, api_key=?, "
-                        "model_name=?, category=?, system_prompt=?, temperature=?, "
-                        "top_p=?, top_k=?, max_tokens=?, context_size=? WHERE id=?",
-                        (name.strip(), provider.strip(), api_base.strip(), api_key.strip(),
-                         model_name.strip(), category.strip(), system_prompt, temperature,
-                         top_p, top_k, max_tokens, context_size, model_id),
-                    )
-                else:
-                    conn.execute(
-                        "UPDATE ai_models SET name=?, provider=?, api_base=?, "
-                        "model_name=?, category=?, system_prompt=?, temperature=?, "
-                        "top_p=?, top_k=?, max_tokens=?, context_size=? WHERE id=?",
-                        (name.strip(), provider.strip(), api_base.strip(),
-                         model_name.strip(), category.strip(), system_prompt, temperature,
-                         top_p, top_k, max_tokens, context_size, model_id),
-                    )
+                conn.execute(
+                    "UPDATE ai_models SET name=?, provider=?, api_base=?, api_key=?, "
+                    "model_name=?, category=?, system_prompt=?, temperature=?, "
+                    "top_p=?, top_k=?, max_tokens=?, context_size=? WHERE id=?",
+                    (name.strip(), provider.strip(), api_base.strip(), api_key.strip(),
+                     model_name.strip(), category.strip(), system_prompt, temperature,
+                     top_p, top_k, max_tokens, context_size, model_id),
+                )
                 conn.commit()
             return True
         except sqlite3.IntegrityError:
