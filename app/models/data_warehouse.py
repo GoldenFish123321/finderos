@@ -219,6 +219,16 @@ class DataWarehouseRepository:
         return rows, total
 
     @staticmethod
+    def get_recent(limit: int = 10) -> list:
+        """获取数据仓库最新记录。"""
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT * FROM data_warehouse ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    @staticmethod
     def search(keyword: str, limit: int = 10) -> list:
         """FTS5 全文检索数据仓库。返回匹配记录列表。"""
         if not keyword or not keyword.strip():
