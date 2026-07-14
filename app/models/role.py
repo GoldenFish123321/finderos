@@ -67,16 +67,29 @@ class RoleRepository:
 
     @staticmethod
     def delete(role_id: int) -> bool:
-        """Delete a role. System roles cannot be deleted."""
+        """Delete a role. System roles cannot be deleted.
+        
+        Returns:
+            True on success, False if role not found / is_system / in use by users.
+        """
         with get_db() as conn:
             row = conn.execute(
                 "SELECT is_system FROM roles WHERE id = ?", (role_id,)
             ).fetchone()
             if not row or row["is_system"] == 1:
                 return False
-            cursor = conn.execute("DELETE FROM roles WHERE id = ?", (role_id,))
-            conn.commit()
-            return cursor.rowcount > 0
+            # 检查是否有用户关联此角色（users 表 role_id 外键无 CASCADE）
+            user_cnt = conn.execute(
+                "SELECT COUNT(*) as cnt FROM users WHERE role_id = ?", (role_id,)
+            ).fetchone()["cnt"]
+            if user_cnt > 0:
+                return False  # 有用户在使用此角色，不可删除
+            try:
+                cursor = conn.execute("DELETE FROM roles WHERE id = ?", (role_id,))
+                conn.commit()
+                return cursor.rowcount > 0
+            except sqlite3.IntegrityError:
+                return False
 
     @staticmethod
     def get_count() -> int:

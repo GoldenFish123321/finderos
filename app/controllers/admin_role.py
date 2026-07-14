@@ -103,8 +103,14 @@ class RoleDeleteHandler(AdminBaseHandler):
     def post(self):
         role_id = int(self.get_body_argument("id", 0))
         role = RoleRepository.get_by_id(role_id)
-        if role and role["is_system"] == 1:
+        if not role:
+            self.write('<script>alert("角色不存在");window.history.back();</script>')
+            return
+        if role["is_system"] == 1:
             self.write('<script>alert("系统默认角色不可删除");window.history.back();</script>')
             return
-        RoleRepository.delete(role_id)
-        self.redirect("/admin/role?msg=已删除")
+        ok = RoleRepository.delete(role_id)
+        if ok:
+            self.redirect("/admin/role?msg=已删除")
+        else:
+            self.write('<script>alert("删除失败：可能有用户正在使用此角色，请先解除关联");window.history.back();</script>')
