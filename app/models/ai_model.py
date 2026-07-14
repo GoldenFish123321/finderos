@@ -1,9 +1,12 @@
 """
 ai_model.py - ai_models table repository (Repository pattern)
 """
+import logging
 import sqlite3
 from app.models.db import get_db
 from app.utils.security import encrypt_api_key, decrypt_api_key
+
+logger = logging.getLogger(__name__)
 
 # Model providers
 PROVIDERS = [
@@ -29,7 +32,8 @@ class AiModelRepository:
     """AI model data access class."""
 
     @staticmethod
-    def get_all(page: int = 1, page_size: int = 20, category: str = "") -> tuple:
+    def get_all(page: int = 1, page_size: int = 20, category: str = "",
+                enabled_only: bool = False) -> tuple:
         """Paginated query of AI models. Returns (rows, total)."""
         with get_db() as conn:
             conditions = []
@@ -37,6 +41,8 @@ class AiModelRepository:
             if category:
                 conditions.append("category = ?")
                 params.append(category)
+            if enabled_only:
+                conditions.append("is_enabled = 1")
             where = "WHERE " + " AND ".join(conditions) if conditions else ""
             total = conn.execute(
                 f"SELECT COUNT(*) as cnt FROM ai_models {where}", params

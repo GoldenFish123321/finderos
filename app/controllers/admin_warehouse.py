@@ -5,6 +5,7 @@ admin_warehouse.py — 数据仓库控制器
 v0.2.13: 支持独立的 data_warehouse 表查询（借鉴郭家琪）。
 v0.2.5: 新增深度采集功能（DeepCollectHandler）。
 """
+import atexit
 import json
 import concurrent.futures
 import tornado.web
@@ -14,6 +15,7 @@ from app.models.data_warehouse import DataWarehouseRepository
 
 # 深度采集专用线程池（复用，避免每个请求创建销毁）
 _deep_collect_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="deep-collect")
+atexit.register(_deep_collect_executor.shutdown, wait=True)
 
 
 class WarehouseHandler(AdminBaseHandler):
