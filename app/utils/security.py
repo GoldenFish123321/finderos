@@ -147,16 +147,30 @@ def decrypt_api_key(ciphertext: str) -> str:
     解密 API Key。
 
     空字符串直接返回。
-    如果解密失败（如旧数据为明文、密钥轮换等），返回原始值作为回退。
-    这确保了从明文到密文的平滑迁移。
+    如果解密失败（如密钥轮换导致无法解密），记录错误日志并返回原始值。
+    注意：返回原始密文意味着 API 调用将使用无效密钥而失败，
+    这比静默回退更安全（fail-secure 原则）。
     """
     if not ciphertext:
         return ""
     try:
         f = _get_fernet()
         return f.decrypt(ciphertext.encode()).decode()
-    except Exception:
-        # 解密失败：可能是旧明文数据，直接返回原值
+    except Exception as e:
+        # 解密失败：密钥可能已轮换或数据损坏
+        logger.error(
+            f"API Key 解密失败，密钥可能已轮换或数据损坏。"
+            f"请检查 COOKIE_SECRET 是否与加密时一致。错误: {e}"
+        )
+        # 如果是明显的 Fernet 密文（以 gAAAAAB 开头），说明密钥不匹配
+        # 返回空字符串触发 API Key 缺失提示，而非使用乱码作为密钥
+        if ciphertext.startswith("gAAAAAB"):
+            logger.critical(
+                "检测到 Fernet 密文但解密失败 — COOKIE_SECRET 已更改！"
+                "所有已加密的 API Key 将不可用。请恢复原始 COOKIE_SECRET。"
+            )
+            return ""
+        # 可能是旧明文数据，直接返回原值（向后兼容）
         return ciphertext
 
 
