@@ -412,10 +412,9 @@ class WatchDeepCollectHandler(AdminBaseHandler):
         success_count = 0
         fail_count = 0
         already_count = 0
-        try:
-            loop = asyncio.get_event_loop()
+        loop = asyncio.get_event_loop()
 
-            for dw_id in saved_dw_ids:
+        for dw_id in saved_dw_ids:
                 # 获取 link 和采集状态（同一连接）
                 with get_db() as conn:
                     record = conn.execute(
