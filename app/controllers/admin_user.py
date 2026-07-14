@@ -149,8 +149,11 @@ class UserBatchDeleteHandler(AdminBaseHandler):
             current_user = UserRepository.get_user_by_username(self.current_user)
             if current_user:
                 ids = [uid for uid in ids if uid != current_user["id"]]
-            count = UserRepository.batch_delete(ids)
-            self.write({"code": 0, "msg": f"成功删除 {count} 个用户"})
+            count, skipped_admin = UserRepository.batch_delete(ids)
+            msg = f"成功删除 {count} 个用户"
+            if skipped_admin > 0:
+                msg += f"（跳过 {skipped_admin} 个受保护的管理员账号）"
+            self.write({"code": 0, "msg": msg})
         except (ValueError, TypeError):
             self.write({"code": 1, "msg": "参数格式错误"})
 
@@ -173,8 +176,11 @@ class UserBatchToggleHandler(AdminBaseHandler):
                 if current_user:
                     ids = [uid for uid in ids if uid != current_user["id"]]
             enable = enable_str == "1"
-            count = UserRepository.batch_toggle(ids, enable)
+            count, skipped_admin = UserRepository.batch_toggle(ids, enable)
             action = "启用" if enable else "禁用"
-            self.write({"code": 0, "msg": f"成功{action} {count} 个用户"})
+            msg = f"成功{action} {count} 个用户"
+            if skipped_admin > 0:
+                msg += f"（跳过 {skipped_admin} 个受保护的管理员账号）"
+            self.write({"code": 0, "msg": msg})
         except (ValueError, TypeError):
             self.write({"code": 1, "msg": "参数格式错误"})
