@@ -1,9 +1,13 @@
 """
-user_chat.py — 用户前台智能问数 / AI 对话控制器
+user_chat.py — 用户前台智能问数 / AI 对话控制器（MCP 架构版）
 
-提供普通用户使用的 A/B/C/D/E 五区布局对话页面。
-支持：SSE 流式对话、@数字员工调用、多轮对话历史、模型切换。
+架构升级 v1.0：
+- 废弃关键词硬匹配意图识别 → 改用 MCP 协议 + LLM Function Calling
+- 工具调用标准化：通过 MCP Server 注册、发现、调用工具
+- 保留向下兼容：无 API Key 时使用 MCP 智能匹配回退
+- 支持：SSE 流式对话、@数字员工调用、多轮对话历史、模型切换
 """
+
 import asyncio
 import atexit
 import concurrent.futures
@@ -19,19 +23,145 @@ from app.models.digital_employee import DigitalEmployeeRepository
 from app.models.data_warehouse import DataWarehouseRepository
 from app.utils.security import write_audit_log
 
+# ── MCP 模块（新增） ──
+from app.mcp.server import MCPServer
+from app.mcp.client import MCPClient, set_mcp_context, clear_mcp_context
+from app.mcp.tools import register_all_tools
+
 logger = logging.getLogger(__name__)
 
-# 全局线程池
+# ── 全局初始化：MCP Server 单例 + 工具注册 ──
+_mcp_server = MCPServer.get_instance()
+register_all_tools(_mcp_server)
+_mcp_client = MCPClient(_mcp_server)
+logger.info(f"MCP 模块已初始化，共 {_mcp_server.tool_count} 个工具可用: {_mcp_server.tool_names}")
+
+# ── 全局线程池 ──
 _user_chat_executor = concurrent.futures.ThreadPoolExecutor(
     max_workers=8, thread_name_prefix="userchat"
 )
 atexit.register(_user_chat_executor.shutdown, wait=True)
 
 
-def _sync_deep_collect(url: str, timeout: int = 30):
-    """同步深度采集（在线程池中执行）。"""
-    from app.services.deep_collector import deep_fetch
-    return deep_fetch(url, timeout=timeout)
+# ── 系统 Prompt 模板 ──
+
+_SYSTEM_IDENTITY = (
+    "你是「瞭望与问数系统」(DataFinderAgentOS) 的 AI 助手，"
+    "一个集成了 Web 数据采集、数据仓库管理和 AI 对话的智能平台。"
+    "你可以帮用户查询数据仓库中的采集数据、生成统计图表、调用数字员工等。"
+    "当用户询问数据相关问题时，你拥有查询系统数据仓库的工具能力，"
+    "请主动使用工具获取真实数据后回答，不要编造数据。"
+    "不要建议用户使用外部工具（如 Snowflake、Redshift 等）。"
+)
+
+_CHART_INSTRUCTION = (
+    "\n\n[系统功能说明]\n"
+    "你具备数据可视化能力。当用户询问统计数据、趋势分析、对比排名等问题时，"
+    "可以在回复末尾附加图表标记，前端将自动渲染为交互式图表。\n\n"
+    "图表标记格式：\n"
+    "1. ECharts图表: [CHART:{\"title\":{\"text\":\"标题\"},\"xAxis\":{\"type\":\"category\",\"data\":[\"A\",\"B\",\"C\"]},\"yAxis\":{\"type\":\"value\"},\"series\":[{\"data\":[10,20,30],\"type\":\"bar\"}]}]\n"
+    "   支持类型: bar(柱状图), line(折线图), pie(饼图), scatter(散点图)\n"
+    "2. 数据表格: [TABLE:{\"title\":\"表名\",\"columns\":[\"列1\",\"列2\"],\"rows\":[[\"v1\",\"v2\"],[\"v3\",\"v4\"]]}]\n\n"
+    "要求：图表数据必须基于真实查询结果；JSON 必须合法；图表标记放在回复末尾。"
+)
+
+_TOOL_USAGE_INSTRUCTION = (
+    "\n\n[工具使用指南]\n"
+    "你有以下工具可以调用来获取真实数据。使用原则：\n"
+    "1. 当用户询问数据仓库相关内容时，优先使用工具查询，而不是凭空回答。\n"
+    "2. search_warehouse 用于搜索关键词；get_recent_warehouse_data 用于查看最新数据；"
+    "get_warehouse_stats 用于统计概况。\n"
+    "3. 如果用户提供 URL 并要求采集/抓取，使用 deep_collect_url 工具。\n"
+    "4. 获取工具查询结果后，请基于真实数据用自然语言组织回答。\n"
+    "5. 当数据适合可视化时，附加 [CHART:...] 或 [TABLE:...] 标记。"
+)
+
+
+# ============================================================
+# 辅助函数
+# ============================================================
+
+def _build_system_prompt(custom_prompt: str = "") -> str:
+    """构建完整的 system prompt。"""
+    parts = []
+    if custom_prompt:
+        parts.append(custom_prompt)
+    parts.append(_SYSTEM_IDENTITY)
+    parts.append(_CHART_INSTRUCTION)
+    parts.append(_TOOL_USAGE_INSTRUCTION)
+    return "\n\n".join(parts)
+
+
+def _estimate_tokens(text: str) -> int:
+    """估算文本 Token 数。"""
+    chinese = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
+    other = len(text) - chinese
+    return max(1, chinese + other // 4)
+
+
+async def _sse_write(handler, content: str, event: str = None):
+    """向 SSE 流写入一条消息。"""
+    payload = json.dumps({"content": content})
+    if event:
+        handler.write(f"event: {event}\ndata: {payload}\n\n")
+    else:
+        handler.write(f"data: {payload}\n\n")
+    await handler.flush()
+
+
+async def _sse_stream_text(handler, text: str, delay: float = 0.015):
+    """逐字符流式输出文本（模拟打字效果）。"""
+    for ch in text:
+        await _sse_write(handler, ch)
+        await asyncio.sleep(delay)
+
+
+async def _sse_done(handler):
+    """发送 SSE 结束标记。"""
+    handler.write("data: [DONE]\n\n")
+    await handler.flush()
+
+
+async def _sse_stats(handler, tokens: int, is_mock: bool, elapsed: float,
+                     conv_id: int = None, extra: dict = None):
+    """发送统计事件。"""
+    stats = {"tokens": tokens, "mock": is_mock, "elapsed": elapsed}
+    if conv_id:
+        stats["conversation_id"] = conv_id
+    if extra:
+        stats.update(extra)
+    handler.write(f"event: stats\ndata: {json.dumps(stats)}\n\n")
+    await handler.flush()
+
+
+def _call_llm_api_sync(api_base: str, api_key: str, payload_bytes: bytes,
+                       timeout: int = 120) -> tuple:
+    """同步阻塞调用 LLM API（在线程池中执行）。返回 (raw_bytes, error_str)。"""
+    import urllib.request
+    import urllib.error
+    try:
+        req = urllib.request.Request(
+            f"{api_base}/chat/completions",
+            data=payload_bytes,
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Authorization": f"Bearer {api_key}",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read(), None
+    except Exception as e:
+        return b"", str(e)
+
+
+async def _call_llm_api_async(api_base: str, api_key: str, payload: dict,
+                              timeout: int = 120) -> tuple:
+    """异步调用 LLM API。返回 (raw_bytes, error_str)。"""
+    payload_bytes = json.dumps(payload).encode("utf-8")
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        _user_chat_executor, _call_llm_api_sync, api_base, api_key, payload_bytes, timeout
+    )
 
 
 # ============================================================
@@ -43,9 +173,7 @@ class UserChatPageHandler(BaseHandler):
 
     @tornado.web.authenticated
     def get(self):
-        # 获取可用模型列表
         models_data, _ = AiModelRepository.get_all(page=1, page_size=50)
-        # 选定默认模型
         selected_model = AiModelRepository.get_default()
         if not selected_model:
             for m in models_data:
@@ -53,12 +181,9 @@ class UserChatPageHandler(BaseHandler):
                     selected_model = m
                     break
 
-        # 获取对话历史
         conversations = ConversationRepository.get_all(
             username=self.current_user, limit=50
         )
-
-        # 获取启用的数字员工列表
         employees = DigitalEmployeeRepository.get_enabled()
 
         self.render(
@@ -82,8 +207,6 @@ class UserChatPageHandler(BaseHandler):
 # ============================================================
 
 class UserModelListHandler(BaseHandler):
-    """API: 获取启用的模型列表"""
-
     @tornado.web.authenticated
     def get(self):
         models_data, _ = AiModelRepository.get_all(page=1, page_size=50)
@@ -91,8 +214,7 @@ class UserModelListHandler(BaseHandler):
         for m in models_data:
             if m.get("is_enabled") == 1:
                 items.append({
-                    "id": m["id"],
-                    "name": m["name"],
+                    "id": m["id"], "name": m["name"],
                     "provider": m.get("provider", ""),
                     "model_name": m.get("model_name", ""),
                     "category": m.get("category", ""),
@@ -102,23 +224,18 @@ class UserModelListHandler(BaseHandler):
 
 
 # ============================================================
-# API: 数字员工列表（供前端 @ 菜单）
+# API: 数字员工列表
 # ============================================================
 
 class UserEmployeeListHandler(BaseHandler):
-    """API: 获取启用的数字员工列表"""
-
     @tornado.web.authenticated
     def get(self):
         employees = DigitalEmployeeRepository.get_enabled()
-        items = []
-        for e in employees:
-            items.append({
-                "id": e["id"],
-                "name": e["name"],
-                "employee_type": e.get("employee_type", "llm"),
-                "description": e.get("description", ""),
-            })
+        items = [{
+            "id": e["id"], "name": e["name"],
+            "employee_type": e.get("employee_type", "llm"),
+            "description": e.get("description", ""),
+        } for e in employees]
         self.write({"code": 0, "items": items})
 
 
@@ -127,28 +244,21 @@ class UserEmployeeListHandler(BaseHandler):
 # ============================================================
 
 class UserConversationListHandler(BaseHandler):
-    """API: 用户对话列表"""
-
     @tornado.web.authenticated
     def get(self):
         conversations = ConversationRepository.get_all(
             username=self.current_user, limit=50
         )
-        items = []
-        for c in conversations:
-            items.append({
-                "id": c["id"],
-                "title": c.get("title", "新对话"),
-                "msg_count": c.get("msg_count", 0),
-                "created_at": c.get("created_at", ""),
-                "updated_at": c.get("updated_at", ""),
-            })
+        items = [{
+            "id": c["id"], "title": c.get("title", "新对话"),
+            "msg_count": c.get("msg_count", 0),
+            "created_at": c.get("created_at", ""),
+            "updated_at": c.get("updated_at", ""),
+        } for c in conversations]
         self.write({"code": 0, "items": items})
 
 
 class UserConversationCreateHandler(BaseHandler):
-    """API: 创建新对话"""
-
     @tornado.web.authenticated
     def post(self):
         model_id_str = self.get_body_argument("model_id", None)
@@ -161,8 +271,6 @@ class UserConversationCreateHandler(BaseHandler):
 
 
 class UserConversationDeleteHandler(BaseHandler):
-    """API: 删除对话"""
-
     @tornado.web.authenticated
     def post(self):
         try:
@@ -182,8 +290,6 @@ class UserConversationDeleteHandler(BaseHandler):
 
 
 class UserConversationMessagesHandler(BaseHandler):
-    """API: 获取对话消息"""
-
     @tornado.web.authenticated
     def get(self):
         try:
@@ -203,17 +309,27 @@ class UserConversationMessagesHandler(BaseHandler):
 
 
 # ============================================================
-# 核心: SSE 流式 AI 对话
+# 核心: SSE 流式 AI 对话（MCP + LLM Function Calling 架构）
 # ============================================================
 
 class UserChatStreamHandler(BaseHandler):
-    """前台 AI 对话 — SSE 流式响应"""
+    """前台 AI 对话 — SSE 流式响应（MCP 架构版）
+
+    核心流程:
+    1. 用户发送消息
+    2. 有 API Key → LLM Function Calling（携带 MCP 工具定义）
+       - LLM 自行决定是否调用工具、调用哪个工具
+       - 工具执行结果返回给 LLM
+       - LLM 基于结果生成最终回复
+    3. 无 API Key → MCP 智能匹配回退（基于工具描述语义匹配）
+    """
 
     @tornado.web.authenticated
     async def post(self):
         import time as _time
         _start_time = _time.time()
 
+        # ── 参数解析 ──
         try:
             model_id = int(self.get_body_argument("model_id", 0))
         except (ValueError, TypeError):
@@ -229,11 +345,12 @@ class UserChatStreamHandler(BaseHandler):
             self.write({"code": 1, "msg": "消息过长（最多10000字符）"})
             return
 
-        # 快捷指令处理（/ 开头）
+        # 快捷指令
         if message.startswith("/"):
             await self._handle_slash_command(message, conversation_id)
             return
 
+        # ── 模型校验 ──
         model = AiModelRepository.get_by_id(model_id)
         if not model or model.get("is_enabled") == 0:
             self.write({"code": 1, "msg": "模型不可用"})
@@ -246,7 +363,7 @@ class UserChatStreamHandler(BaseHandler):
         temperature = model.get("temperature", 0.7)
         max_tokens = model.get("max_tokens", 4096)
 
-        # 多轮对话历史
+        # ── 多轮对话历史 ──
         history_messages = []
         conv_id = None
         if conversation_id:
@@ -262,106 +379,205 @@ class UserChatStreamHandler(BaseHandler):
             except (ValueError, TypeError):
                 pass
 
-        # 系统身份 + 图表能力注入
-        system_identity = (
-            "你是「瞭望与问数系统」(DataFinderAgentOS) 的 AI 助手，"
-            "一个集成了 Web 数据采集、数据仓库管理和 AI 对话的智能平台。"
-            "你可以帮用户查询数据仓库中的采集数据、生成统计图表、调用数字员工等。"
-            "当用户询问数据相关问题时，请基于系统注入的数据仓库查询结果回答，"
-            "不要建议用户使用外部工具（如 Snowflake、Redshift 等）。"
-        )
-        chart_instruction = (
-            "\n\n[系统功能说明]\n"
-            "你具备数据可视化能力。当用户询问统计数据、趋势分析、对比排名等问题时，"
-            "可以在回复末尾附加图表标记，前端将自动渲染为交互式图表。\n\n"
-            "图表标记格式：\n"
-            "1. ECharts图表: [CHART:{\"title\":{\"text\":\"标题\"},\"xAxis\":{\"type\":\"category\",\"data\":[\"A\",\"B\",\"C\"]},\"yAxis\":{\"type\":\"value\"},\"series\":[{\"data\":[10,20,30],\"type\":\"bar\"}]}]\n"
-            "   支持类型: bar(柱状图), line(折线图), pie(饼图), scatter(散点图)\n"
-            "2. 数据表格: [TABLE:{\"title\":\"表名\",\"columns\":[\"列1\",\"列2\"],\"rows\":[[\"v1\",\"v2\"],[\"v3\",\"v4\"]]}]\n\n"
-            "要求：图表数据必须基于真实查询结果；JSON 必须合法；图表标记放在回复末尾。"
-        )
+        # ── 设置 MCP 上下文 ──
+        set_mcp_context(username=self.current_user)
 
-        # 意图识别 + 数据仓库上下文注入（v0.3 智能问数增强）
-        intent, warehouse_ctx = self._detect_intent_and_query(message)
-        if warehouse_ctx:
-            chart_instruction += warehouse_ctx
-
-        # 构建消息：system_prompt(用户的) + system_identity(系统) + chart_instruction + warehouse_ctx
-        full_system = system_identity + chart_instruction
-        if system_prompt:
-            full_system = system_prompt + "\n\n" + full_system
-        if warehouse_ctx:
-            full_system += warehouse_ctx
-
-        messages = []
-        messages.append({"role": "system", "content": full_system})
-        messages.extend(history_messages)
-        messages.append({"role": "user", "content": message})
-
-        # SSE 响应头
+        # ── SSE 响应头 ──
         self.set_header("Content-Type", "text/event-stream")
         self.set_header("Cache-Control", "no-cache")
         self.set_header("Connection", "keep-alive")
         self.set_header("X-Accel-Buffering", "no")
 
         total_tokens = 0
-        api_success = False
+        assistant_reply = ""
         is_mock = True
 
-        # 尝试真实 API
-        if api_key:
-            from app.utils.security import validate_url_safe
-            safe, reason = validate_url_safe(api_base)
-            if not safe:
-                self.write(
-                    f"data: {json.dumps({'error': f'API Base URL 不安全: {reason}'})}\n\n"
+        try:
+            if api_key:
+                # ─── 路径 A: 真实 LLM + Function Calling ───
+                total_tokens, assistant_reply, is_mock = await self._chat_with_llm_tools(
+                    api_base, api_key, model_name, system_prompt,
+                    temperature, max_tokens, message, history_messages
                 )
-                self.write(f"event: stats\ndata: {json.dumps({'tokens': 0, 'mock': True})}\n\n")
-                self.write(f"data: [DONE]\n\n")
-                await self.flush()
-                return
+            else:
+                # ─── 路径 B: 无 API Key → MCP 智能匹配回退 ───
+                total_tokens, assistant_reply = await self._chat_with_mcp_fallback(
+                    message, model
+                )
+        finally:
+            clear_mcp_context()
 
-            payload = json.dumps({
+        # ── 发送统计 ──
+        elapsed = round(_time.time() - _start_time, 2)
+        await _sse_stats(self, total_tokens, is_mock, elapsed, conv_id)
+
+        # ── 记录 Token ──
+        if total_tokens > 0:
+            AiModelRepository.add_tokens(model_id, total_tokens)
+
+        # ── 保存对话 ──
+        if conv_id and assistant_reply:
+            ConversationRepository.add_message(conv_id, "user", message, 0)
+            ConversationRepository.add_message(
+                conv_id, "assistant", assistant_reply, total_tokens
+            )
+            conv = ConversationRepository.get_by_id(conv_id)
+            if conv and (conv.get("title") or "").strip() in ("新对话", ""):
+                auto_title = message.strip()[:30]
+                if auto_title:
+                    ConversationRepository.update_title(conv_id, auto_title)
+
+        # ── 审计日志 ──
+        write_audit_log(
+            action="USER_CHAT",
+            username=self.current_user,
+            target=f"model:{model_id}",
+            detail=f"tokens={total_tokens}, msg_len={len(message)}, elapsed={elapsed}s, mock={is_mock}",
+            client_ip=self.request.remote_ip or "",
+        )
+
+    # ═══════════════════════════════════════════════════════════
+    # 路径 A: LLM Function Calling 核心流程
+    # ═══════════════════════════════════════════════════════════
+
+    async def _chat_with_llm_tools(
+        self, api_base: str, api_key: str, model_name: str,
+        system_prompt: str, temperature: float, max_tokens: int,
+        user_message: str, history: list
+    ) -> tuple:
+        """使用 LLM Function Calling + MCP 工具完成对话。
+
+        Returns:
+            (total_tokens, assistant_reply, is_mock)
+        """
+        # SSRF 校验
+        from app.utils.security import validate_url_safe
+        safe, reason = validate_url_safe(api_base)
+        if not safe:
+            await _sse_write(self, f"API Base URL 不安全: {reason}")
+            await _sse_done(self)
+            return 0, "", True
+
+        # 构建消息列表
+        full_system = _build_system_prompt(system_prompt)
+        messages = [{"role": "system", "content": full_system}]
+        messages.extend(history)
+        messages.append({"role": "user", "content": user_message})
+
+        # 获取 MCP 工具定义（OpenAI Function Calling 格式）
+        tools = _mcp_client.get_openai_tools()
+
+        total_tokens = 0
+        assistant_reply = ""
+        is_mock = False
+        max_rounds = 3
+
+        for round_num in range(max_rounds):
+            payload = {
+                "model": model_name,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "stream": False,
+                "tools": tools,
+                "tool_choice": "auto",
+            }
+
+            raw_data, err = await _call_llm_api_async(api_base, api_key, payload)
+
+            if err:
+                logger.warning(f"LLM API 调用失败 (round {round_num}): {err}")
+                if round_num == 0:
+                    return await self._chat_with_mcp_fallback(user_message, {})
+                break
+
+            try:
+                response = json.loads(raw_data.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                logger.warning("LLM 响应 JSON 解析失败")
+                break
+
+            choice = response.get("choices", [{}])[0]
+            message_obj = choice.get("message", {})
+            finish_reason = choice.get("finish_reason", "")
+
+            usage = response.get("usage", {})
+            round_tokens = usage.get("total_tokens", 0)
+            if round_tokens:
+                total_tokens += round_tokens
+
+            tool_calls = message_obj.get("tool_calls", [])
+
+            if tool_calls and finish_reason == "tool_calls":
+                logger.info(f"LLM 请求工具调用: {[tc['function']['name'] for tc in tool_calls]}")
+
+                messages.append({
+                    "role": "assistant",
+                    "content": message_obj.get("content") or "",
+                    "tool_calls": tool_calls,
+                })
+
+                tool_results = await _mcp_client.execute_tool_calls(tool_calls)
+
+                for tr in tool_results:
+                    messages.append(tr)
+                    tool_name = ""
+                    for tc in tool_calls:
+                        if tc.get("id") == tr.get("tool_call_id"):
+                            tool_name = tc.get("function", {}).get("name", "")
+                            break
+                    await _sse_write(
+                        self,
+                        f"🔧 正在执行: {tool_name}...",
+                        event="tool_status"
+                    )
+                continue
+
+            elif tool_calls:
+                messages.append({
+                    "role": "assistant",
+                    "content": message_obj.get("content") or "",
+                    "tool_calls": tool_calls,
+                })
+                tool_results = await _mcp_client.execute_tool_calls(tool_calls)
+                for tr in tool_results:
+                    messages.append(tr)
+                continue
+
+            else:
+                content = message_obj.get("content", "")
+                if content:
+                    assistant_reply = content
+                    for ch in content:
+                        await _sse_write(self, ch)
+                        await asyncio.sleep(0.01)
+                    await _sse_done(self)
+                    is_mock = False
+                    return total_tokens, assistant_reply, is_mock
+                else:
+                    logger.warning("LLM 返回空 content，尝试继续")
+                    break
+
+        # 最终流式调用（不带 tools，兜底）
+        if not assistant_reply:
+            final_payload = {
                 "model": model_name,
                 "messages": messages,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
                 "stream": True,
-            }).encode('utf-8')
-
-            def _sync_stream_call():
-                import urllib.request
-                try:
-                    req = urllib.request.Request(
-                        f"{api_base}/chat/completions",
-                        data=payload,
-                        headers={
-                            "Content-Type": "application/json; charset=utf-8",
-                            "Authorization": f"Bearer {api_key}",
-                        },
-                    )
-                    with urllib.request.urlopen(req, timeout=120) as resp:
-                        return resp.read(), None
-                except Exception as e:
-                    return b"", str(e)
-
-            loop = asyncio.get_event_loop()
-            raw_data, err = await loop.run_in_executor(
-                _user_chat_executor, _sync_stream_call
-            )
-
+            }
+            raw_data, err = await _call_llm_api_async(api_base, api_key, final_payload)
             if err is None:
-                api_success = True
                 is_mock = False
+                reply_parts = []
                 content_chars = 0
-                assistant_reply_parts = []
                 for line in raw_data.split(b"\n"):
-                    line = line.decode("utf-8", errors="replace").strip()
-                    if line.startswith("data: "):
-                        data_str = line[6:]
+                    line_str = line.decode("utf-8", errors="replace").strip()
+                    if line_str.startswith("data: "):
+                        data_str = line_str[6:]
                         if data_str == "[DONE]":
-                            self.write(f"data: [DONE]\n\n")
-                            await self.flush()
+                            await _sse_done(self)
                             break
                         try:
                             chunk = json.loads(data_str)
@@ -369,196 +585,224 @@ class UserChatStreamHandler(BaseHandler):
                             content = delta.get("content", "")
                             if content:
                                 content_chars += len(content)
-                                assistant_reply_parts.append(content)
-                                self.write(
-                                    f"data: {json.dumps({'content': content})}\n\n"
-                                )
-                                await self.flush()
-                            if "usage" in chunk and chunk.get("usage"):
-                                total_tokens = chunk["usage"].get("total_tokens", 0)
+                                reply_parts.append(content)
+                                await _sse_write(self, content)
+                            if chunk.get("usage"):
+                                total_tokens += chunk["usage"].get("total_tokens", 0)
                         except json.JSONDecodeError:
                             pass
-                assistant_reply = "".join(assistant_reply_parts)
+                assistant_reply = "".join(reply_parts)
                 if total_tokens == 0 and content_chars > 0:
                     total_tokens = max(1, content_chars // 2)
-                if not assistant_reply:
-                    logger.warning("API 返回空响应，回退到本地 Mock")
-                    api_success = False
-                    is_mock = True
             else:
-                logger.warning(f"用户对话 API 调用失败: {err}，回退到本地 Mock")
-
-        # Mock 回退
-        if not api_success:
-            total_tokens, assistant_reply = await self._mock_chat_response(
-                message, model
-            )
-            api_success = True
-
-        # 发送统计
-        elapsed = round(_time.time() - _start_time, 2)
-        resp_stats = {"tokens": total_tokens, "mock": is_mock, "elapsed": elapsed}
-        if conv_id:
-            resp_stats["conversation_id"] = conv_id
-        self.write(f"event: stats\ndata: {json.dumps(resp_stats)}\n\n")
-        await self.flush()
-
-        # 记录 Token
-        if total_tokens > 0:
-            AiModelRepository.add_tokens(model_id, total_tokens)
-
-        # 保存对话
-        if conv_id:
-            ConversationRepository.add_message(conv_id, "user", message, 0)
-            ConversationRepository.add_message(
-                conv_id, "assistant", assistant_reply, total_tokens
-            )
-            # 自动标题：首条消息后，若标题仍为"新对话"，用前30字替换
-            conv = ConversationRepository.get_by_id(conv_id)
-            if conv and (conv.get("title") or "").strip() in ("新对话", ""):
-                auto_title = message.strip()[:30]
-                if auto_title:
-                    ConversationRepository.update_title(conv_id, auto_title)
-
-        write_audit_log(
-            action="USER_CHAT",
-            username=self.current_user,
-            target=f"model:{model_id}",
-            detail=f"tokens={total_tokens}, msg_len={len(message)}, elapsed={elapsed}s",
-            client_ip=self.request.remote_ip or "",
-        )
-
-    def _detect_intent_and_query(self, message: str) -> tuple:
-        """意图识别 + 数据仓库查询。返回 (intent, warehouse_context_string)。
-
-        意图分类：
-        - data_query:   搜索/查找/查看数据仓库内容
-        - data_latest:  查看最新数据
-        - data_stats:   请求统计信息
-        - chart_request: 要求生成图表
-        - general:      普通对话
-        """
-        msg_lower = message.lower().strip()
-        result = {"intent": "general"}
-
-        # 统计类关键词
-        stats_kw = ["统计", "概况", "多少", "总量", "有多少条", "一共", "共计",
-                     "分布", "占比", "排行", "top", "排名"]
-        # 搜索/查看类关键词
-        search_kw = ["搜索", "查找", "查询", "找", "有没有", "搜一下",
-                     "帮我查", "帮我搜", "帮我找", "查看", "看看", "看",
-                     "列出", "显示", "展示", "浏览", "有什么", "有哪些"]
-        # 最新数据类关键词
-        latest_kw = ["最新", "最近", "近期", "新数据", "最新内容", "最近更新"]
-        # 图表类关键词
-        chart_kw = ["图表", "报表", "画图", "作图", "柱状图", "折线图", "饼图",
-                    "可视化", "echarts", "生成图", "做个图"]
-
-        # 同时检测"数据仓库"或"数据"等词，确认用户想查询的是系统数据
-        data_kw = ["数据仓库", "数据", "仓库", "采集", "瞭望"]
-
-        # 意图判定
-        is_about_data = any(kw in msg_lower for kw in data_kw)
-        if any(kw in msg_lower for kw in latest_kw):
-            result["intent"] = "data_latest"
-        elif any(kw in msg_lower for kw in search_kw):
-            result["intent"] = "data_query"
-        elif any(kw in msg_lower for kw in stats_kw):
-            result["intent"] = "data_stats"
-        elif any(kw in msg_lower for kw in chart_kw):
-            result["intent"] = "chart_request"
-        elif is_about_data:
-            # 提到了"数据仓库/数据"但无明确动作词 → 视为查询
-            result["intent"] = "data_latest"
-
-        # 提取搜索关键词：剔除意图关键词
-        import re
-        all_intent_words = set(stats_kw + search_kw + chart_kw + latest_kw + data_kw)
-        clean_msg = message
-        for w in sorted(all_intent_words, key=len, reverse=True):
-            clean_msg = re.sub(re.escape(w), "", clean_msg, flags=re.IGNORECASE)
-        keyword = clean_msg.strip() or message
-
-        # 查询数据仓库
-        warehouse_items = []
-        warehouse_count = 0
-        if result["intent"] in ("data_query", "data_stats", "data_latest"):
-            try:
-                if result["intent"] == "data_latest":
-                    # 查询最新记录
-                    warehouse_items = DataWarehouseRepository.get_recent(limit=8)
-                else:
-                    warehouse_items = DataWarehouseRepository.search(keyword, limit=8)
-                warehouse_count = len(warehouse_items)
-            except Exception:
-                pass
-
-        # 获取统计信息
-        stats = None
-        if result["intent"] in ("data_stats", "data_latest"):
-            try:
-                stats = DataWarehouseRepository.get_stats()
-            except Exception:
-                pass
-
-        # 构建上下文字符串
-        ctx_parts = []
-        if warehouse_items:
-            ctx_parts.append("\n\n[系统注入：数据仓库查询结果]")
-            ctx_parts.append(
-                "你正在使用「瞭望与问数系统」(DataFinderAgentOS)，一个智能数据采集与AI问数平台。"
-                "以下是系统数据仓库中的真实数据，请基于这些数据回答用户问题："
-            )
-            for i, item in enumerate(warehouse_items, 1):
-                ctx_parts.append(
-                    f"{i}. 标题: {item.get('title', '')}\n"
-                    f"   摘要: {(item.get('summary', '') or '')[:200]}\n"
-                    f"   来源: {item.get('source_name', '')}\n"
-                    f"   链接: {item.get('link', '')}"
+                logger.warning(f"最终流式调用也失败: {err}")
+                total_tokens, assistant_reply = await self._chat_with_mcp_fallback(
+                    user_message, {}
                 )
-            ctx_parts.append(
-                f"\n共查询到 {warehouse_count} 条相关数据。"
-                f"请基于以上真实数据回答用户问题，不要编造数据。"
-                f"{'如数据量适合做图表，请在回复末尾附加 [CHART:...] 标记。' if result['intent'] in ('data_stats', 'chart_request') else ''}"
+
+        return total_tokens, assistant_reply, is_mock
+
+    # ═══════════════════════════════════════════════════════════
+    # 路径 B: MCP 智能匹配回退（无 API Key）
+    # ═══════════════════════════════════════════════════════════
+
+    async def _chat_with_mcp_fallback(
+        self, user_message: str, model: dict
+    ) -> tuple:
+        """无 API Key 时的 MCP 智能匹配回退方案。
+
+        使用 MCP 工具描述进行语义匹配，执行匹配到的工具，
+        然后基于工具结果生成自然语言回复。
+
+        Returns:
+            (total_tokens, assistant_reply)
+        """
+        match = _mcp_client.match_tool_by_query(user_message)
+
+        if match:
+            tool_name, arguments = match
+            logger.info(f"MCP 智能匹配: {tool_name}, args={arguments}")
+
+            await _sse_write(
+                self,
+                f"🔧 智能识别意图 → 调用工具: {tool_name}",
+                event="tool_status"
             )
 
-        if stats:
-            ctx_parts.append(
-                f"\n\n[系统注入：数据仓库概况]\n"
-                f"总记录数: {stats['total']} 条\n"
-                f"已深度采集: {stats['deep_collected']} 条\n"
-                f"Top 来源: {', '.join(s['name'] + '(' + str(s['count']) + ')' for s in stats.get('top_sources', [])[:5])}"
+            tool = _mcp_server.get_tool(tool_name)
+            if tool:
+                try:
+                    result = await tool.call(arguments)
+                    reply = self._format_tool_result_as_reply(
+                        tool_name, arguments, result, user_message, model
+                    )
+                    for ch in reply:
+                        await _sse_write(self, ch)
+                        await asyncio.sleep(0.015)
+                    await _sse_done(self)
+                    tokens = _estimate_tokens(reply)
+                    return tokens, reply
+                except Exception as e:
+                    logger.error(f"工具执行失败: {tool_name} - {e}", exc_info=True)
+                    error_reply = f"⚠️ 工具 {tool_name} 执行出错: {str(e)}"
+                    await _sse_stream_text(self, error_reply)
+                    await _sse_done(self)
+                    return _estimate_tokens(error_reply), error_reply
+
+        return await self._mock_chat_response(user_message, model)
+
+    def _format_tool_result_as_reply(
+        self, tool_name: str, arguments: dict, result: any,
+        user_message: str, model: dict
+    ) -> str:
+        """将工具执行结果格式化为自然语言回复。"""
+        model_name = model.get("name", "AI助手") if isinstance(model, dict) else "AI助手"
+
+        if tool_name == "search_warehouse":
+            items = result.get("items", []) if isinstance(result, dict) else []
+            total = result.get("total", len(items)) if isinstance(result, dict) else len(items)
+            kw = arguments.get("keyword", user_message)
+            if not items:
+                return (
+                    f"📊 在数据仓库中搜索「**{kw}**」，未找到匹配结果。\n\n"
+                    f"💡 建议：\n"
+                    f"- 尝试使用不同关键词\n"
+                    f"- 检查数据仓库是否有数据\n"
+                    f"- 可以先执行瞭望采集来获取数据"
+                )
+            lines = [f"📊 数据仓库搜索「**{kw}**」，共找到 **{total}** 条结果：\n"]
+            for i, item in enumerate(items[:8], 1):
+                title = item.get("title", "无标题")[:80]
+                source = item.get("source_name", "未知来源")
+                summary = (item.get("summary", "") or "")[:120]
+                link = item.get("link", "")
+                lines.append(f"**{i}. {title}**")
+                if summary:
+                    lines.append(f"   > {summary}")
+                lines.append(f"   📎 来源: {source}")
+                if link:
+                    lines.append(f"   🔗 {link}")
+                lines.append("")
+            if total > 8:
+                lines.append(f"... 还有 {total - 8} 条结果未显示")
+            return "\n".join(lines)
+
+        elif tool_name == "get_recent_warehouse_data":
+            items = result.get("items", []) if isinstance(result, dict) else []
+            total = result.get("total", len(items)) if isinstance(result, dict) else len(items)
+            if not items:
+                return "📋 数据仓库当前为空，还没有采集到任何数据。\n\n💡 建议：先在后台执行瞭望采集任务。"
+            lines = [f"📋 数据仓库最新数据（共 **{total}** 条）：\n"]
+            for i, item in enumerate(items[:8], 1):
+                title = item.get("title", "无标题")[:80]
+                source = item.get("source_name", "未知来源")
+                summary = (item.get("summary", "") or "")[:120]
+                link = item.get("link", "")
+                deep_mark = " 🔍已深度采集" if item.get("is_deep_collected") else ""
+                lines.append(f"**{i}. {title}**{deep_mark}")
+                if summary:
+                    lines.append(f"   > {summary}")
+                lines.append(f"   📎 来源: {source}")
+                if link:
+                    lines.append(f"   🔗 {link}")
+                lines.append("")
+            return "\n".join(lines)
+
+        elif tool_name == "get_warehouse_stats":
+            if isinstance(result, dict):
+                total = result.get("total", 0)
+                deep = result.get("deep_collected", 0)
+                top_sources = result.get("top_sources", [])
+                lines = [
+                    f"📈 **数据仓库概况**\n",
+                    f"- 总记录数: **{total}** 条",
+                    f"- 已深度采集: **{deep}** 条",
+                    f"- 待采集: **{total - deep}** 条",
+                ]
+                if top_sources:
+                    lines.append(f"\n📊 **来源分布 Top 5**:")
+                    for s in top_sources[:5]:
+                        lines.append(f"  - {s.get('name', '?')}: {s.get('count', 0)} 条")
+                return "\n".join(lines)
+            return f"📈 数据仓库统计: {json.dumps(result, ensure_ascii=False)}"
+
+        elif tool_name == "deep_collect_url":
+            if isinstance(result, dict):
+                if result.get("success"):
+                    title = result.get("title", "无标题")
+                    size = result.get("content_size", 0)
+                    content = (result.get("content", "") or "")[:800]
+                    lines = [
+                        f"✅ **深度采集完成！**\n",
+                        f"- 标题: **{title[:100]}**",
+                        f"- 内容长度: **{size}** 字符\n",
+                    ]
+                    if content:
+                        lines.append(f"📄 **正文预览**:\n{content}\n...")
+                    return "\n".join(lines)
+                else:
+                    return f"⚠️ 深度采集失败: {result.get('error', '未知错误')}"
+            return f"深度采集结果: {result}"
+
+        elif tool_name == "list_digital_employees":
+            employees = result.get("employees", []) if isinstance(result, dict) else []
+            if not employees:
+                return "🤖 当前没有可用的数字员工。"
+            lines = ["🤖 **可用数字员工**:\n"]
+            for e in employees:
+                etype = "LLM型" if e.get("type") == "llm" else "API型"
+                desc = e.get("description", "")[:60]
+                lines.append(f"- **{e['name']}** ({etype})")
+                if desc:
+                    lines.append(f"  {desc}")
+            return "\n".join(lines)
+
+        elif tool_name == "list_conversations":
+            convs = result.get("conversations", []) if isinstance(result, dict) else []
+            if not convs:
+                return "📝 暂无历史对话记录。"
+            lines = ["📝 **历史对话**:\n"]
+            for c in convs[:10]:
+                title = c.get("title", "新对话")[:40]
+                count = c.get("msg_count", 0)
+                lines.append(f"- {title} ({count} 条消息)")
+            return "\n".join(lines)
+
+        else:
+            return (
+                f"🔧 工具 **{tool_name}** 执行结果：\n\n"
+                f"```json\n{json.dumps(result, ensure_ascii=False, indent=2)[:2000]}\n```"
             )
 
-        if result["intent"] == "chart_request" and not warehouse_items:
-            ctx_parts.append(
-                "\n\n[系统提示] 用户请求生成图表，但当前数据仓库中无匹配数据。"
-                "请告知用户数据不足，建议先执行数据采集。"
-            )
-
-        # 无数据时也要告诉 AI 系统身份
-        if not ctx_parts and is_about_data:
-            ctx_parts.append(
-                "\n\n[系统说明] 你正在使用「瞭望与问数系统」(DataFinderAgentOS)，"
-                "一个智能数据采集与AI问数平台。当前数据仓库中暂无匹配的数据。"
-                "请告知用户数据仓库为空，建议先在后台执行数据采集。不要建议用户使用 Snowflake/Redshift 等外部工具。"
-            )
-
-        return result["intent"], "\n".join(ctx_parts) if ctx_parts else ""
+    # ═══════════════════════════════════════════════════════════
+    # 快捷指令 / Mock 回复
+    # ═══════════════════════════════════════════════════════════
 
     async def _handle_slash_command(self, message: str, conversation_id):
         """处理 / 快捷指令。"""
         cmd = message.strip().lower()
+        self.set_header("Content-Type", "text/event-stream")
+        self.set_header("Cache-Control", "no-cache")
+
         if cmd == "/clear":
-            # 清屏：返回空内容让前端清空对话区
-            self.set_header("Content-Type", "text/event-stream")
-            self.set_header("Cache-Control", "no-cache")
             self.write(f"event: action\ndata: {json.dumps({'action': 'clear'})}\n\n")
-            self.write(f"data: [DONE]\n\n")
+            self.write("data: [DONE]\n\n")
             await self.flush()
             return
+
+        elif cmd == "/tools":
+            tools_list = _mcp_server.list_tools()
+            lines = ["🔧 **可用 MCP 工具列表**:\n"]
+            for t in tools_list:
+                lines.append(f"- **{t['name']}**: {t.get('description', '')[:100]}")
+            full = "\n".join(lines)
+            for ch in full:
+                await _sse_write(self, ch)
+                await asyncio.sleep(0.01)
+            await _sse_done(self)
+            return
+
         elif cmd == "/summary":
-            # 摘要当前对话
             conv_id = None
             if conversation_id:
                 try:
@@ -566,84 +810,71 @@ class UserChatStreamHandler(BaseHandler):
                 except (ValueError, TypeError):
                     pass
             if not conv_id:
-                self.set_header("Content-Type", "text/event-stream")
-                self.set_header("Cache-Control", "no-cache")
-                self.write(f"data: {json.dumps({'content': '当前没有活跃对话，无法生成摘要。'})}\n\n")
-                self.write(f"data: [DONE]\n\n")
-                await self.flush()
+                await _sse_write(self, "当前没有活跃对话，无法生成摘要。")
+                await _sse_done(self)
                 return
             msgs = ConversationRepository.get_messages(conv_id, limit=20)
             if not msgs:
-                self.set_header("Content-Type", "text/event-stream")
-                self.set_header("Cache-Control", "no-cache")
-                self.write(f"data: {json.dumps({'content': '当前对话尚无消息。'})}\n\n")
-                self.write(f"data: [DONE]\n\n")
-                await self.flush()
+                await _sse_write(self, "当前对话尚无消息。")
+                await _sse_done(self)
                 return
-            # 构建摘要文本
             summary_lines = ["📋 **对话摘要**\n"]
             for m in msgs:
                 role_label = "👤 用户" if m["role"] == "user" else "🤖 AI"
                 preview = (m["content"] or "")[:80]
                 summary_lines.append(f"- {role_label}: {preview}...")
             full = "\n".join(summary_lines)
-            self.set_header("Content-Type", "text/event-stream")
-            self.set_header("Cache-Control", "no-cache")
             for ch in full:
-                self.write(f"data: {json.dumps({'content': ch})}\n\n")
-                await self.flush()
+                await _sse_write(self, ch)
                 await asyncio.sleep(0.01)
-            self.write(f"data: [DONE]\n\n")
-            await self.flush()
+            await _sse_done(self)
             return
+
         elif cmd.startswith("/trans"):
-            # 翻译最后一条消息（简易实现：标记翻译意图）
-            self.set_header("Content-Type", "text/event-stream")
-            self.set_header("Cache-Control", "no-cache")
-            self.write(
-                f"data: {json.dumps({'content': '💡 /trans 指令：请在消息前加「翻译成英文：」或「翻译成中文：」来使用翻译功能。'})}\n\n"
+            await _sse_write(
+                self,
+                "💡 /trans 指令：请在消息前加「翻译成英文：」"
+                "或「翻译成中文：」来使用翻译功能。"
             )
-            self.write(f"data: [DONE]\n\n")
-            await self.flush()
+            await _sse_done(self)
             return
         else:
-            self.set_header("Content-Type", "text/event-stream")
-            self.set_header("Cache-Control", "no-cache")
-            self.write(
-                f"data: {json.dumps({'content': f'未知指令: {message}。可用指令: /clear, /summary, /trans'})}\n\n"
+            await _sse_write(
+                self,
+                f"未知指令: {message}。可用指令: /clear, /summary, /trans, /tools"
             )
-            self.write(f"data: [DONE]\n\n")
-            await self.flush()
+            await _sse_done(self)
 
     async def _mock_chat_response(self, message: str, model: dict) -> tuple:
-        """本地 Mock 流式响应。返回 (估算token数, 完整回复文本)。"""
-        system_prompt = model.get("system_prompt", "")
+        """本地 Mock 流式响应（无 API Key 且无工具匹配时）。"""
+        model_name = model.get("name", "AI助手") if isinstance(model, dict) else "AI助手"
+        provider = model.get("provider", "未知") if isinstance(model, dict) else "未知"
+        system_prompt = model.get("system_prompt", "") if isinstance(model, dict) else ""
+
         mock_reply = (
-            f"您好！我是 {model.get('name', 'AI助手')}（{model.get('provider', '未知')}）。\n\n"
+            f"您好！我是 **{model_name}**（{provider}）。\n\n"
             f"您刚才问：「{message}」\n\n"
-            f"当前为本地 Mock 模式。配置有效的 API Key 后，将自动切换为真实 AI 对话。\n\n"
-            f"🔧 系统提示词：{system_prompt[:100] if system_prompt else '（未设置）'}"
+            f"当前为本地智能模式。配置有效的 API Key 后，将启用完整 AI 大模型对话与 MCP 工具调用。\n\n"
+            f"🔧 系统提示词：{system_prompt[:100] if system_prompt else '（未设置）'}\n\n"
+            f"💡 可用 MCP 工具（输入 /tools 查看详情）：\n"
+            + "\n".join(f"  • {n}" for n in _mcp_server.tool_names[:6])
+            + "\n\n💬 试试这些：\n"
+            f"  • 「查看数据仓库」— 浏览最新采集数据\n"
+            f"  • 「搜索 AI」— 搜索关键词\n"
+            f"  • 「数据统计」— 查看数据仓库概况"
         )
 
-        for ch in mock_reply:
-            self.write(f"data: {json.dumps({'content': ch})}\n\n")
-            await self.flush()
-            await asyncio.sleep(0.015)
-
-        self.write(f"data: [DONE]\n\n")
-        await self.flush()
-
-        chinese_chars = sum(1 for c in mock_reply if '\u4e00' <= c <= '\u9fff')
-        other_chars = len(mock_reply) - chinese_chars
-        return max(1, chinese_chars + other_chars // 4), mock_reply
+        await _sse_stream_text(self, mock_reply)
+        await _sse_done(self)
+        return _estimate_tokens(mock_reply), mock_reply
 
 
 # ============================================================
-# 核心: @数字员工 SSE 流式调用
+# 核心: @数字员工 SSE 流式调用（MCP 增强版）
 # ============================================================
 
 class UserEmployeeInvokeHandler(BaseHandler):
-    """前台 @数字员工调用 — SSE 流式响应"""
+    """前台 @数字员工调用 — SSE 流式响应（MCP 架构版）"""
 
     @tornado.web.authenticated
     async def post(self):
@@ -669,16 +900,20 @@ class UserEmployeeInvokeHandler(BaseHandler):
             self.write({"code": 1, "msg": "员工不可用"})
             return
 
-        if emp.get("employee_type") == "api":
-            await self._invoke_api_employee(emp, message)
-        else:
-            await self._invoke_llm_employee(emp, message, _start_time)
+        set_mcp_context(username=self.current_user)
+
+        try:
+            if emp.get("employee_type") == "api":
+                await self._invoke_api_employee(emp, message)
+            else:
+                await self._invoke_llm_employee(emp, message, _start_time)
+        finally:
+            clear_mcp_context()
 
     async def _invoke_llm_employee(self, emp: dict, message: str, start_time: float):
-        """LLM 型员工调用。"""
+        """LLM 型员工调用（MCP 增强版）。"""
         import time as _time
 
-        # 选择模型
         model = None
         if emp.get("model_id"):
             model = AiModelRepository.get_by_id(emp["model_id"])
@@ -693,10 +928,8 @@ class UserEmployeeInvokeHandler(BaseHandler):
         if not model:
             self.set_header("Content-Type", "text/event-stream")
             self.set_header("Cache-Control", "no-cache")
-            self.write(
-                f"data: {json.dumps({'error': '没有可用的AI模型'})}\n\n"
-            )
-            await self.flush()
+            await _sse_write(self, "没有可用的AI模型")
+            await _sse_done(self)
             return
 
         api_base = (model.get("api_base") or "https://api.openai.com/v1").rstrip("/")
@@ -706,54 +939,25 @@ class UserEmployeeInvokeHandler(BaseHandler):
         temperature = model.get("temperature", 0.7)
         max_tokens = model.get("max_tokens", 4096)
 
-        # 执行工具调用
-        tool_ctx = await self._execute_employee_tools(emp, message)
-        warehouse_ctx = ""
-        if tool_ctx.get("warehouse_data"):
-            items = tool_ctx["warehouse_data"][:5]
-            warehouse_ctx = "\n\n[系统注入：数据仓库查询结果]\n"
-            for i, item in enumerate(items, 1):
-                warehouse_ctx += (
-                    f"{i}. 标题: {item.get('title','')}\n"
-                    f"   摘要: {item.get('summary','')}\n"
-                    f"   来源: {item.get('source_name','')}\n"
-                    f"   链接: {item.get('link','')}\n"
-                )
-            warehouse_ctx += (
-                f"共 {tool_ctx['warehouse_count']} 条匹配结果。"
-                f"请基于以上真实数据回答用户问题。\n"
-            )
+        # ── 使用 MCP 智能匹配执行工具 ──
+        match = _mcp_client.match_tool_by_query(message)
+        tool_ctx = {}
+        if match:
+            tool_name, arguments = match
+            tool = _mcp_server.get_tool(tool_name)
+            if tool:
+                try:
+                    result = await tool.call(arguments)
+                    tool_ctx = {"tool_name": tool_name, "result": result}
+                except Exception as e:
+                    logger.error(f"员工工具执行失败: {e}")
 
-        if tool_ctx.get("warehouse_stats"):
-            ws = tool_ctx["warehouse_stats"]
-            warehouse_ctx += (
-                f"\n[系统注入：数据仓库概况] "
-                f"总记录 {ws['total']} 条，已深度采集 {ws['deep_collected']} 条。\n"
-            )
-
-        if tool_ctx.get("deep_collect_result") and tool_ctx["deep_collect_result"].get("success"):
-            dc = tool_ctx["deep_collect_result"]
-            warehouse_ctx += (
-                f"\n[系统注入：深度采集结果]\n"
-                f"标题: {dc.get('title','')}\n"
-                f"内容: {dc.get('content','')[:1500]}\n"
-            )
-
-        # 构建消息
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt + warehouse_ctx})
-        elif warehouse_ctx:
-            messages.append({"role": "system", "content": warehouse_ctx})
-        messages.append({"role": "user", "content": message})
-
-        # SSE 响应头
+        # ── 构建消息 ──
         self.set_header("Content-Type", "text/event-stream")
         self.set_header("Cache-Control", "no-cache")
         self.set_header("Connection", "keep-alive")
         self.set_header("X-Accel-Buffering", "no")
 
-        # 发送员工名称事件（供前端显示名称而非 🤖）
         emp_name = emp.get("name", "数字员工")
         self.write(
             f"event: employee\ndata: {json.dumps({'name': emp_name, 'type': emp.get('employee_type', 'llm')})}\n\n"
@@ -763,56 +967,48 @@ class UserEmployeeInvokeHandler(BaseHandler):
         total_tokens = 0
         api_success = False
 
+        warehouse_ctx = ""
+        if tool_ctx:
+            result_data = tool_ctx.get("result", {})
+            if isinstance(result_data, dict):
+                items = result_data.get("items", [])
+                if items:
+                    warehouse_ctx = "\n\n[工具查询结果]\n"
+                    for i, item in enumerate(items[:5], 1):
+                        warehouse_ctx += (
+                            f"{i}. {item.get('title','')[:100]}\n"
+                            f"   摘要: {(item.get('summary','') or '')[:200]}\n"
+                        )
+                    warehouse_ctx += f"共 {len(items)} 条结果。请基于以上真实数据回答。"
+
+        messages = []
+        full_system = _build_system_prompt(system_prompt) + warehouse_ctx
+        messages.append({"role": "system", "content": full_system})
+        messages.append({"role": "user", "content": message})
+
         if api_key:
             from app.utils.security import validate_url_safe
             safe, reason = validate_url_safe(api_base)
             if not safe:
-                self.write(
-                    f"data: {json.dumps({'error': f'API Base URL 不安全: {reason}'})}\n\n"
-                )
-                self.write(f"data: [DONE]\n\n")
-                await self.flush()
+                await _sse_write(self, f"API Base URL 不安全: {reason}")
+                await _sse_done(self)
                 return
 
-            payload = json.dumps({
-                "model": model_name,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
+            raw_data, err = await _call_llm_api_async(api_base, api_key, {
+                "model": model_name, "messages": messages,
+                "temperature": temperature, "max_tokens": max_tokens,
                 "stream": True,
-            }).encode('utf-8')
-
-            def _sync_stream_call():
-                import urllib.request
-                try:
-                    req = urllib.request.Request(
-                        f"{api_base}/chat/completions",
-                        data=payload,
-                        headers={
-                            "Content-Type": "application/json; charset=utf-8",
-                            "Authorization": f"Bearer {api_key}",
-                        },
-                    )
-                    with urllib.request.urlopen(req, timeout=120) as resp:
-                        return resp.read(), None
-                except Exception as e:
-                    return b"", str(e)
-
-            loop = asyncio.get_event_loop()
-            raw_data, err = await loop.run_in_executor(
-                _user_chat_executor, _sync_stream_call
-            )
+            })
 
             if err is None:
                 api_success = True
                 content_chars = 0
                 for line in raw_data.split(b"\n"):
-                    line = line.decode("utf-8", errors="replace").strip()
-                    if line.startswith("data: "):
-                        data_str = line[6:]
+                    line_str = line.decode("utf-8", errors="replace").strip()
+                    if line_str.startswith("data: "):
+                        data_str = line_str[6:]
                         if data_str == "[DONE]":
-                            self.write(f"data: [DONE]\n\n")
-                            await self.flush()
+                            await _sse_done(self)
                             break
                         try:
                             chunk = json.loads(data_str)
@@ -820,22 +1016,16 @@ class UserEmployeeInvokeHandler(BaseHandler):
                             content = delta.get("content", "")
                             if content:
                                 content_chars += len(content)
-                                self.write(
-                                    f"data: {json.dumps({'content': content})}\n\n"
-                                )
-                                await self.flush()
-                            if "usage" in chunk and chunk.get("usage"):
+                                await _sse_write(self, content)
+                            if chunk.get("usage"):
                                 total_tokens = chunk["usage"].get("total_tokens", 0)
                         except json.JSONDecodeError:
                             pass
                 if total_tokens == 0 and content_chars > 0:
                     total_tokens = max(1, content_chars // 2)
             else:
-                logger.warning(
-                    f"用户员工调用 API 失败: {err}，回退到本地 Mock"
-                )
+                logger.warning(f"员工 API 调用失败: {err}")
 
-        # Mock 回退
         if not api_success:
             total_tokens = await self._mock_employee_response(emp, message, tool_ctx)
 
@@ -843,10 +1033,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
             AiModelRepository.add_tokens(model["id"], total_tokens)
 
         elapsed = round(_time.time() - start_time, 2)
-        self.write(
-            f"event: stats\ndata: {json.dumps({'tokens': total_tokens, 'mock': not api_success, 'elapsed': elapsed})}\n\n"
-        )
-        await self.flush()
+        await _sse_stats(self, total_tokens, not api_success, elapsed)
 
         write_audit_log(
             action="USER_EMPLOYEE_INVOKE",
@@ -857,9 +1044,9 @@ class UserEmployeeInvokeHandler(BaseHandler):
         )
 
     async def _mock_employee_response(
-        self, emp: dict, message: str, tool_results: dict = None
+        self, emp: dict, message: str, tool_ctx: dict = None
     ) -> int:
-        """Mock 数字员工响应。"""
+        """Mock 数字员工响应（MCP 增强版）。"""
         name = emp.get("name", "数字员工")
         skills_list = []
         try:
@@ -868,73 +1055,61 @@ class UserEmployeeInvokeHandler(BaseHandler):
             pass
         crawl4ai_on = emp.get("crawl4ai_enabled", 0) == 1
 
-        if tool_results is None:
-            tool_results = await self._execute_employee_tools(emp, message)
+        if tool_ctx is None:
+            match = _mcp_client.match_tool_by_query(message)
+            if match:
+                tool_name, arguments = match
+                tool = _mcp_server.get_tool(tool_name)
+                if tool:
+                    try:
+                        result = await tool.call(arguments)
+                        tool_ctx = {"tool_name": tool_name, "result": result}
+                    except Exception:
+                        tool_ctx = {}
+                else:
+                    tool_ctx = {}
+            else:
+                tool_ctx = {}
 
         lines = [f"🤖 **{name}** 为您服务。\n"]
 
-        intent = tool_results.get("intent", "general")
-        if intent == "warehouse_query":
-            lines.append(
-                f"📊 在数据仓库中搜索「{tool_results.get('keyword', message)}」...\n"
-            )
-        elif intent == "warehouse_list":
-            lines.append("📋 获取数据仓库最新内容...\n")
-        elif intent == "deep_collect" and crawl4ai_on:
-            lines.append("🕷️ 正在深度采集网页内容...\n")
-        elif intent == "warehouse_stats":
-            lines.append("📈 数据仓库统计信息...\n")
+        if tool_ctx and tool_ctx.get("tool_name"):
+            tool_name = tool_ctx["tool_name"]
+            result = tool_ctx.get("result", {})
+            lines.append(f"🔧 已调用 MCP 工具: **{tool_name}**\n")
 
-        if tool_results.get("warehouse_data"):
-            lines.append(
-                f"\n**数据仓库查询结果**（共 {tool_results['warehouse_count']} 条）：\n"
-            )
-            for i, item in enumerate(tool_results["warehouse_data"][:5], 1):
-                title = item.get("title", "无标题")[:80]
-                link = item.get("link", "")[:60]
-                source = item.get("source_name", "未知来源")
-                summary = (item.get("summary", "") or "")[:100]
-                lines.append(f"{i}. **{title}**")
-                if summary:
-                    lines.append(f"   > {summary}")
-                lines.append(f"   📎 来源: {source}")
-                if link:
-                    lines.append(f"   🔗 {link}")
-                lines.append("")
-            if tool_results["warehouse_count"] > 5:
-                lines.append(
-                    f"... 还有 {tool_results['warehouse_count'] - 5} 条结果未显示\n"
-                )
-
-        if tool_results.get("deep_collect_result"):
-            dc = tool_results["deep_collect_result"]
-            if dc.get("success"):
-                lines.append(
-                    f"\n✅ 深度采集完成！\n"
-                    f"- 标题: {dc.get('title', 'N/A')[:100]}\n"
-                    f"- 内容长度: {dc.get('content_size', 0)} 字符\n"
-                )
-                content_preview = (dc.get("content", "") or "")[:500]
-                if content_preview:
-                    lines.append(f"\n**正文预览**:\n{content_preview}\n...\n")
-            else:
-                lines.append(
-                    f"\n⚠️ 深度采集失败: {dc.get('error', '未知错误')}\n"
-                )
-
-        if tool_results.get("warehouse_stats"):
-            ws = tool_results["warehouse_stats"]
-            lines.append(
-                f"\n📈 **数据仓库概况**:\n"
-                f"- 总记录数: {ws.get('total', 0)}\n"
-                f"- 已深度采集: {ws.get('deep_collected', 0)}\n"
-            )
-
-        if (
-            not tool_results.get("warehouse_data")
-            and not tool_results.get("deep_collect_result")
-            and not tool_results.get("warehouse_stats")
-        ):
+            if isinstance(result, dict):
+                if "items" in result:
+                    items = result["items"]
+                    lines.append(f"\n📊 查询结果（共 {len(items)} 条）：\n")
+                    for i, item in enumerate(items[:5], 1):
+                        title = item.get("title", "无标题")[:80]
+                        source = item.get("source_name", "未知来源")
+                        summary = (item.get("summary", "") or "")[:100]
+                        link = item.get("link", "")
+                        lines.append(f"{i}. **{title}**")
+                        if summary:
+                            lines.append(f"   > {summary}")
+                        lines.append(f"   📎 {source}")
+                        if link:
+                            lines.append(f"   🔗 {link}")
+                        lines.append("")
+                elif "total" in result:
+                    lines.append(
+                        f"\n📈 **数据仓库概况**:\n"
+                        f"- 总记录数: {result.get('total', 0)}\n"
+                        f"- 已深度采集: {result.get('deep_collected', 0)}\n"
+                    )
+                elif result.get("success") is not None:
+                    if result["success"]:
+                        lines.append(
+                            f"\n✅ 深度采集完成\n"
+                            f"- 标题: {result.get('title', 'N/A')[:100]}\n"
+                            f"- 内容长度: {result.get('content_size', 0)} 字符\n"
+                        )
+                    else:
+                        lines.append(f"\n⚠️ 操作失败: {result.get('error', '未知错误')}\n")
+        else:
             lines.append(f"\n您问：「{message}」\n")
             skills_text = "、".join(skills_list) if skills_list else "通用助手"
             lines.append(f"🔧 我的技能: {skills_text}")
@@ -945,115 +1120,20 @@ class UserEmployeeInvokeHandler(BaseHandler):
             lines.append("  • 「搜索 AI」— 在数据仓库中搜索关键词")
             if crawl4ai_on:
                 lines.append("  • 「深度采集 https://...」— 抓取网页正文")
-            lines.append("\n⚠️ 当前为本地智能模式。配置 API Key 后将启用 AI 大模型对话。")
+            lines.append("\n⚠️ 当前为本地智能模式（MCP 工具已集成）。")
 
         full_reply = "\n".join(lines)
         for ch in full_reply:
-            self.write(f"data: {json.dumps({'content': ch})}\n\n")
-            await self.flush()
+            await _sse_write(self, ch)
             await asyncio.sleep(0.01)
+        await _sse_done(self)
 
-        self.write(f"data: [DONE]\n\n")
-        await self.flush()
-
-        chinese_chars = sum(1 for c in full_reply if '\u4e00' <= c <= '\u9fff')
-        other_chars = len(full_reply) - chinese_chars
-        return max(1, chinese_chars + other_chars // 4)
-
-    async def _execute_employee_tools(self, emp: dict, message: str) -> dict:
-        """根据用户意图执行工具调用。"""
-        result = {"intent": "general"}
-        msg_lower = message.lower().strip()
-        crawl4ai_on = emp.get("crawl4ai_enabled", 0) == 1
-
-        search_keywords = ["搜索", "查找", "查询", "找", "search", "有没有"]
-        list_keywords = [
-            "数据仓库", "最新数据", "最近采集", "仓库列表",
-            "列出", "有什么数据", "查看数据", "看看数据",
-        ]
-        stats_keywords = ["统计", "概况", "有多少", "数量"]
-        crawl_keywords = ["深度采集", "抓取", "采集网页", "爬取", "crawl", "fetch"]
-
-        # crawl 需同时有关键词+URL，否则继续匹配其他意图
-        if any(kw in msg_lower for kw in crawl_keywords) and crawl4ai_on:
-            url_match = re.search(r'https?://[^\s]+', message)
-            if url_match:
-                result["intent"] = "deep_collect"
-                result["url"] = url_match.group(0)
-        if not result["intent"]:
-            if any(kw in msg_lower for kw in stats_keywords):
-                result["intent"] = "warehouse_stats"
-            elif any(kw in msg_lower for kw in search_keywords):
-                result["intent"] = "warehouse_query"
-                keyword = message
-                for kw in search_keywords:
-                    keyword = keyword.replace(kw, "")
-                result["keyword"] = keyword.strip() or message
-            elif any(kw in msg_lower for kw in list_keywords):
-                result["intent"] = "warehouse_list"
-            elif len(message) < 20 and not message.startswith("http"):
-                result["intent"] = "warehouse_query"
-                result["keyword"] = message
-
-        try:
-            if result["intent"] in ("warehouse_query", "warehouse_list"):
-                keyword = result.get("keyword", "")
-                rows, total = DataWarehouseRepository.get_all(
-                    page=1, page_size=10, keyword=keyword
-                )
-                result["warehouse_data"] = [dict(r) for r in rows]
-                result["warehouse_count"] = total
-
-            if result["intent"] == "warehouse_stats":
-                from app.models.db import get_db
-                with get_db() as conn:
-                    total = conn.execute(
-                        "SELECT COUNT(*) as cnt FROM data_warehouse"
-                    ).fetchone()["cnt"]
-                    deep = conn.execute(
-                        "SELECT COUNT(*) as cnt FROM data_warehouse "
-                        "WHERE is_deep_collected = 1"
-                    ).fetchone()["cnt"]
-                result["warehouse_stats"] = {"total": total, "deep_collected": deep}
-
-            if result["intent"] == "deep_collect" and crawl4ai_on:
-                url = result.get("url", "")
-                if url:
-                    from app.utils.security import validate_url_safe
-                    safe, reason = validate_url_safe(url)
-                    if safe:
-                        try:
-                            loop = asyncio.get_event_loop()
-                            status, title, content, error = await loop.run_in_executor(
-                                _user_chat_executor,
-                                lambda: _sync_deep_collect(url),
-                            )
-                            result["deep_collect_result"] = {
-                                "success": status == 200,
-                                "title": title,
-                                "content": content[:2000] if content else "",
-                                "content_size": len(content) if content else 0,
-                                "error": error,
-                            }
-                        except Exception as e:
-                            result["deep_collect_result"] = {
-                                "success": False,
-                                "error": str(e),
-                            }
-                    else:
-                        result["deep_collect_result"] = {
-                            "success": False,
-                            "error": f"URL 安全校验失败: {reason}",
-                        }
-        except Exception as e:
-            logger.error(f"用户员工工具执行异常: {e}")
-            result["tool_error"] = str(e)
-
-        return result
+        return _estimate_tokens(full_reply)
 
     async def _invoke_api_employee(self, emp: dict, message: str):
         """API 型员工调用 — SSE 流式返回。"""
         import time as _time
+        import urllib.parse
         _start = _time.time()
 
         api_url = emp.get("api_url", "")
@@ -1066,13 +1146,11 @@ class UserEmployeeInvokeHandler(BaseHandler):
         if not api_url:
             self.set_header("Content-Type", "text/event-stream")
             self.set_header("Cache-Control", "no-cache")
-            self.write(f"data: {json.dumps({'error': 'API 型员工未配置接口地址'})}\n\n")
-            self.write(f"data: [DONE]\n\n")
-            await self.flush()
+            await _sse_write(self, "API 型员工未配置接口地址")
+            await _sse_done(self)
             return
 
         try:
-            import urllib.parse
             encoded_msg = urllib.parse.quote(message, safe="")
             api_url = api_url.replace("{message}", encoded_msg)
             api_params = api_params.replace("{message}", encoded_msg)
@@ -1092,143 +1170,74 @@ class UserEmployeeInvokeHandler(BaseHandler):
         if not safe:
             self.set_header("Content-Type", "text/event-stream")
             self.set_header("Cache-Control", "no-cache")
-            self.write(f"data: {json.dumps({'error': f'API URL 不安全: {reason}'})}\n\n")
-            self.write(f"data: [DONE]\n\n")
-            await self.flush()
+            await _sse_write(self, f"API URL 不安全: {reason}")
+            await _sse_done(self)
             return
 
-        # SSE 响应头
         self.set_header("Content-Type", "text/event-stream")
         self.set_header("Cache-Control", "no-cache")
         self.set_header("Connection", "keep-alive")
         self.set_header("X-Accel-Buffering", "no")
 
-        # 发送员工名称事件
         emp_name = emp.get("name", "数字员工")
         self.write(
             f"event: employee\ndata: {json.dumps({'name': emp_name, 'type': 'api'})}\n\n"
         )
         await self.flush()
 
-        import urllib.request
-
         def _sync_api_call():
+            import urllib.request
             try:
-                if api_method == "POST":
-                    data = api_params.encode('utf-8') if api_params else None
-                    req = urllib.request.Request(
-                        api_url, data=data, headers=headers, method="POST"
-                    )
-                elif api_method == "GET":
+                if api_method.upper() == "POST":
+                    data = api_params.encode("utf-8") if api_params else None
+                    req = urllib.request.Request(api_url, data=data, headers=headers, method="POST")
+                else:
                     full_url = api_url
                     if api_params:
                         full_url += ("&" if "?" in api_url else "?") + api_params
-                    req = urllib.request.Request(full_url, headers=headers, method="GET")
-                else:
-                    data = api_params.encode('utf-8') if api_params else None
-                    req = urllib.request.Request(
-                        api_url, data=data, headers=headers, method=api_method
-                    )
+                    req = urllib.request.Request(full_url, headers=headers)
                 with urllib.request.urlopen(req, timeout=30) as resp:
-                    body = resp.read().decode("utf-8", errors="replace")
-                    return resp.status, body, None
+                    return resp.read().decode("utf-8", errors="replace"), resp.status, None
             except Exception as e:
-                return 0, "", str(e)
+                return "", 0, str(e)
 
         loop = asyncio.get_event_loop()
-        status, body, err = await loop.run_in_executor(
-            _user_chat_executor, _sync_api_call
-        )
+        body, status, err = await loop.run_in_executor(_user_chat_executor, _sync_api_call)
 
         if err:
-            self.write(f"data: {json.dumps({'content': f'❌ API 调用失败: {err}'})}\n\n")
-            self.write(f"data: [DONE]\n\n")
-            await self.flush()
-        else:
-            # 尝试解析 card 模板
-            card_data = None
-            if response_template:
-                try:
-                    result_json = json.loads(body)
-                    card_data = self._build_card_from_template(
-                        response_template, result_json, emp_name
-                    )
-                except (json.JSONDecodeError, TypeError):
-                    pass
+            await _sse_write(self, f"API 调用失败: {err}")
+            await _sse_done(self)
+            return
 
-            # 流式输出 API 返回内容
-            content_text = body
+        if response_template:
             try:
-                parsed = json.loads(body)
-                content_text = json.dumps(parsed, ensure_ascii=False, indent=2)
-            except (json.JSONDecodeError, TypeError):
+                import re as _re
+                rendered = response_template
+                data_obj = {}
+                try:
+                    data_obj = json.loads(body)
+                except (json.JSONDecodeError, TypeError):
+                    data_obj = {"raw": body}
+                for key, value in data_obj.items():
+                    if isinstance(value, str):
+                        rendered = rendered.replace("{{" + key + "}}", value)
+                rendered = _re.sub(r'\{\{.*?\}\}', '', rendered)
+                body = rendered
+            except Exception:
                 pass
 
-            # 分块发送内容
-            chunk_size = 50
-            for i in range(0, len(content_text), chunk_size):
-                chunk = content_text[i:i + chunk_size]
-                self.write(f"data: {json.dumps({'content': chunk})}\n\n")
-                await self.flush()
-                await asyncio.sleep(0.01)
+        for ch in body[:5000]:
+            await _sse_write(self, ch)
+            await asyncio.sleep(0.01)
+        await _sse_done(self)
 
-            self.write(f"data: [DONE]\n\n")
-            await self.flush()
-
-            # 发送卡片（如果有）
-            if card_data:
-                self.write(
-                    f"event: card\ndata: {json.dumps(card_data, ensure_ascii=False)}\n\n"
-                )
-                await self.flush()
-
-        # 发送统计
         elapsed = round(_time.time() - _start, 2)
-        self.write(
-            f"event: stats\ndata: {json.dumps({'tokens': 0, 'mock': False, 'elapsed': elapsed})}\n\n"
-        )
-        await self.flush()
+        await _sse_stats(self, 0, False, elapsed)
 
         write_audit_log(
             action="USER_EMPLOYEE_INVOKE",
             username=self.current_user,
             target=f"employee:{emp['id']}",
-            detail=f"type=api, status={status}, elapsed={elapsed}s",
+            detail=f"api_call, status={status}, elapsed={elapsed}s",
             client_ip=self.request.remote_ip or "",
         )
-
-    def _build_card_from_template(
-        self, template_str: str, api_result: dict, emp_name: str
-    ) -> dict:
-        """根据 response_render_template 构建卡片数据。"""
-        card = {"title": emp_name, "type": "default", "data": {}}
-        try:
-            tmpl = json.loads(template_str)
-        except (json.JSONDecodeError, TypeError):
-            # 非 JSON 模板，直接放入原始数据
-            card["data"] = api_result
-            return card
-
-        card["title"] = tmpl.get("title", emp_name)
-        card["type"] = tmpl.get("type", "default")
-
-        # 按映射提取字段
-        mapping = tmpl.get("mapping", {})
-        if mapping:
-            extracted = {}
-            for target_key, source_path in mapping.items():
-                # 支持点号路径如 "data.temp" 或 "weather.temperature"
-                value = api_result
-                for part in source_path.split("."):
-                    if isinstance(value, dict) and part in value:
-                        value = value[part]
-                    else:
-                        value = None
-                        break
-                if value is not None:
-                    extracted[target_key] = value
-            card["data"] = extracted
-        else:
-            card["data"] = api_result
-
-        return card
