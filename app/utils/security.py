@@ -59,6 +59,10 @@ def validate_url_safe(url: str) -> tuple[bool, str]:
     2. 不允许包含 CR/LF（防 Header 注入）
     3. 不允许指向内网/回环地址
     4. 不允许空 hostname
+
+    注意: 存在 DNS 重绑定攻击窗口（TOCTOU），
+    DNS 解析验证与实际 HTTP 请求之间 DNS 可能变化。
+    如需更强的防护，建议在网络层（防火墙）限制出站流量。
     """
     if not url:
         return False, "URL 为空"
