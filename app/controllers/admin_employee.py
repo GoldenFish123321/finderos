@@ -14,12 +14,19 @@ from app.models.digital_employee import (
     DigitalEmployeeRepository, EMPLOYEE_TYPES,
 )
 from app.models.ai_model import AiModelRepository
+from app.models.data_warehouse import DataWarehouseRepository
 from app.utils.security import write_audit_log
 
 logger = logging.getLogger(__name__)
 
 # SSE 对话线程池（复用模型引擎的线程池模式）
 _invoke_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="emp")
+
+
+def _sync_deep_collect(url: str, timeout: int = 30):
+    """同步深度采集（在线程池中执行）。"""
+    from app.services.deep_collector import deep_fetch
+    return deep_fetch(url, timeout=timeout)
 
 
 class EmployeeListHandler(AdminBaseHandler):
@@ -265,10 +272,39 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         temperature = model["temperature"]
         max_tokens = model["max_tokens"]
 
+        # 注入数据仓库上下文：让 LLM 型员工能引用真实数据
+        tool_ctx = await self._execute_employee_tools(emp, message)
+        warehouse_ctx = ""
+        if tool_ctx.get("warehouse_data"):
+            items = tool_ctx["warehouse_data"][:5]
+            warehouse_ctx = "\n\n[系统注入：数据仓库查询结果]\n"
+            for i, item in enumerate(items, 1):
+                warehouse_ctx += (
+                    f"{i}. 标题: {item.get('title','')}\n"
+                    f"   摘要: {item.get('summary','')}\n"
+                    f"   来源: {item.get('source_name','')}\n"
+                    f"   链接: {item.get('link','')}\n"
+                )
+            warehouse_ctx += f"共 {tool_ctx['warehouse_count']} 条匹配结果。请基于以上真实数据回答用户问题。\n"
+
+        if tool_ctx.get("warehouse_stats"):
+            ws = tool_ctx["warehouse_stats"]
+            warehouse_ctx += f"\n[系统注入：数据仓库概况] 总记录 {ws['total']} 条，已深度采集 {ws['deep_collected']} 条。\n"
+
+        if tool_ctx.get("deep_collect_result") and tool_ctx["deep_collect_result"].get("success"):
+            dc = tool_ctx["deep_collect_result"]
+            warehouse_ctx += (
+                f"\n[系统注入：深度采集结果]\n"
+                f"标题: {dc.get('title','')}\n"
+                f"内容: {dc.get('content','')[:1500]}\n"
+            )
+
         # 构建消息
         messages = []
         if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "system", "content": system_prompt + warehouse_ctx})
+        elif warehouse_ctx:
+            messages.append({"role": "system", "content": warehouse_ctx})
         messages.append({"role": "user", "content": message})
 
         # SSE 响应头
@@ -365,33 +401,175 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         )
 
     async def _mock_llm_response(self, emp: dict, message: str) -> int:
-        """LLM 型员工 Mock 回退响应。"""
+        """LLM 型员工智能响应：解析意图 → 执行工具 → 格式化回复。"""
         name = emp.get("name", "数字员工")
         skills_list = []
         try:
             skills_list = json.loads(emp.get("skills", "[]"))
         except (json.JSONDecodeError, TypeError):
             pass
-        skills_text = "、".join(skills_list) if skills_list else "通用"
+        crawl4ai_on = emp.get("crawl4ai_enabled", 0) == 1
 
-        mock_reply = (
-            f"🤖 您好！我是 **{name}**。\n\n"
-            f"您刚才问：「{message}」\n\n"
-            f"🔧 我的技能标签：{skills_text}\n"
-            f"📝 系统提示词：{emp.get('system_prompt', '（未设置）')[:100]}\n\n"
-            f"⚠️ 当前为 Mock 模式。配置有效的 API Key 后，将自动切换为真实 AI 对话。"
-        )
-        for ch in mock_reply:
+        # 1. 执行工具调用：根据意图自动查询数据仓库 / 触发采集
+        tool_results = await self._execute_employee_tools(emp, message)
+
+        # 2. 构建智能回复
+        lines = [f"🤖 **{name}** 为您服务。\n"]
+
+        # 意图识别摘要
+        intent = tool_results.get("intent", "general")
+        if intent == "warehouse_query":
+            lines.append(f"📊 在数据仓库中搜索「{tool_results.get('keyword', message)}」...\n")
+        elif intent == "warehouse_list":
+            lines.append("📋 获取数据仓库最新内容...\n")
+        elif intent == "deep_collect" and crawl4ai_on:
+            lines.append("🕷️ 正在通过 Crawl4ai 深度采集网页内容...\n")
+        elif intent == "warehouse_stats":
+            lines.append("📈 数据仓库统计信息...\n")
+
+        # 工具执行结果
+        if tool_results.get("warehouse_data"):
+            lines.append(f"\n**数据仓库查询结果**（共 {tool_results['warehouse_count']} 条）：\n")
+            for i, item in enumerate(tool_results["warehouse_data"][:5], 1):
+                title = item.get("title", "无标题")[:80]
+                link = item.get("link", "")[:60]
+                source = item.get("source_name", "未知来源")
+                summary = (item.get("summary", "") or "")[:100]
+                lines.append(f"{i}. **{title}**")
+                if summary:
+                    lines.append(f"   > {summary}")
+                lines.append(f"   📎 来源: {source}")
+                if link:
+                    lines.append(f"   🔗 {link}")
+                lines.append("")
+            if tool_results["warehouse_count"] > 5:
+                lines.append(f"... 还有 {tool_results['warehouse_count'] - 5} 条结果未显示\n")
+
+        if tool_results.get("deep_collect_result"):
+            dc = tool_results["deep_collect_result"]
+            if dc.get("success"):
+                lines.append(f"\n✅ 深度采集完成！\n- 标题: {dc.get('title', 'N/A')[:100]}\n- 内容长度: {dc.get('content_size', 0)} 字符\n")
+                content_preview = (dc.get("content", "") or "")[:500]
+                if content_preview:
+                    lines.append(f"\n**正文预览**:\n{content_preview}\n...\n")
+            else:
+                lines.append(f"\n⚠️ 深度采集失败: {dc.get('error', '未知错误')}\n")
+
+        if tool_results.get("warehouse_stats"):
+            ws = tool_results["warehouse_stats"]
+            lines.append(f"\n📈 **数据仓库概况**:\n- 总记录数: {ws.get('total', 0)}\n- 已深度采集: {ws.get('deep_collected', 0)}\n")
+
+        if not tool_results.get("warehouse_data") and not tool_results.get("deep_collect_result") and not tool_results.get("warehouse_stats"):
+            lines.append(f"\n您问：「{message}」\n")
+            skills_text = "、".join(skills_list) if skills_list else "通用助手"
+            lines.append(f"🔧 我的技能: {skills_text}")
+            if crawl4ai_on:
+                lines.append(f"🕷️ Crawl4ai 网页采集: 已启用")
+            lines.append(f"\n💡 试试这些指令:")
+            lines.append(f"  • 「查看数据仓库」— 列出最新采集数据")
+            lines.append(f"  • 「搜索 AI」— 在数据仓库中搜索关键词")
+            if crawl4ai_on:
+                lines.append(f"  • 「深度采集 https://...」— 抓取网页正文")
+            lines.append(f"\n⚠️ 当前为本地智能模式。配置 API Key 后将启用 AI 大模型对话。")
+
+        full_reply = "\n".join(lines)
+        for ch in full_reply:
             self.write(f"data: {json.dumps({'content': ch})}\n\n")
             await self.flush()
-            await asyncio.sleep(0.015)
+            await asyncio.sleep(0.01)
 
         self.write(f"data: [DONE]\n\n")
         await self.flush()
 
-        chinese_chars = sum(1 for c in mock_reply if '\u4e00' <= c <= '\u9fff')
-        other_chars = len(mock_reply) - chinese_chars
+        chinese_chars = sum(1 for c in full_reply if '\u4e00' <= c <= '\u9fff')
+        other_chars = len(full_reply) - chinese_chars
         return max(1, chinese_chars + other_chars // 4)
+
+    async def _execute_employee_tools(self, emp: dict, message: str) -> dict:
+        """根据用户消息意图执行对应的工具调用。返回工具执行结果字典。"""
+        result = {"intent": "general"}
+        msg_lower = message.lower().strip()
+        crawl4ai_on = emp.get("crawl4ai_enabled", 0) == 1
+
+        # 意图: 搜索数据仓库
+        search_keywords = ["搜索", "查找", "查询", "找", "search", "数据仓库里有", "有没有"]
+        list_keywords = ["数据仓库", "最新数据", "最近采集", "仓库列表", "列出", "有什么数据", "查看数据", "看看数据"]
+        stats_keywords = ["统计", "概况", "有多少", "数量"]
+        crawl_keywords = ["深度采集", "抓取", "采集网页", "爬取", "crawl", "fetch"]
+
+        # 检测意图
+        if any(kw in msg_lower for kw in crawl_keywords) and crawl4ai_on:
+            # 提取 URL
+            import re
+            url_match = re.search(r'https?://[^\s]+', message)
+            if url_match:
+                result["intent"] = "deep_collect"
+                result["url"] = url_match.group(0)
+            else:
+                result["intent"] = "general"
+        elif any(kw in msg_lower for kw in stats_keywords):
+            result["intent"] = "warehouse_stats"
+        elif any(kw in msg_lower for kw in search_keywords):
+            result["intent"] = "warehouse_query"
+            # 提取搜索关键词（去掉指令词）
+            keyword = message
+            for kw in search_keywords:
+                keyword = keyword.replace(kw, "")
+            result["keyword"] = keyword.strip() or message
+        elif any(kw in msg_lower for kw in list_keywords):
+            result["intent"] = "warehouse_list"
+        elif len(message) < 20 and not message.startswith("http"):
+            # 短消息可能是关键词搜索
+            result["intent"] = "warehouse_query"
+            result["keyword"] = message
+
+        # 执行工具
+        try:
+            if result["intent"] in ("warehouse_query", "warehouse_list"):
+                keyword = result.get("keyword", "")
+                rows, total = DataWarehouseRepository.get_all(
+                    page=1, page_size=10, keyword=keyword
+                )
+                result["warehouse_data"] = [dict(r) for r in rows]
+                result["warehouse_count"] = total
+
+            if result["intent"] == "warehouse_stats":
+                from app.models.db import get_db
+                with get_db() as conn:
+                    total = conn.execute("SELECT COUNT(*) as cnt FROM data_warehouse").fetchone()["cnt"]
+                    deep = conn.execute(
+                        "SELECT COUNT(*) as cnt FROM data_warehouse WHERE is_deep_collected = 1"
+                    ).fetchone()["cnt"]
+                result["warehouse_stats"] = {"total": total, "deep_collected": deep}
+
+            if result["intent"] == "deep_collect" and crawl4ai_on:
+                url = result.get("url", "")
+                if url:
+                    from app.utils.security import validate_url_safe
+                    safe, reason = validate_url_safe(url)
+                    if safe:
+                        try:
+                            loop = asyncio.get_event_loop()
+                            status, title, content, error = await loop.run_in_executor(
+                                _invoke_executor,
+                                lambda: _sync_deep_collect(url),
+                            )
+                            result["deep_collect_result"] = {
+                                "success": status == 200,
+                                "title": title,
+                                "content": content[:2000] if content else "",
+                                "content_size": len(content) if content else 0,
+                                "error": error,
+                            }
+                        except Exception as e:
+                            result["deep_collect_result"] = {"success": False, "error": str(e)}
+                    else:
+                        result["deep_collect_result"] = {"success": False, "error": f"URL 安全校验失败: {reason}"}
+        except Exception as e:
+            logger.error(f"员工工具执行异常: {e}")
+            result["tool_error"] = str(e)
+
+        return result
 
     async def _invoke_api_employee(self, emp: dict, message: str):
         """API 型员工调用：HTTP 代理 → JSON 响应。"""
