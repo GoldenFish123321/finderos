@@ -98,6 +98,7 @@ def init_db():
                 request_headers TEXT DEFAULT '{}',
                 is_enabled      INTEGER DEFAULT 1,
                 sort_order      INTEGER DEFAULT 0,
+                schedule_interval INTEGER DEFAULT 0,
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)

@@ -49,6 +49,7 @@ from app.controllers.admin_employee import (
     EmployeeTestPageHandler,
 )
 from app.models.db import init_db, seed_default_data
+from app.services.scheduler import CollectionScheduler
 
 # 配置结构化日志
 logging.basicConfig(
@@ -178,6 +179,10 @@ if __name__ == "__main__":
 
     # 创建应用
     app = make_app()
+
+    # 启动定时采集调度器 (v0.6.0)
+    scheduler = CollectionScheduler(app, check_interval_ms=60000)
+    scheduler.start()
 
     # 启动 HTTP 服务器
     bind_address = os.environ.get("BIND_ADDRESS", "127.0.0.1")

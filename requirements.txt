@@ -7,7 +7,7 @@ tornado>=6.4
 cryptography>=41.0
 
 # 可选：AI 爬虫组件（深度采集增强）
-# crawl4ai>=0.4
+crawl4ai>=0.4
 
 # 可选：如需异步 HTTP 客户端（提升 AI 对话并发性能）
 # aiohttp>=3.9

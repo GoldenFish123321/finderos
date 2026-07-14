@@ -23,6 +23,13 @@ from urllib.parse import urljoin, urlparse
 
 from app.utils.security import validate_url_safe
 
+# 尝试导入 crawl4ai（可选依赖，增强正文提取）
+try:
+    import crawl4ai  # noqa: F401
+    _HAS_CRAWL4AI = True
+except ImportError:
+    _HAS_CRAWL4AI = False
+
 logger = logging.getLogger(__name__)
 
 # 复用 collector 的 SSL 上下文和请求头
@@ -202,6 +209,15 @@ def deep_fetch(url: str, timeout: int = 30) -> Tuple[int, str, str, str]:
     """
     if not url:
         return 0, "", "", "URL 为空"
+
+    # 优先使用 Crawl4ai（如果已安装）
+    if _HAS_CRAWL4AI:
+        try:
+            c_result = _try_crawl4ai(url, timeout)
+            if c_result:
+                return c_result
+        except Exception as e:
+            logger.debug(f"Crawl4ai 采集失败，回退自研方案: {e}")
 
     # SSRF 校验
     is_safe, reason = validate_url_safe(url)
