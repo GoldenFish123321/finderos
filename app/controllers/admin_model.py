@@ -254,6 +254,7 @@ class ModelChatHandler(AdminBaseHandler):
                 self.write(f"data: {json.dumps({'error': f'API Base URL 不安全: {reason}'})}\n\n")
                 await self.flush()
                 self.write(f"event: stats\ndata: {json.dumps({'tokens': 0, 'mock': True})}\n\n")
+                self.write(f"data: [DONE]\n\n")
                 await self.flush()
                 return
 

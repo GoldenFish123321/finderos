@@ -327,6 +327,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             safe, reason = validate_url_safe(api_base)
             if not safe:
                 self.write(f"data: {json.dumps({'error': f'API Base URL 不安全: {reason}'})}\n\n")
+                self.write(f"data: [DONE]\n\n")
                 await self.flush()
                 return
 
