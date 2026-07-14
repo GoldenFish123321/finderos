@@ -602,12 +602,12 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             self.write({"code": 1, "msg": "API 型员工未配置接口地址"})
             return
 
-        # 替换模板变量（URL 中的 {message} 需要编码，参数模板中保持原文）
+        # 替换模板变量（URL 编码防止参数注入）
         try:
             import urllib.parse
             encoded_msg = urllib.parse.quote(message, safe="")
             api_url = api_url.replace("{message}", encoded_msg)
-            api_params = api_params.replace("{message}", message)
+            api_params = api_params.replace("{message}", encoded_msg)
         except Exception:
             pass
 

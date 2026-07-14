@@ -845,7 +845,8 @@ class UserEmployeeInvokeHandler(BaseHandler):
             import urllib.parse
             encoded_msg = urllib.parse.quote(message, safe="")
             api_url = api_url.replace("{message}", encoded_msg)
-            api_params = api_params.replace("{message}", message)
+            # URL 编码防止参数注入（&、= 等特殊字符不能直接拼入查询串）
+            api_params = api_params.replace("{message}", encoded_msg)
         except Exception:
             pass
 
