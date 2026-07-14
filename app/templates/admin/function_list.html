@@ -32,13 +32,13 @@
                 <tr>
                     <td>{{ f["id"] }}</td>
                     <td><i class="layui-icon {{ f['icon'] }}" style="font-size:20px;{% if f['is_enabled'] == 0 %}opacity:0.35;{% end %}"></i></td>
-                    <td>
+                    <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ f['name'] }}">
                         {% if f["parent_id"] %}
                         <span style="padding-left:20px;">├─</span>
                         {% end %}
                         {{ f["name"] }}
                     </td>
-                    <td><code style="padding:2px 6px;border-radius:3px;">{{ f["route_path"] or "—" }}</code></td>
+                    <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ f.get('route_path', '') }}"><code style="padding:2px 6px;border-radius:3px;">{{ f["route_path"] or "—" }}</code></td>
                     <td>{{ "二级" if f["parent_id"] else "一级" }}</td>
                     <td>{{ f["sort_order"] }}</td>
                     <td>

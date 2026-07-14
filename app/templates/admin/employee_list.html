@@ -4,11 +4,11 @@
 <style>
 /* 数字员工列表 — 深色科技风（使用 CSS 变量，与全局主题统一） */
 .emp-stats { display:flex; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
-.emp-stat-card { flex:1; min-width:140px; background:var(--bg-card); border-radius:var(--radius-md); padding:18px; text-align:center; border:1px solid var(--border-subtle); }
-.emp-stat-card .num { font-size:28px; font-weight:700; background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.emp-stat-card { flex:1; min-width:140px; background:var(--bg-card); border-radius:var(--radius-md); padding:20px 16px; text-align:center; border:1px solid var(--border-subtle); }
+.emp-stat-card .num { font-size:32px; font-weight:700; background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
 .emp-stat-card .label { font-size:13px; color:var(--text-muted); margin-top:4px; }
 .emp-tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
-.emp-tabs a { padding:8px 18px; border-radius:20px; font-size:13px; color:var(--text-muted); background:var(--bg-card); border:1px solid var(--border-subtle); text-decoration:none; transition:all var(--transition-fast); }
+.emp-tabs a { padding:6px 16px; border-radius:20px; font-size:13px; color:var(--text-muted); background:var(--bg-card); border:1px solid var(--border-subtle); text-decoration:none; transition:all var(--transition-fast); }
 .emp-tabs a.active, .emp-tabs a:hover { color:#fff; background:var(--accent-blue); border-color:var(--accent-blue); }
 .emp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:16px; }
 .emp-card { background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:20px; transition:all var(--transition-smooth); position:relative; overflow:hidden; backdrop-filter:blur(10px); }
