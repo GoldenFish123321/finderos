@@ -11,6 +11,7 @@ import io
 import logging
 import re
 import ssl
+import threading
 import urllib.parse
 import urllib.request
 import zlib
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 # 全局 CookieJar — 百度验证码需要先访问首页获取 BAIDUID 等 cookie
 _global_cookie_jar: Optional[CookieJar] = None
+_global_cookie_lock = threading.Lock()
 _global_ssl_ctx = ssl.create_default_context()
 
 # 预定义的 Chrome 138 TLS 指纹 header
@@ -220,28 +222,35 @@ PARSERS = {
 
 
 def _ensure_baidu_cookies():
-    """确保全局 CookieJar 中有百度的 BAIDUID cookie（绕过验证码）。"""
+    """确保全局 CookieJar 中有百度的 BAIDUID cookie（绕过验证码）。
+
+    使用线程锁保护 _global_cookie_jar 的读写，防止并发竞态。
+    """
     global _global_cookie_jar
     if _global_cookie_jar is not None:
         return
 
-    _global_cookie_jar = CookieJar()
-    opener = urllib.request.build_opener(
-        urllib.request.HTTPCookieProcessor(_global_cookie_jar),
-        urllib.request.HTTPSHandler(context=_global_ssl_ctx),
-    )
-    try:
-        req = urllib.request.Request("https://www.baidu.com/", headers=dict(_BASE_HEADERS))
-        resp = opener.open(req, timeout=10)
+    with _global_cookie_lock:
+        # 双重检查锁定：第一个线程获取锁后，第二个线程不再重新初始化
+        if _global_cookie_jar is not None:
+            return
+        _global_cookie_jar = CookieJar()
+        opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(_global_cookie_jar),
+            urllib.request.HTTPSHandler(context=_global_ssl_ctx),
+        )
         try:
-            resp.read()
-        finally:
-            resp.close()
-        cookie_count = len(list(_global_cookie_jar))
-        logger.info(f"百度 Cookie 预热成功: {cookie_count} 个")
-    except Exception as e:
-        logger.warning(f"百度 Cookie 预热失败: {e}")
-        _global_cookie_jar = None  # 重置，下次重试
+            req = urllib.request.Request("https://www.baidu.com/", headers=dict(_BASE_HEADERS))
+            resp = opener.open(req, timeout=10)
+            try:
+                resp.read()
+            finally:
+                resp.close()
+            cookie_count = len(list(_global_cookie_jar))
+            logger.info(f"百度 Cookie 预热成功: {cookie_count} 个")
+        except Exception as e:
+            logger.warning(f"百度 Cookie 预热失败: {e}")
+            _global_cookie_jar = None  # 重置，下次重试
 
 
 def _clean_html(html: str) -> str:
@@ -286,14 +295,16 @@ def fetch_and_parse(
         merged.update(headers)
         headers = merged
 
-    # 百度 URL 需要先获取 Cookie
+    # 百度 URL 需要先获取 Cookie（线程安全）
     if "baidu.com" in url:
         _ensure_baidu_cookies()
 
     try:
-        if _global_cookie_jar is not None and "baidu.com" in url:
+        # 局部引用避免全局变量在检查和使用之间被修改
+        cookie_jar = _global_cookie_jar
+        if cookie_jar is not None and "baidu.com" in url:
             opener = urllib.request.build_opener(
-                urllib.request.HTTPCookieProcessor(_global_cookie_jar),
+                urllib.request.HTTPCookieProcessor(cookie_jar),
                 urllib.request.HTTPSHandler(context=_global_ssl_ctx),
             )
             req = urllib.request.Request(url, headers=headers)
