@@ -160,7 +160,15 @@ class WatchSaveHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def post(self):
+        # 兼容两种前端传参格式：
+        # 1. 多个同名表单字段 result_ids=1&result_ids=2
+        # 2. 逗号分隔字符串 result_ids=1,2
         result_ids = self.get_body_arguments("result_ids")
+        if not result_ids:
+            ids_str = self.get_body_argument("result_ids", "")
+            if ids_str:
+                result_ids = [x.strip() for x in ids_str.split(",") if x.strip()]
+
         if not result_ids:
             self.write({"code": 1, "msg": "请选择要保存的结果"})
             return
