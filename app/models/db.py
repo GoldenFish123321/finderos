@@ -431,7 +431,7 @@ def _seed_default_models():
 
 
 def _seed_default_employees():
-    """种子：默认数字化员工（产业专员 + 天机助手）。"""
+    """种子：默认数字化员工（产业专员 + 天机助手 + 天气 + 采集专员 + 文案编写 + 新闻聚合 + 科普助手）。"""
     import json
     with get_db() as conn:
         existing = conn.execute("SELECT COUNT(*) as cnt FROM digital_employees").fetchone()
@@ -444,7 +444,7 @@ def _seed_default_employees():
                 (
                     1, "产业专员", "llm",
                     "专注于产业分析和行业研究的AI助手，能够追踪行业动态、分析产业链结构、生成产业报告",
-                    None,  # 自动使用默认模型
+                    None,
                     "你是一位专业的产业分析师，擅长：\n"
                     "1. 产业链结构分析与上下游关系梳理\n"
                     "2. 行业政策解读与趋势预判\n"
@@ -452,7 +452,7 @@ def _seed_default_employees():
                     "4. 技术路线演进追踪\n"
                     "请用专业但不晦涩的语言回答，引用数据时注明来源。",
                     json.dumps(["产业分析", "政策解读", "竞品分析", "趋势预判"], ensure_ascii=False),
-                    1,  # 启用 Crawl4ai 采集能力
+                    1,
                     1,
                 ),
             )
@@ -476,4 +476,111 @@ def _seed_default_employees():
                     1,
                 ),
             )
-            print("[种子] 默认数字化员工已创建（产业专员 + 天机助手）")
+            # 天气查询 — API 型数字员工（免费天气 API）
+            conn.execute(
+                "INSERT INTO digital_employees (id, name, employee_type, description, "
+                "api_url, api_method, api_headers, api_params_template, response_render_template, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    3, "天气", "api",
+                    "查询指定城市的天气信息，返回温度、天气状况、风力等",
+                    "https://wttr.in/{message}?format=j1",
+                    "GET",
+                    json.dumps({"Accept": "application/json"}, ensure_ascii=False),
+                    "",
+                    json.dumps({
+                        "type": "weather_card",
+                        "title": "{{current_condition.0.weatherDesc.0.value}}",
+                        "fields": [
+                            {"label": "温度", "value": "{{current_condition.0.temp_C}}°C"},
+                            {"label": "体感温度", "value": "{{current_condition.0.FeelsLikeC}}°C"},
+                            {"label": "湿度", "value": "{{current_condition.0.humidity}}%"},
+                            {"label": "风力", "value": "{{current_condition.0.windspeedKmph}} km/h"},
+                            {"label": "风向", "value": "{{current_condition.0.winddir16Point}}"},
+                        ]
+                    }, ensure_ascii=False),
+                    1,
+                ),
+            )
+            # 采集专员 — LLM 型数字员工（带 Crawl4ai 深度采集）
+            conn.execute(
+                "INSERT INTO digital_employees (id, name, employee_type, description, "
+                "model_id, system_prompt, skills, crawl4ai_enabled, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    4, "采集专员", "llm",
+                    "专注于数据采集与信息提取的AI助手，支持关键词搜索、深度采集、数据整理",
+                    None,
+                    "你是采集专员，专门负责数据采集和整理工作。你的核心能力：\n"
+                    "1. 根据关键词在数据仓库中搜索相关信息\n"
+                    "2. 对指定URL进行深度内容采集和正文提取\n"
+                    "3. 对采集结果进行分类、归纳和摘要\n"
+                    "4. 生成结构化的数据报告\n"
+                    "请高效、准确地完成采集任务，输出清晰的结构化结果。",
+                    json.dumps(["数据搜索", "深度采集", "内容提取", "数据整理"], ensure_ascii=False),
+                    1,
+                    1,
+                ),
+            )
+            # 文案编写 — LLM 型数字员工
+            conn.execute(
+                "INSERT INTO digital_employees (id, name, employee_type, description, "
+                "model_id, system_prompt, skills, crawl4ai_enabled, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    5, "文案编写", "llm",
+                    "专注于各类文案创作的AI助手，支持报告、方案、邮件、宣传稿等多种文体",
+                    None,
+                    "你是一位专业的文案撰写专家，擅长：\n"
+                    "1. 商业报告和行业分析报告的撰写\n"
+                    "2. 项目方案和策划书的编写\n"
+                    "3. 正式邮件和公文的起草\n"
+                    "4. 宣传稿、新闻稿的撰写\n"
+                    "5. 演讲稿和PPT大纲的制作\n"
+                    "请根据用户需求，输出格式规范、逻辑清晰、语言得体的专业文案。",
+                    json.dumps(["报告撰写", "方案策划", "公文起草", "宣传文案", "演讲稿"], ensure_ascii=False),
+                    0,
+                    1,
+                ),
+            )
+            # 新闻聚合 — LLM 型数字员工
+            conn.execute(
+                "INSERT INTO digital_employees (id, name, employee_type, description, "
+                "model_id, system_prompt, skills, crawl4ai_enabled, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    6, "新闻聚合", "llm",
+                    "专注于新闻资讯聚合与摘要的AI助手，能够快速整理热点新闻并生成简报",
+                    None,
+                    "你是新闻聚合助手，专门负责新闻资讯的检索与整理。你的核心能力：\n"
+                    "1. 从数据仓库中检索最新新闻和资讯\n"
+                    "2. 按主题/关键词整理新闻列表\n"
+                    "3. 生成新闻摘要和每日简报\n"
+                    "4. 追踪特定话题的新闻动态\n"
+                    "请输出清晰、有条理的新闻摘要，标注来源和时间。",
+                    json.dumps(["新闻检索", "资讯聚合", "热点追踪", "每日简报"], ensure_ascii=False),
+                    0,
+                    1,
+                ),
+            )
+            # 科普助手 — LLM 型数字员工
+            conn.execute(
+                "INSERT INTO digital_employees (id, name, employee_type, description, "
+                "model_id, system_prompt, skills, crawl4ai_enabled, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    7, "科普助手", "llm",
+                    "专注于知识科普与百科问答的AI助手，能够深入浅出地解释各类知识",
+                    None,
+                    "你是一位知识渊博的科普专家，擅长：\n"
+                    "1. 用通俗易懂的语言解释复杂概念\n"
+                    "2. 解答科学、历史、文化等各类百科问题\n"
+                    "3. 提供知识背景和延伸阅读建议\n"
+                    "4. 从数据仓库中引用相关数据和事实\n"
+                    "请用生动有趣但严谨准确的方式回答问题，必要时引用权威来源。",
+                    json.dumps(["百科问答", "知识科普", "概念解释", "学术参考"], ensure_ascii=False),
+                    0,
+                    1,
+                ),
+            )
+            print("[种子] 默认数字化员工已创建（7个：产业专员/天机助手/天气/采集专员/文案编写/新闻聚合/科普助手）")
