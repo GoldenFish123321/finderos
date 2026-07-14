@@ -113,6 +113,15 @@ class WatchSourceRepository:
             return new_status
 
     @staticmethod
+    def get_all_enabled() -> list:
+        """获取所有启用的瞭望源（含调度配置）。"""
+        with get_db() as conn:
+            return conn.execute(
+                "SELECT * FROM watch_sources WHERE is_enabled = 1 "
+                "AND schedule_interval > 0 ORDER BY sort_order ASC"
+            ).fetchall()
+
+    @staticmethod
     def get_count() -> int:
         """Get total source count."""
         with get_db() as conn:
