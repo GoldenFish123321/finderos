@@ -27,7 +27,7 @@ from app.controllers.admin_function import (
     FunctionListHandler, FunctionFormHandler, FunctionDeleteHandler, FunctionToggleHandler,
 )
 from app.controllers.admin_menu import MenuHandler, MenuSortHandler
-from app.controllers.admin_watch import WatchHandler, WatchSaveHandler
+from app.controllers.admin_watch import WatchHandler, WatchSaveHandler, WatchDeepCollectHandler
 from app.controllers.admin_watch_source import (
     WatchSourceListHandler, WatchSourceFormHandler,
     WatchSourceDeleteHandler, WatchSourceToggleHandler,
@@ -103,6 +103,7 @@ def make_app() -> tornado.web.Application:
             # 瞭望采集
             (r"/admin/watch", WatchHandler),
             (r"/admin/watch/save", WatchSaveHandler),
+            (r"/admin/watch/deep-collect", WatchDeepCollectHandler),
 
             # 瞭源管理
             (r"/admin/watch/source", WatchSourceListHandler),

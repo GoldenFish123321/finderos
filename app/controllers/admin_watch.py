@@ -245,3 +245,183 @@ class WatchSaveHandler(AdminBaseHandler):
             msg = f"所有 {skipped} 条结果已存在或已保存，无需重复操作"
 
         self.write({"code": 0, "msg": msg})
+
+
+class WatchDeepCollectHandler(AdminBaseHandler):
+    """瞭望采集页一站式深度采集（v0.2.5 新增）
+
+    选中采集结果 → 保存到数据仓库 → 立即深度采集正文内容。
+    用户无需先跳转到数据仓库页面再操作。
+    """
+
+    @tornado.web.authenticated
+    async def post(self):
+        import asyncio
+        import concurrent.futures
+
+        # 解析 result_ids（复用 WatchSaveHandler 的兼容逻辑）
+        raw_ids = (self.get_body_arguments("result_ids")
+                   or self.get_body_arguments("result_ids[]"))
+        if not raw_ids:
+            ids_str = self.get_body_argument("result_ids", "")
+            if not ids_str:
+                ids_str = self.get_body_argument("result_ids[]", "")
+            if ids_str:
+                raw_ids = [ids_str]
+            else:
+                try:
+                    body = json.loads(self.request.body)
+                    if isinstance(body, dict) and "result_ids" in body:
+                        raw_ids = body["result_ids"]
+                        if isinstance(raw_ids, (int, str)):
+                            raw_ids = [str(raw_ids)]
+                        else:
+                            raw_ids = [str(x) for x in raw_ids]
+                except (json.JSONDecodeError, TypeError, AttributeError):
+                    pass
+
+        result_ids = []
+        for r in raw_ids:
+            for part in str(r).split(","):
+                part = part.strip()
+                if part:
+                    result_ids.append(part)
+
+        if not result_ids:
+            self.write({"code": 1, "msg": "请选择要深度采集的结果"})
+            return
+
+        ids = [int(rid) for rid in result_ids if rid]
+        if not ids:
+            self.write({"code": 1, "msg": "无效的结果 ID"})
+            return
+
+        # 最多处理 5 条，避免超时
+        ids = ids[:5]
+
+        # 步骤1：标记 watch_results 为已保存 + 写入 data_warehouse
+        WatchResultRepository.mark_saved_batch(ids)
+
+        saved_dw_ids = []
+        # 使用单个连接完成所有检查+写入，避免嵌套 get_db() 死锁
+        from app.models.db import get_db
+        with get_db() as conn:
+            for rid in ids:
+                result = WatchResultRepository.get_by_id(rid)
+                if not result:
+                    continue
+                result_data = result["result_data"] or ""
+                if result_data.startswith("SAVED:"):
+                    result_data = result_data[6:]
+                items = []
+                try:
+                    items = json.loads(result_data)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                if isinstance(items, dict):
+                    items = [items]
+                if isinstance(items, list):
+                    for item in items:
+                        if not isinstance(item, dict):
+                            continue
+                        link = item.get("link", "")
+                        title = item.get("title", "")
+                        source_name = item.get("source_name", "")
+
+                        # 检查是否已存在（同一连接内完成）
+                        existing = None
+                        if link:
+                            existing = conn.execute(
+                                "SELECT id FROM data_warehouse WHERE link = ?", (link,)
+                            ).fetchone()
+                        if not existing and title:
+                            existing = conn.execute(
+                                "SELECT id FROM data_warehouse WHERE title = ? AND source_name = ?",
+                                (title, source_name),
+                            ).fetchone()
+
+                        if existing:
+                            saved_dw_ids.append(existing["id"])
+                            continue
+
+                        # 立即插入
+                        try:
+                            raw_json = json.dumps(item, ensure_ascii=False)
+                            conn.execute(
+                                "INSERT OR IGNORE INTO data_warehouse "
+                                "(result_id, title, link, summary, source_name, raw_data) "
+                                "VALUES (?, ?, ?, ?, ?, ?)",
+                                (rid, title, link, item.get("summary", ""),
+                                 source_name, raw_json),
+                            )
+                            # 获取新插入的 ID
+                            if link:
+                                new_row = conn.execute(
+                                    "SELECT id FROM data_warehouse WHERE link = ? ORDER BY id DESC LIMIT 1",
+                                    (link,),
+                                ).fetchone()
+                            else:
+                                new_row = conn.execute(
+                                    "SELECT id FROM data_warehouse WHERE title = ? AND source_name = ? ORDER BY id DESC LIMIT 1",
+                                    (title, source_name),
+                                ).fetchone()
+                            if new_row:
+                                saved_dw_ids.append(new_row["id"])
+                        except Exception:
+                            pass
+            conn.commit()
+
+        if not saved_dw_ids:
+            self.write({"code": 1, "msg": "保存到数据仓库失败，请检查数据"})
+            return
+
+        # 步骤2：对每个已保存的仓库记录执行深度采集
+        from app.services.deep_collector import deep_fetch_and_save
+
+        success_count = 0
+        fail_count = 0
+        already_count = 0
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+        try:
+            loop = asyncio.get_event_loop()
+
+            for dw_id in saved_dw_ids:
+                # 获取 link 和采集状态（同一连接）
+                with get_db() as conn:
+                    record = conn.execute(
+                        "SELECT id, link, is_deep_collected FROM data_warehouse WHERE id = ?",
+                        (dw_id,),
+                    ).fetchone()
+                if not record or not record["link"]:
+                    fail_count += 1
+                    continue
+                if record["is_deep_collected"] == 1:
+                    already_count += 1
+                    continue
+
+                success, msg = await loop.run_in_executor(
+                    executor, deep_fetch_and_save, dw_id, record["link"]
+                )
+                if success:
+                    success_count += 1
+                else:
+                    fail_count += 1
+        finally:
+            executor.shutdown(wait=False)
+
+        # 审计日志
+        from app.utils.security import write_audit_log
+        write_audit_log(
+            action="WATCH_DEEP_COLLECT",
+            username=self.current_user,
+            target=f"watch_results:{','.join(str(x) for x in ids[:5])}",
+            detail=f"saved={len(saved_dw_ids)}, deep_ok={success_count}, deep_fail={fail_count}",
+            client_ip=self.request.remote_ip or "",
+        )
+
+        summary = f"保存 {len(saved_dw_ids)} 条，深度采集成功 {success_count} 条"
+        if already_count > 0:
+            summary += f"，{already_count} 条已采集跳过"
+        if fail_count > 0:
+            summary += f"，失败 {fail_count} 条"
+        self.write({"code": 0, "msg": summary})

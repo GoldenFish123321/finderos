@@ -240,6 +240,9 @@
             <button class="btn-glass btn-sm btn-primary" id="btn-save-warehouse">
                 💾 保存到数据仓库
             </button>
+            <button class="btn-glass btn-sm" id="btn-deep-collect-watch" style="background:linear-gradient(135deg,rgba(95,184,120,0.2),rgba(94,163,255,0.15));color:#5FB878;border:1px solid rgba(95,184,120,0.3);">
+                🔍 保存并深度采集
+            </button>
             <span id="save-status" style="font-size:12px;color:var(--accent-green);"></span>
         </div>
 
@@ -439,6 +442,42 @@ layui.use(['laypage', 'jquery', 'form'], function(){
         });
     });
 
+    // 保存并深度采集（一站式：保存到仓库 → 立即深度采集正文）
+    document.getElementById('btn-deep-collect-watch').addEventListener('click', function(){
+        var ids = Array.from(selectedCards);
+        if (ids.length === 0) { layer.msg('请先点击卡片选择要深度采集的条目', {icon: 2}); return; }
+        if (ids.length > 5) { layer.msg('一次最多深度采集 5 条，请减少选择', {icon: 2}); return; }
+
+        var btn = this;
+        btn.disabled = true;
+        var origText = btn.textContent;
+        btn.textContent = '⏳ 保存并采集中...';
+        document.getElementById('save-status').textContent = '';
+
+        $.post('/admin/watch/deep-collect', {
+            result_ids: ids,
+            _xsrf: xsrf
+        }, function(res){
+            btn.disabled = false;
+            btn.textContent = origText;
+            if (res.code === 0) {
+                document.getElementById('save-status').textContent = res.msg;
+                layer.msg(res.msg, {icon: 1});
+                selectedCards.clear();
+                document.querySelectorAll('.watch-result-card.selected').forEach(function(c){ c.classList.remove('selected'); });
+                updateToolbar();
+            } else {
+                document.getElementById('save-status').textContent = res.msg;
+                layer.msg(res.msg, {icon: 2});
+            }
+        }, 'json').fail(function(){
+            btn.disabled = false;
+            btn.textContent = origText;
+            document.getElementById('save-status').textContent = '深度采集失败';
+            layer.msg('深度采集请求失败', {icon: 2});
+        });
+    });
+
     // 回车触发采集
     document.getElementById('collect-keyword').addEventListener('keydown', function(e){
         if (e.keyCode === 13) document.getElementById('btn-collect').click();
@@ -465,7 +504,7 @@ function renderNewsCards(newsList) {
         html += '<div class="card-select">✓</div>';
         html += '<div class="card-title">';
         if (n.link) {
-            html += '<a href="' + n.link + '" target="_blank" onclick="event.stopPropagation()">' + escapeHtml(n.title) + '</a>';
+            html += '<a href="' + escapeHtml(n.link) + '" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">' + escapeHtml(n.title) + '</a>';
         } else {
             html += escapeHtml(n.title);
         }
