@@ -155,13 +155,8 @@ def _extract_text_content(html: str, base_url: str = "") -> str:
     for pattern in _CONTENT_PATTERNS:
         m = re.search(pattern, cleaned, re.DOTALL | re.IGNORECASE)
         if m:
-            # 修复: Python 中 or 优先级高于 if-else，原表达式解析为
-            # (m.group(1) or m.group(2)) if (cond) else m.group(0)
-            # 由于所有模式只有1个捕获组，lastindex 永远为1，导致始终取 group(0)（含HTML标签）
-            if m.lastindex and m.lastindex >= 2:
-                content_html = m.group(1) or m.group(2)
-            else:
-                content_html = m.group(1)
+            # 所有 _CONTENT_PATTERNS 均只有1个捕获组，直接取 group(1)
+            content_html = m.group(1)
             if len(content_html) > 500:
                 break
 

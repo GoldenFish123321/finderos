@@ -125,10 +125,12 @@ class LoginHandler(BaseHandler):
 
         # 登录成功：清除限速记录，设置安全 Cookie（含 Secure/SameSite 属性）
         login_limiter.clear(client_ip, username)
+        is_https = self.request.protocol == "https"
         self.set_secure_cookie(
             "username", username,
             httponly=True,
             samesite="Lax",
+            secure=is_https,
         )
         write_audit_log("LOGIN_SUCCESS", username, "", "登录成功", client_ip)
         self._redirect_by_role(username)
@@ -228,9 +230,11 @@ class RegisterHandler(BaseHandler):
         write_audit_log("REGISTER", username, "", "用户自助注册成功", client_ip)
 
         # 注册成功后自动登录
+        is_https = self.request.protocol == "https"
         self.set_secure_cookie(
             "username", username,
             httponly=True,
             samesite="Lax",
+            secure=is_https,
         )
         self.redirect("/index?msg=注册成功，欢迎使用瞭望与问数系统！")

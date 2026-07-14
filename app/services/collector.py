@@ -67,9 +67,11 @@ def _decompress(data: bytes, encoding: str) -> bytes:
             import brotli
             return brotli.decompress(data)
         except ImportError:
-            pass
-        except Exception:
-            pass
+            logger.warning("响应使用 Brotli 压缩，但 brotli 包未安装，无法解压，将返回空数据")
+            return b""
+        except Exception as e:
+            logger.warning(f"Brotli 解压失败: {e}，返回空数据")
+            return b""
     return data
 
 
