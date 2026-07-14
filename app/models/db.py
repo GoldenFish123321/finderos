@@ -144,17 +144,21 @@ def init_db():
 
         # 兼容旧表迁移：为已存在的 ai_models 表添加 total_tokens 列
         try:
-            conn.execute("ALTER TABLE ai_models ADD COLUMN total_tokens INTEGER DEFAULT 0")
-            logger.info("Database migration: added total_tokens column to ai_models")
-        except Exception:
-            pass  # 列已存在
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(ai_models)").fetchall()}
+            if "total_tokens" not in cols:
+                conn.execute("ALTER TABLE ai_models ADD COLUMN total_tokens INTEGER DEFAULT 0")
+                logger.info("Database migration: added total_tokens column to ai_models")
+        except Exception as e:
+            logger.error(f"Database migration failed (ai_models.total_tokens): {e}", exc_info=True)
 
         # 兼容旧表迁移：为已存在的 watch_sources 表添加 schedule_interval 列 (v0.6.0)
         try:
-            conn.execute("ALTER TABLE watch_sources ADD COLUMN schedule_interval INTEGER DEFAULT 0")
-            logger.info("Database migration: added schedule_interval column to watch_sources")
-        except Exception:
-            pass  # 列已存在
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(watch_sources)").fetchall()}
+            if "schedule_interval" not in cols:
+                conn.execute("ALTER TABLE watch_sources ADD COLUMN schedule_interval INTEGER DEFAULT 0")
+                logger.info("Database migration: added schedule_interval column to watch_sources")
+        except Exception as e:
+            logger.error(f"Database migration failed (watch_sources.schedule_interval): {e}", exc_info=True)
 
         # 独立数据仓库表（v0.2.13 新增，借鉴郭家琪项目的独立设计）
         conn.execute("""
@@ -379,9 +383,12 @@ def _seed_default_models():
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (1, "GPT-4o-mini", "openai", "https://api.openai.com/v1", "gpt-4o-mini", "text", 1, 1),
             )
-            # DeepSeek-V3（从环境变量读取 API Key）
+            # DeepSeek-V3（从环境变量读取 API Key，加密存储）
             deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "")
-            if not deepseek_key:
+            if deepseek_key:
+                from app.utils.security import encrypt_api_key
+                deepseek_key = encrypt_api_key(deepseek_key)
+            else:
                 print("[种子] 提示: DEEPSEEK_API_KEY 未设置，DeepSeek 模型将使用 Mock 模式")
             conn.execute(
                 "INSERT INTO ai_models (id, name, provider, api_base, api_key, model_name, category, is_enabled, is_default) "
