@@ -356,7 +356,7 @@ def seed_default_data():
                 (10, "数据仓库", "layui-icon-component", "/admin/warehouse", None, 6, 1),
                 (11, "模型引擎", "layui-icon-util", "/admin/model", None, 7, 1),
                 # 系统设置子项（新增，借鉴陈子墨丰富的种子数据设计）
-                (12, "AI对话", "layui-icon-dialogue", "/admin/model/chat", 3, 1, 1),
+                (12, "AI对话", "layui-icon-dialogue", "/chat", 3, 1, 1),
                 # 数字员工 (v0.3.0 新增)
                 (13, "数字员工", "layui-icon-user", "/admin/employee", None, 8, 1),
             ]
