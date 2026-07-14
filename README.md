@@ -1,11 +1,13 @@
-# 🔭 瞭望与问数系统 (DataFinderAgentOS) v0.2
+# 🔭 瞭望与问数系统 (DataFinderAgentOS) v0.3
 
-> 基于 Tornado 异步 Web 框架构建的轻量级智能数据采集与 AI 问数一体化平台。
+> 基于 Tornado 异步 Web 框架构建的轻量级智能数据采集与 AI 问数一体化平台。  
+> **v0.3 新增**：用户前台智能问数（五区布局）、@数字员工、ECharts 报表、多轮对话历史。
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Tornado](https://img.shields.io/badge/Tornado-6.4+-00ADD8?style=flat)](https://www.tornadoweb.org/)
 [![SQLite](https://img.shields.io/badge/SQLite-3-003B57?style=flat&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![Layui](https://img.shields.io/badge/Layui-2.x-1E9FFF?style=flat)](https://layui.dev/)
+[![ECharts](https://img.shields.io/badge/ECharts-5.x-AA344D?style=flat)](https://echarts.apache.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat)](LICENSE)
 
 ---
@@ -48,7 +50,10 @@
 ### 核心能力
 
 ```
-🔐 用户认证与 RBAC 权限管理          — 安全的密码存储、登录限速、审计日志
+� 智能问数 — 用户前台 AI 对话         — A/B/C/D/E 五区布局 + SSE 流式 + 多轮对话
+🤖 数字员工 — @ 触发智能 Agent         — 天气/采集专员/文案编写/新闻聚合/科普助手等 7 个
+📊 报表呈现 — ECharts 交互图表         — 柱状图/折线图/饼图/散点图 + 数据表格
+�🔐 用户认证与 RBAC 权限管理          — 安全的密码存储、登录限速、审计日志
 🔭 瞭望采集 — 可配置的 Web 采集引擎    — 百度/搜狗新闻等多源采集 + SSRF 防护
 🗄️ 数据仓库 — 采集结果独立存储与检索   — 独立 data_warehouse 表，支持去重
 🤖 模型引擎 — 多 Provider AI 统一管理  — OpenAI/DeepSeek/智谱/文心 + SSE 流式对话
@@ -162,17 +167,19 @@ DataFinderAgentOS/
 │   │   ├── __init__.py
 │   │   ├── auth.py               # 登录/登出/注册 + 频率限制器
 │   │   ├── base.py               # 公共基础 Handler（认证 + 安全响应头）
-│   │   ├── home.py               # 前台主页控制器
+│   │   ├── home.py               # 前台主页控制器 → 跳转 /chat
+│   │   ├── user_chat.py          # 用户前台智能问数（A/B/C/D/E 五区 + SSE + @员工 + 图表）
 │   │   ├── admin_base.py         # 管理后台基础 Handler（权限校验）
 │   │   ├── admin_home.py         # 管理后台仪表盘（统计卡片）
 │   │   ├── admin_user.py         # 用户管理 CRUD + 批量操作
 │   │   ├── admin_role.py         # 角色管理 CRUD + 功能权限树联动
 │   │   ├── admin_function.py     # 功能管理 CRUD（树形结构 + 启用/禁用）
 │   │   ├── admin_menu.py         # 菜单管理（角色→菜单预览 + 排序）
-│   │   ├── admin_watch.py        # 瞭望采集页 + 执行采集 + 保存仓库
+│   │   ├── admin_watch.py        # 瞭望采集页 + 执行采集 + 保存仓库 + 深度采集
 │   │   ├── admin_watch_source.py # 瞭望源管理 CRUD + 启用/禁用
-│   │   ├── admin_warehouse.py    # 数据仓库列表/详情/单删/批量删除
-│   │   └── admin_model.py        # 模型引擎 CRUD + SSE 流式对话 + API
+│   │   ├── admin_warehouse.py    # 数据仓库列表/详情/单删/批量删除 + 深度采集
+│   │   ├── admin_model.py        # 模型引擎 CRUD + SSE 流式对话 + 多轮对话 API
+│   │   └── admin_employee.py     # 数字化员工 CRUD + SSE 调用 + 测试页
 │   │
 │   ├── models/                   # 数据模型层（Repository 模式）
 │   │   ├── __init__.py
@@ -183,20 +190,26 @@ DataFinderAgentOS/
 │   │   ├── watch_source.py       # WatchSourceRepository — 瞭望源仓储
 │   │   ├── watch_result.py       # WatchResultRepository — 采集结果仓储
 │   │   ├── data_warehouse.py     # DataWarehouseRepository — 数据仓库仓储
-│   │   └── ai_model.py           # AiModelRepository — AI 模型仓储
+│   │   ├── ai_model.py           # AiModelRepository — AI 模型仓储
+│   │   ├── conversation.py       # ConversationRepository — 对话管理仓储（v0.3）
+│   │   └── digital_employee.py   # DigitalEmployeeRepository — 数字员工仓储（v0.3）
 │   │
 │   ├── services/                 # 业务服务层
 │   │   ├── __init__.py
-│   │   └── collector.py          # 采集引擎（HTTP 请求 + HTML 解析 + SSRF + 反爬）
+│   │   ├── collector.py          # 采集引擎（HTTP 请求 + HTML 解析 + SSRF + 反爬）
+│   │   ├── deep_collector.py     # 深度采集引擎（正文提取 + crawl4ai）（v0.3）
+│   │   └── scheduler.py          # 定时采集调度器（v0.3）
 │   │
 │   ├── utils/                    # 工具模块
 │   │   ├── __init__.py
-│   │   └── security.py           # SSRF 校验 + 审计日志 + CRLF 检测
+│   │   └── security.py           # SSRF 校验 + 审计日志 + CRLF 检测 + API Key 加密
 │   │
 │   ├── templates/                # Tornado 模板
 │   │   ├── base.html             # 基础布局模板
 │   │   ├── login.html            # 登录页
 │   │   ├── register.html         # 注册页
+│   │   ├── user_index.html       # 前台首页（统计卡片，自动跳转 /chat）
+│   │   ├── user_chat.html        # 前台智能问数主页（A/B/C/D/E 五区布局）（v0.3）
 │   │   └── admin/                # 管理后台模板
 │   │       ├── base_layout.html       # 后台布局（侧边栏 + 顶栏）
 │   │       ├── index.html             # 仪表盘首页
@@ -214,7 +227,11 @@ DataFinderAgentOS/
 │   │       ├── warehouse_detail.html  # 采集结果详情
 │   │       ├── model_list.html        # 模型引擎列表
 │   │       ├── model_form.html        # 模型表单
-│   │       └── model_chat.html        # AI 流式对话界面
+│   │       ├── model_chat.html        # AI 流式对话界面
+│   │       ├── employee_list.html     # 数字员工列表（v0.3）
+│   │       ├── employee_form.html     # 数字员工表单（v0.3）
+│   │       ├── employee_test.html     # 数字员工测试页（v0.3）
+│   │       └── change_password.html   # 修改密码
 │   │
 │   └── static/                   # 静态资源
 │       ├── css/
@@ -730,6 +747,89 @@ data: {"tokens": 42, "mock": false}
 
 ---
 
+### 8. 前台智能问数系统
+
+#### 8.1 概述
+
+前台智能问数系统（`/chat`）是 v0.3 新增的**普通用户 AI 对话界面**，采用 A/B/C/D/E 五区布局：
+
+```
+┌──────────────────┬──────────────────────────────┐
+│  A区: LOGO+标题   │                              │
+│  B区: 模型选择    │     D区: 对话区               │
+│  C区: 任务列表    │   聊天气泡（左AI / 右用户）    │
+│                  ├──────────────────────────────┤
+│                  │     E区: 输入区               │
+│                  │  输入框 + /快捷 + @数字员工    │
+└──────────────────┴──────────────────────────────┘
+```
+
+#### 8.2 核心功能
+
+| 区域 | 功能 | 说明 |
+|------|------|------|
+| **A区** | LOGO + 标题 | 品牌标识，显示系统名称和版本 |
+| **B区** | 模型切换器 | 下拉选择启用的 AI 模型，⭐标识默认模型 |
+| **C区** | 任务列表 | 对话历史自动生成标题，点击切换/删除对话 |
+| **D区** | 对话区 | Markdown 渲染气泡（marked.js），左 AI / 右用户 |
+| **E区** | 输入区 | 多行输入框 + `@` 数字员工菜单 + `/` 快捷指令 |
+
+#### 8.3 SSE 流式对话
+
+- **真实 API 模式**：配置 API Key 后走 OpenAI 兼容 SSE 流式调用
+- **Mock 回退模式**：无 API Key 时本地逐字流式输出
+- **图表注入**：AI 回复中 `[CHART:...]` 标记自动渲染为 ECharts 图表
+- **表格注入**：`[TABLE:...]` 标记自动渲染为 HTML 数据表格
+- **元信息显示**：每条 AI 回复下方显示响应时间(s)和 Token 消耗
+
+#### 8.4 对话持久化
+
+- 双表存储：`conversations`（对话元信息）+ `conversation_messages`（消息记录）
+- 自动标题：首条消息前 30 字符作为对话标题
+- 多轮对话：最近 10 条消息自动注入上下文
+- 归属校验：仅对话创建者可查看/删除自己的对话
+
+---
+
+### 9. 数字化员工
+
+#### 9.1 概述
+
+数字化员工（`/admin/employee`）是 v0.3 新增的**AI Agent 管理模块**，支持两种类型：
+
+| 类型 | 实现方式 | 适用场景 |
+|------|----------|----------|
+| **LLM 型** | 绑定 AI 模型 + 系统提示词 + 技能列表 + 可选 Crawl4ai | 复杂推理、数据分析、文案撰写、深度采集 |
+| **API 型** | HTTP/HTTPS API + 参数模板 + 响应渲染模板 | 天气查询、新闻获取等外部服务调用 |
+
+#### 9.2 默认数字员工（7个）
+
+| 员工 | 类型 | 核心能力 |
+|------|------|---------|
+| 🏭 **产业专员** | LLM | 产业链分析、政策解读、竞品分析、趋势预判 |
+| 🧠 **天机助手** | LLM | 信息检索、数据分析、文案撰写、代码辅助 |
+| 🌤 **天气** | API | 实时天气查询（wttr.in），返回温度/湿度/风力卡片 |
+| 🕷 **采集专员** | LLM | 数据仓库搜索、深度采集、内容提取与整理 |
+| ✍️ **文案编写** | LLM | 报告撰写、方案策划、公文起草、宣传文案 |
+| 📰 **新闻聚合** | LLM | 新闻检索、热点追踪、每日简报 |
+| 📚 **科普助手** | LLM | 百科问答、知识科普、概念解释 |
+
+#### 9.3 调用方式
+
+- **后台测试**：`/admin/employee/test` 对话测试页面
+- **后台调用**：`POST /admin/employee/invoke` SSE 流式 API
+- **前台 @ 触发**：用户在输入框中输入 `@天气 成都` 自动匹配并调用
+- **数据仓库注入**：LLM 型员工自动注数据仓库查询结果作为上下文
+
+#### 9.4 LLM 型员工特性
+
+- **模型回退**：员工绑定模型 → 系统默认模型 → 第一个启用模型
+- **工具调用**：自动识别意图（数据仓库查询/统计/深度采集）并执行
+- **Crawl4ai**：可选启用网页深度采集能力
+- **Mock 智能模式**：无 API Key 时提供本地工具调用和结构化回复
+
+---
+
 ## API 接口一览
 
 > **基础 URL**: `http://localhost:10010`  
@@ -837,6 +937,41 @@ data: {"tokens": 42, "mock": false}
 | POST | `/admin/model/chat/stream` | **SSE 流式对话**（需设置 `Accept: text/event-stream`） |
 | GET | `/admin/api/model/list` | 模型 JSON API（返回已启用模型列表） |
 
+#### 数字化员工（v0.3）
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/employee` | 员工列表（卡片式，`?page=&type=`） |
+| GET | `/admin/employee/add` | 新增员工页面 |
+| POST | `/admin/employee/add` | 提交新增员工 |
+| GET | `/admin/employee/edit` | 编辑员工页面（`?id=`） |
+| POST | `/admin/employee/edit` | 提交编辑员工 |
+| POST | `/admin/employee/delete` | 删除员工 |
+| POST | `/admin/employee/toggle` | 启用/禁用员工 |
+| POST | `/admin/employee/invoke` | **SSE 流式调用员工** |
+| GET | `/admin/api/employee/list` | 员工 JSON API |
+| GET | `/admin/employee/test` | 员工对话测试页 |
+
+#### 用户前台-智能问数（v0.3）
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/chat` | 用户前台对话主页（A/B/C/D/E 五区） |
+| POST | `/chat/stream` | **SSE 流式 AI 对话** |
+| POST | `/chat/employee/invoke` | **SSE 流式 @数字员工调用** |
+| GET | `/api/chat/models` | 获取可用模型列表 |
+| GET | `/api/chat/employees` | 获取数字员工列表 |
+| GET | `/api/chat/conversation/list` | 用户对话历史列表 |
+| POST | `/api/chat/conversation/create` | 创建新对话 |
+| POST | `/api/chat/conversation/delete` | 删除对话 |
+| GET | `/api/chat/conversation/messages` | 获取对话消息（`?id=`） |
+
+#### 多轮对话管理（v0.3）
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/api/conversation/list` | 对话列表 |
+| POST | `/admin/api/conversation/create` | 创建对话 |
+| POST | `/admin/api/conversation/delete` | 删除对话 |
+| GET | `/admin/api/conversation/messages` | 获取对话消息 |
+
 ---
 
 ## 数据库设计
@@ -891,6 +1026,40 @@ erDiagram
         timestamp deep_collected_at
         timestamp created_at
     }
+    conversations {
+        int id PK
+        string username
+        string title
+        int model_id
+        timestamp created_at
+        timestamp updated_at
+    }
+    conversation_messages {
+        int id PK
+        int conversation_id FK
+        string role
+        string content
+        int token_count
+        timestamp created_at
+    }
+    digital_employees {
+        int id PK
+        string name
+        string employee_type
+        string description
+        int model_id
+        string system_prompt
+        string skills
+        int crawl4ai_enabled
+        string api_url
+        string api_method
+        string api_headers
+        string api_params_template
+        string response_render_template
+        string api_secret
+        int is_enabled
+        timestamp created_at
+    }
 ```
 
 ### 核心表清单
@@ -906,6 +1075,9 @@ erDiagram
 | `data_warehouse` | 独立数据仓库 | 100 ~ 100000 | `link`(UNIQUE) |
 | `ai_models` | AI 模型配置 | 3 ~ 50 | `is_default` |
 | `audit_logs` | 操作审计日志 | 自动增长 | `action`, `username`, `created_at` |
+| `conversations` | 对话元信息表 | 10 ~ 10000 | `username` |
+| `conversation_messages` | 对话消息表 | 100 ~ 100000 | `conversation_id` (CASCADE) |
+| `digital_employees` | 数字化员工配置表 | 5 ~ 50 | `is_enabled` |
 
 > 完整 DDL 和字段详细说明请参考 `docs/constraint.md`。
 
@@ -1155,7 +1327,25 @@ python -m pytest test/test_login_rate_limiter.py::TestLoginRateLimiter::test_rat
 
 ## 更新日志
 
-### v0.2.x (2026-07) — 当前版本
+### v0.3 (2026-07) — 前台智能问数系统
+
+**v0.3.0** — 用户前台 + 数字员工 + ECharts 报表
+- ✅ **前台智能问数**：A/B/C/D/E 五区布局对话页面（`/chat`）
+- ✅ **SSE 流式对话**：真实 API + Mock 回退，Markdown 气泡渲染
+- ✅ **多轮对话**：`conversations` + `conversation_messages` 双表持久化
+- ✅ **@数字员工**：7 个默认员工（天气/采集专员/文案编写/新闻聚合/科普助手/产业专员/天机助手）
+- ✅ **LLM 型员工**：模型绑定 + 提示词 + 技能 + 数据仓库上下文注入
+- ✅ **API 型员工**：HTTP 调用 + 参数模板 + 响应渲染模板（天气卡片）
+- ✅ **ECharts 报表**：柱状图/折线图/饼图/散点图 + 数据表格
+- ✅ **图表指令**：`[CHART:...]` / `[TABLE:...]` 标记自动注入系统提示
+- ✅ **模型切换**：用户前台 B 区下拉选择模型
+- ✅ **任务列表**：用户前台 C 区对话历史管理
+- ✅ **首页改造**：普通用户登录后自动跳转 `/chat`
+- ✅ **员工管理后台**：卡片式列表 + 表单编辑 + 测试对话页
+- ✅ **深度采集引擎**：正文提取（article/main/body） + crawl4ai 可选增强
+- ✅ **定时采集调度器**：基于 Tornado PeriodicCallback 的自动采集
+
+### v0.2.x (2026-07) — 数据采集与 AI 引擎
 
 **v0.2.13** — 数据仓库独立化
 - ✅ 新增独立 `data_warehouse` 表（标题/链接/摘要/来源 + URL 去重索引）
