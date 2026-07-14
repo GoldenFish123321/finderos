@@ -394,8 +394,10 @@ layui.use(['laypage', 'jquery', 'form'], function(){
                     document.getElementById('news-toolbar').style.display = 'flex';
                     var emptyEl = document.getElementById('news-empty');
                     if (emptyEl) emptyEl.style.display = 'none';
+                    // 隐藏分页（采集结果直接展示，无需分页导航）
+                    var pagEl = document.getElementById('watch-pagination');
+                    if (pagEl) pagEl.style.display = 'none';
                 }
-                setTimeout(function(){ location.reload(); }, 1500);
             } else {
                 layer.msg(res.msg, {icon: 2});
             }
