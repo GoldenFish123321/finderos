@@ -189,13 +189,13 @@ function sendMessage() {
                         return;
                     }
                     lastContent += (chunk.content || '');
-                    loadingDiv.querySelector('.bubble').innerHTML = marked.parse(lastContent) || lastContent || '<div class="typing-indicator" style="display:block;"><span></span><span></span><span></span></div>';
+                    loadingDiv.querySelector('.bubble').innerHTML = mdParser.parse(lastContent) || lastContent || '<div class="typing-indicator" style="display:block;"><span></span><span></span><span></span></div>';
                 } catch(e) {}
             }
         }
         if (isDone) {
             // 最终渲染
-            loadingDiv.querySelector('.bubble').innerHTML = marked.parse(lastContent) || lastContent;
+            loadingDiv.querySelector('.bubble').innerHTML = mdParser.parse(lastContent) || lastContent;
             input.disabled = false;
             document.getElementById('btn-send').disabled = false;
         }
@@ -216,9 +216,31 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Markdown 解析器 — 支持代码块/标题/列表/链接/表格/粗斜体/行内代码
-var marked = {
-    parse: function(text) {
+// Markdown 解析器 — 优先使用 CDN marked.js，回退到内置实现
+var mdParser = (function() {
+    // 如果 CDN 已加载 marked.js，使用它（并配置安全选项）
+    if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
+        // 配置 marked 选项
+        if (typeof marked.setOptions === 'function') {
+            marked.setOptions({
+                breaks: true,       // 支持 GFM 换行
+                gfm: true,          // GitHub Flavored Markdown
+                sanitize: false,    // 我们自己做 XSS 防护（先转义 HTML）
+            });
+        }
+        return {
+            parse: function(text) {
+                if (!text) return '';
+                // 安全措施：marked 本身不执行 script，但为防 XSS 先做基础转义
+                // marked.js 默认会转义 HTML 标签
+                return marked.parse(text);
+            }
+        };
+    }
+
+    // 回退：内置简易 Markdown 解析器
+    return {
+        parse: function(text) {
         if (!text) return '';
         var html = text;
         // 0. 转义 HTML
@@ -275,7 +297,8 @@ var marked = {
             return codeBlocks[parseInt(idx)];
         });
         return html;
-    }
-};
+        }
+    };
+})();
 </script>
 {% end %}

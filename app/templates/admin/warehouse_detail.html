@@ -8,6 +8,15 @@
             <tr><td width="120">ID</td><td>{{ result['id'] }}</td></tr>
             <tr><td>瞭望源</td><td>{{ result['source_name'] or '未知' }}</td></tr>
             <tr><td>关键词</td><td><b>{{ result['keyword'] }}</b></td></tr>
+            <tr><td>标题</td><td>{{ result['title'] or '—' }}</td></tr>
+            <tr><td>链接</td><td>
+                {% set link_val = result['link'] or '' %}
+                {% if link_val and not link_val.lower().startswith(('javascript:', 'data:', 'vbscript:')) %}
+                <a href="{{ link_val }}" target="_blank" style="color:#5ea3ff;word-break:break-all;">{{ link_val }}</a>
+                {% else %}
+                {{ link_val or '—' }}
+                {% end %}
+            </td></tr>
             <tr><td>请求URL</td><td><code style="word-break:break-all;">{{ result['request_url'] }}</code></td></tr>
             <tr><td>响应状态</td><td>
                 {% if result['response_status'] == 200 %}
@@ -25,19 +34,74 @@
                     0 B
                 {% end %}
             </td></tr>
+            <tr><td>深度采集</td><td>
+                {% if result['is_deep_collected'] == 1 %}
+                <span class="layui-badge layui-bg-green">✅ 已采集（{{ result['deep_collected_at'] or '' }}）</span>
+                {% else %}
+                <span class="layui-badge">⏳ 未采集</span>
+                {% end %}
+            </td></tr>
             <tr><td>采集时间</td><td>{{ result['created_at'] }}</td></tr>
         </table>
 
+        <!-- 深度采集内容面板 -->
+        {% if result['is_deep_collected'] == 1 %}
         <div class="layui-card" style="margin-top:15px;">
-            <div class="layui-card-header">响应内容预览</div>
+            <div class="layui-card-header">📖 深度采集正文</div>
             <div class="layui-card-body">
-                <pre style="max-height:500px;overflow:auto;padding:15px;border-radius:4px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-all;">{{ result['result_data'] or '[空]' }}</pre>
+                {% if deep_content %}
+                <pre style="max-height:500px;overflow:auto;padding:15px;border-radius:4px;font-size:14px;line-height:1.8;white-space:pre-wrap;word-break:break-word;background:rgba(0,0,0,0.2);color:#d0d0d0;">{{ deep_content }}</pre>
+                {% else %}
+                <p style="color:#888;">深度采集已完成，但无正文内容（可能为纯链接或非文本页面）。</p>
+                {% end %}
+            </div>
+        </div>
+        {% end %}
+
+        <div class="layui-card" style="margin-top:15px;">
+            <div class="layui-card-header">原始响应数据</div>
+            <div class="layui-card-body">
+                <pre style="max-height:300px;overflow:auto;padding:15px;border-radius:4px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-all;">{{ result['result_data'] or '[空]' }}</pre>
             </div>
         </div>
 
-        <div style="margin-top:15px;">
+        <div style="margin-top:15px;display:flex;gap:10px;">
             <a href="/admin/warehouse" class="layui-btn layui-btn-primary">返回列表</a>
+            {% if result['is_deep_collected'] != 1 and result['link'] %}
+            <button class="layui-btn layui-btn-normal" id="btn-deep-collect" data-id="{{ result['id'] }}">🔍 深度采集此链接</button>
+            {% end %}
         </div>
     </div>
 </div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+var xsrf = '{% raw xsrf_token %}';
+layui.use('jquery', function(){
+    var $ = layui.$;
+    var btn = document.getElementById('btn-deep-collect');
+    if (btn) {
+        btn.addEventListener('click', function(){
+            var id = this.getAttribute('data-id');
+            var origText = this.textContent;
+            this.textContent = '⏳ 采集中...';
+            this.disabled = true;
+            $.post('/admin/warehouse/deep-collect', {id: id, _xsrf: xsrf}, function(res){
+                if (res.code === 0) {
+                    layer.msg(res.msg, {icon: 1}, function(){ location.reload(); });
+                } else {
+                    layer.msg(res.msg, {icon: 2});
+                    btn.textContent = origText;
+                    btn.disabled = false;
+                }
+            }, 'json').fail(function(){
+                layer.msg('请求失败', {icon: 2});
+                btn.textContent = origText;
+                btn.disabled = false;
+            });
+        });
+    }
+});
+</script>
 {% end %}
