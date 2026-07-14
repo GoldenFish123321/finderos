@@ -160,7 +160,11 @@ class FunctionRepository:
 
     @staticmethod
     def toggle_enabled(func_id: int) -> int:
-        """Toggle function enabled/disabled. Returns new status (0/1) or -1."""
+        """Toggle function enabled/disabled. Returns new status (0/1) or -1.
+        
+        禁用父功能时，同时清理所有子功能的 role_functions 关联，
+        避免数据层面残留不一致的权限记录。
+        """
         with get_db() as conn:
             row = conn.execute(
                 "SELECT is_enabled FROM functions WHERE id = ?", (func_id,)
@@ -172,8 +176,15 @@ class FunctionRepository:
                 "UPDATE functions SET is_enabled = ? WHERE id = ?", (new_status, func_id)
             )
             if new_status == 0:
+                # 清理自身 role_functions 关联
                 conn.execute(
                     "DELETE FROM role_functions WHERE function_id = ?", (func_id,)
+                )
+                # 清理所有子功能的 role_functions 关联（通过子查询找出所有子功能ID）
+                conn.execute(
+                    "DELETE FROM role_functions WHERE function_id IN "
+                    "(SELECT id FROM functions WHERE parent_id = ?)",
+                    (func_id,),
                 )
             conn.commit()
             return new_status
