@@ -174,7 +174,7 @@ class FunctionRepository:
     def toggle_enabled(func_id: int) -> int:
         """Toggle function enabled/disabled. Returns new status (0/1) or -1.
         
-        禁用父功能时，同时清理所有子功能的 role_functions 关联，
+        禁用父功能时，递归清理自身及所有子孙功能的 role_functions 关联，
         避免数据层面残留不一致的权限记录。
         """
         with get_db() as conn:
@@ -188,16 +188,22 @@ class FunctionRepository:
                 "UPDATE functions SET is_enabled = ? WHERE id = ?", (new_status, func_id)
             )
             if new_status == 0:
-                # 清理自身 role_functions 关联
-                conn.execute(
-                    "DELETE FROM role_functions WHERE function_id = ?", (func_id,)
-                )
-                # 清理所有子功能的 role_functions 关联（通过子查询找出所有子功能ID）
-                conn.execute(
-                    "DELETE FROM role_functions WHERE function_id IN "
-                    "(SELECT id FROM functions WHERE parent_id = ?)",
-                    (func_id,),
-                )
+                # 递归收集所有子孙节点 ID
+                all_ids = [func_id]
+                i = 0
+                while i < len(all_ids):
+                    children = conn.execute(
+                        "SELECT id FROM functions WHERE parent_id = ?", (all_ids[i],)
+                    ).fetchall()
+                    for child in children:
+                        if child["id"] not in all_ids:
+                            all_ids.append(child["id"])
+                    i += 1
+                # 清理所有子孙功能（含自身）的 role_functions 关联
+                for fid in all_ids:
+                    conn.execute(
+                        "DELETE FROM role_functions WHERE function_id = ?", (fid,)
+                    )
             conn.commit()
             return new_status
 

@@ -29,7 +29,11 @@ class MenuHandler(AdminBaseHandler):
         menu_tree = []
         selected_role = None
         if role_id:
-            role_id_int = int(role_id)
+            try:
+                role_id_int = int(role_id)
+            except (ValueError, TypeError):
+                self.write('<script>alert("无效的角色ID");window.history.back();</script>')
+                return
             selected_role = RoleRepository.get_by_id(role_id_int)
             # 获取该角色关联的功能树
             func_ids = RoleRepository.get_function_ids(role_id_int)
