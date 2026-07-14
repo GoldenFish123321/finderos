@@ -120,6 +120,11 @@ def init_db():
                 FOREIGN KEY (source_id) REFERENCES watch_sources(id) ON DELETE SET NULL
             )
         """)
+        # URL 去重索引（非空 URL 唯一，避免并发采集重复入库）
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_wr_url "
+            "ON watch_results(request_url) WHERE request_url != ''"
+        )
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS ai_models (

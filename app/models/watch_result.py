@@ -145,10 +145,21 @@ class WatchResultRepository:
                               result_data: str = "") -> tuple:
         """
         Create a collection result if URL doesn't already exist.
-        Uses a single connection to avoid TOCTOU race condition.
+        Uses INSERT OR IGNORE with UNIQUE index for atomic dedup.
         Returns (new_id, is_new) — is_new is True if created, False if duplicate skipped.
         """
         with get_db() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO watch_results (source_id, keyword, request_url, "
+                "response_status, response_size, result_data) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (source_id, keyword, request_url,
+                 response_status, response_size, result_data),
+            )
+            if cur.lastrowid:
+                conn.commit()
+                return cur.lastrowid, True
+            # 已存在：查询已有记录 ID
             if request_url:
                 existing = conn.execute(
                     "SELECT id FROM watch_results WHERE request_url = ?",
@@ -156,15 +167,7 @@ class WatchResultRepository:
                 ).fetchone()
                 if existing:
                     return existing["id"], False
-            cur = conn.execute(
-                "INSERT INTO watch_results (source_id, keyword, request_url, "
-                "response_status, response_size, result_data) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (source_id, keyword, request_url,
-                 response_status, response_size, result_data),
-            )
-            conn.commit()
-            return cur.lastrowid, True
+            return 0, False
 
     @staticmethod
     def mark_saved_batch(result_ids: list) -> tuple:
