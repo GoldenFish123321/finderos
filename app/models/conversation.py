@@ -10,12 +10,12 @@ class ConversationRepository:
     """对话管理数据访问类。"""
 
     @staticmethod
-    def create(title: str = "新对话", model_id: int = None) -> int:
+    def create(title: str = "新对话", model_id: int = None, username: str = "") -> int:
         """创建新对话，返回对话 ID。"""
         with get_db() as conn:
             cur = conn.execute(
-                "INSERT INTO conversations (title, model_id) VALUES (?, ?)",
-                (title, model_id),
+                "INSERT INTO conversations (title, model_id, username) VALUES (?, ?, ?)",
+                (title, model_id, username),
             )
             conn.commit()
             return cur.lastrowid
@@ -28,7 +28,7 @@ class ConversationRepository:
                 "SELECT c.*, "
                 "(SELECT COUNT(*) FROM conversation_messages WHERE conversation_id = c.id) as msg_count "
                 "FROM conversations c "
-                "WHERE c.username = ? OR c.username = '' "
+                "WHERE c.username = ? "
                 "ORDER BY c.updated_at DESC LIMIT ?",
                 (username, limit),
             ).fetchall()

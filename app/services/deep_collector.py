@@ -210,14 +210,9 @@ def deep_fetch(url: str, timeout: int = 30) -> Tuple[int, str, str, str]:
     if not url:
         return 0, "", "", "URL 为空"
 
-    # 优先使用 Crawl4ai（如果已安装）
+    # crawl4ai 集成待实现（库已安装但暂未对接），直接使用自研解析方案
     if _HAS_CRAWL4AI:
-        try:
-            c_result = _try_crawl4ai(url, timeout)
-            if c_result:
-                return c_result
-        except Exception as e:
-            logger.debug(f"Crawl4ai 采集失败，回退自研方案: {e}")
+        logger.debug("crawl4ai 已安装但集成代码待实现，使用自研方案")
 
     # SSRF 校验
     is_safe, reason = validate_url_safe(url)

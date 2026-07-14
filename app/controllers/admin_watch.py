@@ -307,7 +307,12 @@ class WatchDeepCollectHandler(AdminBaseHandler):
         from app.models.db import get_db
         with get_db() as conn:
             for rid in ids:
-                result = WatchResultRepository.get_by_id(rid)
+                # 直接使用当前连接查询，避免嵌套 get_db()
+                result = conn.execute(
+                    "SELECT wr.*, ws.name as source_name "
+                    "FROM watch_results wr LEFT JOIN watch_sources ws ON wr.source_id = ws.id "
+                    "WHERE wr.id = ?", (rid,)
+                ).fetchone()
                 if not result:
                     continue
                 result_data = result["result_data"] or ""
