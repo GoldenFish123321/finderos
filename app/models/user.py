@@ -2,11 +2,14 @@
 user.py - Users table repository (Repository pattern)
 """
 import hashlib
+import logging
 import secrets
 import sqlite3
 
 from app.config.settings import settings
 from app.models.db import get_db
+
+logger = logging.getLogger(__name__)
 
 
 def _hash_password(password: str, salt: bytes) -> str:
@@ -46,7 +49,12 @@ class UserRepository:
             return False
         if row["is_enabled"] == 0:
             return False
-        expected = _hash_password(password, bytes.fromhex(row["salt"]))
+        try:
+            salt_bytes = bytes.fromhex(row["salt"])
+        except (ValueError, TypeError):
+            logger.error(f"用户 {username} 的 salt 数据损坏，无法验证密码")
+            return False
+        expected = _hash_password(password, salt_bytes)
         return secrets.compare_digest(expected, row["password_hash"])
 
     @staticmethod

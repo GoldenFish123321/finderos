@@ -331,9 +331,6 @@ class WatchDeepCollectHandler(AdminBaseHandler):
         # 最多处理 5 条，避免超时
         ids = ids[:5]
 
-        # 步骤1：标记 watch_results 为已保存 + 写入 data_warehouse
-        WatchResultRepository.mark_saved_batch(ids)
-
         saved_dw_ids = []
         # 使用单个连接完成所有检查+写入，避免嵌套 get_db() 死锁
         from app.models.db import get_db
@@ -407,6 +404,10 @@ class WatchDeepCollectHandler(AdminBaseHandler):
                         except Exception as e:
                             logger.error(f"深度采集: 插入数据仓库记录失败 (rid={rid}): {e}", exc_info=True)
             conn.commit()
+
+        # 只有成功写入数据仓库后才标记 SAVED（防止数据解析失败导致虚假标记）
+        if saved_dw_ids:
+            WatchResultRepository.mark_saved_batch(ids)
 
         if not saved_dw_ids:
             self.write({"code": 1, "msg": "保存到数据仓库失败，请检查数据"})

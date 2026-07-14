@@ -151,12 +151,24 @@ class FunctionRepository:
 
     @staticmethod
     def delete(func_id: int) -> bool:
-        """Delete a function and its children."""
+        """Delete a function and all its descendants (recursive, handles arbitrary depth)."""
         with get_db() as conn:
-            conn.execute("DELETE FROM functions WHERE parent_id = ?", (func_id,))
-            cursor = conn.execute("DELETE FROM functions WHERE id = ?", (func_id,))
+            # 递归收集所有子孙节点 ID（自底向上删除，避免 FK 约束冲突）
+            to_delete = [func_id]
+            i = 0
+            while i < len(to_delete):
+                children = conn.execute(
+                    "SELECT id FROM functions WHERE parent_id = ?", (to_delete[i],)
+                ).fetchall()
+                for child in children:
+                    if child["id"] not in to_delete:
+                        to_delete.append(child["id"])
+                i += 1
+            # 自底向上删除（先删叶子节点，再删父节点）
+            for fid in reversed(to_delete):
+                conn.execute("DELETE FROM functions WHERE id = ?", (fid,))
             conn.commit()
-            return cursor.rowcount > 0
+            return len(to_delete) > 0
 
     @staticmethod
     def toggle_enabled(func_id: int) -> int:
