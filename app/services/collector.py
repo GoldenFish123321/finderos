@@ -41,7 +41,11 @@ _BASE_HEADERS = {
 
 
 def _decompress(data: bytes, encoding: str) -> bytes:
-    """解压 HTTP 响应体（gzip / deflate / br raw）。"""
+    """解压 HTTP 响应体（gzip / deflate / br raw）。
+
+    注意: Brotli (br) 需要安装 brotli 或 brotlipy 包；
+    未安装时静默回退，不解压。
+    """
     if not data:
         return data
     enc = (encoding or "").lower()
@@ -58,6 +62,14 @@ def _decompress(data: bytes, encoding: str) -> bytes:
                 return zlib.decompress(data, -15)
             except Exception:
                 pass
+    if "br" in enc:
+        try:
+            import brotli
+            return brotli.decompress(data)
+        except ImportError:
+            pass
+        except Exception:
+            pass
     return data
 
 
