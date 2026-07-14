@@ -1030,46 +1030,88 @@ function appendMessage(role, content, tokens, elapsed, isPlaceholder) {
 // ============================================================
 // ECharts 图表检测与渲染（支持多图表 + 表格）
 // ============================================================
+
+// 从文本中提取 [CHART:...] 和 [TABLE:...] 标记（括号计数法，支持任意嵌套）
+function extractMarkupBlocks(text, tag) {
+    var results = [];
+    var prefix = '[' + tag + ':';
+    var i = 0;
+    while ((i = text.indexOf(prefix, i)) !== -1) {
+        var jsonStart = i + prefix.length;
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+        var j = jsonStart;
+        while (j < text.length) {
+            var ch = text[j];
+            if (escaped) {
+                escaped = false;
+            } else if (ch === '\\') {
+                escaped = true;
+            } else if (ch === '"') {
+                inString = !inString;
+            } else if (!inString) {
+                if (ch === '{' || ch === '[') depth++;
+                else if (ch === '}' || ch === ']') {
+                    if (depth === 0) {
+                        // 当前字符是结束标记的 ]
+                        results.push({
+                            full: text.substring(i, j + 1),
+                            json: text.substring(jsonStart, j)
+                        });
+                        i = j + 1;
+                        break;
+                    }
+                    depth--;
+                }
+            }
+            j++;
+        }
+        if (j >= text.length) break; // 格式错误，停止搜索
+    }
+    return results;
+}
+
 function detectAndRenderChart(aiContent, totalContent) {
-    let html = totalContent;
+    var html = totalContent;
 
     // 1. 检测 [TABLE:...] 标记 — 渲染为 HTML 表格
-    html = html.replace(/\[TABLE:({[^}]+(?:{[^}]*})*[^}]*})\]/g, (match, jsonStr) => {
+    var tableBlocks = extractMarkupBlocks(html, 'TABLE');
+    for (var ti = 0; ti < tableBlocks.length; ti++) {
         try {
-            const cfg = JSON.parse(jsonStr);
-            const columns = cfg.columns || [];
-            const rows = cfg.rows || [];
-            let tableHtml = '<div class="info-card"><div class="card-title">' +
+            var cfg = JSON.parse(tableBlocks[ti].json);
+            var columns = cfg.columns || [];
+            var rows = cfg.rows || [];
+            var tableHtml = '<div class="info-card"><div class="card-title">' +
                 (cfg.title || '数据表格') + '</div><table>';
             tableHtml += '<thead><tr>' +
-                columns.map(c => `<th>${escapeHtml(String(c))}</th>`).join('') +
+                columns.map(function(c) { return '<th>' + escapeHtml(String(c)) + '</th>'; }).join('') +
                 '</tr></thead><tbody>';
-            rows.forEach(row => {
+            rows.forEach(function(row) {
                 tableHtml += '<tr>' +
-                    (Array.isArray(row) ? row : columns.map(c => row[c] || ''))
-                        .map(v => `<td>${escapeHtml(String(v))}</td>`).join('') +
+                    (Array.isArray(row) ? row : columns.map(function(c) { return row[c] || ''; }))
+                        .map(function(v) { return '<td>' + escapeHtml(String(v)) + '</td>'; }).join('') +
                     '</tr>';
             });
             tableHtml += '</tbody></table></div>';
-            return tableHtml;
+            html = html.replace(tableBlocks[ti].full, tableHtml);
         } catch(e) {
-            return match;
+            console.warn('TABLE配置解析失败:', e);
         }
-    });
+    }
 
     // 2. 检测 [CHART:...] 标记 — 渲染为 ECharts 图表
-    const chartRegex = /\[CHART:({(?:[^{}]|{(?:[^{}]|{[^{}]*})*})*})\]/g;
-    const chartMatches = [...html.matchAll(chartRegex)];
-    const chartIds = [];
-    let chartIndex = 0;
+    var chartBlocks = extractMarkupBlocks(html, 'CHART');
+    var chartIds = [];
+    var chartIndex = 0;
 
-    for (const cm of chartMatches) {
+    for (var ci = 0; ci < chartBlocks.length; ci++) {
         try {
-            const chartConfig = JSON.parse(cm[1]);
-            const chartId = 'chart-' + Date.now() + '-' + (chartIndex++);
+            var chartConfig = JSON.parse(chartBlocks[ci].json);
+            var chartId = 'chart-' + Date.now() + '-' + (chartIndex++);
             chartIds.push({id: chartId, config: chartConfig});
-            html = html.replace(cm[0],
-                `<div class="chart-container" id="${chartId}"></div>`);
+            html = html.replace(chartBlocks[ci].full,
+                '<div class="chart-container" id="' + chartId + '"></div>');
         } catch(e) {
             console.warn('图表配置解析失败:', e);
         }
@@ -1078,19 +1120,17 @@ function detectAndRenderChart(aiContent, totalContent) {
     aiContent.innerHTML = marked.parse(html);
 
     // 延迟渲染图表（等 DOM 就绪）
-    chartIds.forEach(({id, config}) => {
-        setTimeout(() => {
-            const chartDom = document.getElementById(id);
+    chartIds.forEach(function(item) {
+        setTimeout(function() {
+            var chartDom = document.getElementById(item.id);
             if (chartDom && typeof echarts !== 'undefined') {
-                const chart = echarts.init(chartDom);
-                // 注入默认样式
-                const defaultOpts = {
+                var chart = echarts.init(chartDom);
+                var defaultOpts = {
                     tooltip: { trigger: 'axis' },
                     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
                 };
-                chart.setOption(Object.assign({}, defaultOpts, config));
-                // 响应式缩放
-                const resizeObserver = new ResizeObserver(() => chart.resize());
+                chart.setOption(Object.assign({}, defaultOpts, item.config));
+                var resizeObserver = new ResizeObserver(function() { chart.resize(); });
                 resizeObserver.observe(chartDom);
             }
         }, 150);
