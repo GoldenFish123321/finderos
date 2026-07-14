@@ -29,6 +29,7 @@ class FunctionRepository:
                 "SELECT * FROM functions ORDER BY sort_order ASC, id ASC"
             ).fetchall()
 
+        # 第一遍：创建所有节点放入 node_map，收集顶层节点
         node_map = {}
         tree = []
         for row in all_funcs:
@@ -40,10 +41,13 @@ class FunctionRepository:
                 "children": [],
             }
             node_map[row["id"]] = node
+
+        # 第二遍：建立父子关系（确保父节点无论顺序都已被创建）
+        for row in all_funcs:
             if row["parent_id"] is None:
-                tree.append(node)
+                tree.append(node_map[row["id"]])
             elif row["parent_id"] in node_map:
-                node_map[row["parent_id"]]["children"].append(node)
+                node_map[row["parent_id"]]["children"].append(node_map[row["id"]])
 
         def clean_children(nodes):
             for n in nodes:
@@ -70,8 +74,8 @@ class FunctionRepository:
                 ).fetchall()
                 checked_ids = {r["function_id"] for r in rows}
 
+        # 第一遍：创建所有节点放入 node_map
         node_map = {}
-        tree = []
         for row in all_funcs:
             node = {
                 "id": row["id"],
@@ -81,10 +85,14 @@ class FunctionRepository:
                 "children": [],
             }
             node_map[row["id"]] = node
+
+        # 第二遍：建立父子关系（确保父节点无论顺序都已被创建）
+        tree = []
+        for row in all_funcs:
             if row["parent_id"] is None:
-                tree.append(node)
+                tree.append(node_map[row["id"]])
             elif row["parent_id"] in node_map:
-                node_map[row["parent_id"]]["children"].append(node)
+                node_map[row["parent_id"]]["children"].append(node_map[row["id"]])
 
         def clean_children(nodes):
             for n in nodes:
