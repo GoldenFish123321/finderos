@@ -37,7 +37,11 @@ class FunctionFormHandler(AdminBaseHandler):
         func_id = self.get_query_argument("id", None)
         func = None
         if func_id:
-            func = FunctionRepository.get_by_id(int(func_id))
+            try:
+                func = FunctionRepository.get_by_id(int(func_id))
+            except (ValueError, TypeError):
+                self.write('<script>alert("无效的功能ID");window.history.back();</script>')
+                return
             if not func:
                 self.write('<script>alert("功能不存在");window.history.back();</script>')
                 return

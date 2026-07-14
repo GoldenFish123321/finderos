@@ -56,7 +56,11 @@ class ModelFormHandler(AdminBaseHandler):
         model_id = self.get_query_argument("id", None)
         model = None
         if model_id:
-            model = AiModelRepository.get_by_id(int(model_id))
+            try:
+                model = AiModelRepository.get_by_id(int(model_id))
+            except (ValueError, TypeError):
+                self.write('<script>alert("无效的模型ID");window.history.back();</script>')
+                return
             if not model:
                 self.write('<script>alert("模型不存在");window.history.back();</script>')
                 return
