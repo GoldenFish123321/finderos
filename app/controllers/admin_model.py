@@ -27,7 +27,10 @@ class ModelListHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def get(self):
-        page = int(self.get_query_argument("page", 1))
+        try:
+            page = int(self.get_query_argument("page", 1))
+        except (ValueError, TypeError):
+            page = 1
         category = self.get_query_argument("category", "").strip()
         rows, total = AiModelRepository.get_all(page=page, page_size=6, category=category)
         total_pages = max(1, (total + 6 - 1) // 6)
@@ -164,8 +167,14 @@ class ModelApiListHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def get(self):
-        page = int(self.get_query_argument("page", 1))
-        limit = int(self.get_query_argument("limit", 6))
+        try:
+            page = int(self.get_query_argument("page", 1))
+        except (ValueError, TypeError):
+            page = 1
+        try:
+            limit = int(self.get_query_argument("limit", 6))
+        except (ValueError, TypeError):
+            limit = 6
         category = self.get_query_argument("category", "").strip()
         rows, total = AiModelRepository.get_all(
             page=page, page_size=limit, category=category, enabled_only=True
@@ -497,7 +506,11 @@ class ConversationMessagesHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def get(self):
-        conv_id = int(self.get_query_argument("id", 0))
+        try:
+            conv_id = int(self.get_query_argument("id", 0))
+        except (ValueError, TypeError):
+            self.write({"code": 1, "msg": "无效的对话ID"})
+            return
         # 校验对话归属权，防止 IDOR 越权访问
         conv = ConversationRepository.get_by_id(conv_id)
         if not conv:

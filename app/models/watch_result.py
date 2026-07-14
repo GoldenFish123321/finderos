@@ -78,7 +78,7 @@ class WatchResultRepository:
         """Mark a result as saved to warehouse."""
         with get_db() as conn:
             conn.execute(
-                "UPDATE watch_results SET result_data = 'SAVED:' || result_data WHERE id = ?",
+                "UPDATE watch_results SET result_data = 'SAVED:' || COALESCE(result_data, '') WHERE id = ?",
                 (result_id,),
             )
             conn.commit()
