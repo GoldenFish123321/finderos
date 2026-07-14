@@ -143,7 +143,7 @@ class WatchHandler(AdminBaseHandler):
                         keyword=keyword,
                         request_url=news_link or request_url,
                         response_status=status,
-                        response_size=len(news.get("summary", "")),
+                        response_size=len(json.dumps(news, ensure_ascii=False).encode("utf-8")),
                         result_data=json.dumps(news, ensure_ascii=False),
                     )
                     if is_new:
@@ -229,11 +229,10 @@ class WatchSaveHandler(AdminBaseHandler):
             return
 
         ids = [int(rid) for rid in result_ids if rid]
-        # 原有标记逻辑
-        saved, skipped = WatchResultRepository.mark_saved_batch(ids)
 
-        # v0.2.13: 同时写入独立 data_warehouse 表（借鉴郭家琪）
+        # v0.2.13: 先写入独立 data_warehouse 表，成功后再标记 SAVED（避免解析失败导致错误标记）
         dw_count = 0
+        saved_ids = []
         for rid in ids:
             result = WatchResultRepository.get_by_id(rid)
             if not result:
@@ -262,6 +261,13 @@ class WatchSaveHandler(AdminBaseHandler):
                             raw_data=json.dumps(item, ensure_ascii=False),
                         ):
                             dw_count += 1
+                            if rid not in saved_ids:
+                                saved_ids.append(rid)
+
+        # 只有成功写入数据仓库后才标记 SAVED（避免数据解析失败导致虚假的 SAVED 标记）
+        saved, skipped = 0, len(ids)
+        if saved_ids:
+            saved, skipped = WatchResultRepository.mark_saved_batch(saved_ids)
 
         if dw_count > 0:
             msg = f"成功保存 {dw_count} 条结果到数据仓库"

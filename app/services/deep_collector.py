@@ -35,6 +35,23 @@ logger = logging.getLogger(__name__)
 # 复用 collector 的 SSL 上下文和请求头
 _ssl_ctx = ssl.create_default_context()
 
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """禁止 HTTP 重定向跟随，防止 SSRF 绕过（重定向到内网地址）。"""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+    http_error_301 = http_error_302 = http_error_303 = http_error_307 = http_error_308 = (
+        lambda self, req, fp, code, msg, hdrs: fp
+    )
+
+
+# 预构建不跟随重定向的 opener
+_no_redirect_opener = urllib.request.build_opener(
+    _NoRedirectHandler(),
+    urllib.request.HTTPSHandler(context=_ssl_ctx),
+)
+
 _BASE_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -223,7 +240,7 @@ def deep_fetch(url: str, timeout: int = 30) -> Tuple[int, str, str, str]:
 
     try:
         req = urllib.request.Request(url, headers=_BASE_HEADERS)
-        with urllib.request.urlopen(req, timeout=timeout, context=_ssl_ctx) as resp:
+        with _no_redirect_opener.open(req, timeout=timeout) as resp:
             status = resp.getcode()
             encoding = resp.headers.get("Content-Encoding", "")
             content_type = resp.headers.get("Content-Type", "")
