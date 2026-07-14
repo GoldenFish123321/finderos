@@ -58,7 +58,8 @@ class WatchHandler(AdminBaseHandler):
     def post(self):
         """执行采集：关键词 → 按启用的瞭望源发起请求 → 解析 → 返回结构化结果"""
         keyword = self.get_body_argument("keyword", "").strip()
-        source_ids_raw = self.get_body_argument("source_ids", "")
+        # 兼容 jQuery 数组序列化 (source_ids[]=1&source_ids[]=2)
+        source_ids_raw = self.get_body_argument("source_ids", "") or self.get_body_argument("source_ids[]", "")
         source_ids = [s.strip() for s in source_ids_raw.split(",") if s.strip()] if source_ids_raw else []
 
         if not keyword:
@@ -162,14 +163,40 @@ class WatchSaveHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def post(self):
-        # 兼容两种前端传参格式：
-        # 1. 多个同名表单字段 result_ids=1&result_ids=2
-        # 2. 逗号分隔字符串 result_ids=1,2
-        result_ids = self.get_body_arguments("result_ids")
-        if not result_ids:
+        # 兼容四种前端传参格式：
+        # 1. jQuery默认数组序列化: result_ids[]=1&result_ids[]=2
+        # 2. 多个同名表单字段: result_ids=1&result_ids=2
+        # 3. 逗号分隔字符串: result_ids=1,2
+        # 4. JSON body: {"result_ids": [1,2]}
+        raw_ids = (self.get_body_arguments("result_ids")
+                   or self.get_body_arguments("result_ids[]"))
+        if not raw_ids:
+            # 尝试从逗号分隔字符串或 JSON body 解析
             ids_str = self.get_body_argument("result_ids", "")
+            if not ids_str:
+                ids_str = self.get_body_argument("result_ids[]", "")
             if ids_str:
-                result_ids = [x.strip() for x in ids_str.split(",") if x.strip()]
+                raw_ids = [ids_str]
+            else:
+                # 尝试 JSON body
+                try:
+                    body = json.loads(self.request.body)
+                    if isinstance(body, dict) and "result_ids" in body:
+                        raw_ids = body["result_ids"]
+                        if isinstance(raw_ids, (int, str)):
+                            raw_ids = [str(raw_ids)]
+                        else:
+                            raw_ids = [str(x) for x in raw_ids]
+                except (json.JSONDecodeError, TypeError, AttributeError):
+                    pass
+
+        # 统一展开：对每个元素按逗号拆分，兼容混合格式
+        result_ids = []
+        for r in raw_ids:
+            for part in str(r).split(","):
+                part = part.strip()
+                if part:
+                    result_ids.append(part)
 
         if not result_ids:
             self.write({"code": 1, "msg": "请选择要保存的结果"})
