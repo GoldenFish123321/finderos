@@ -199,7 +199,8 @@ def seed_default_data():
     import secrets
 
     with get_db() as conn:
-        conn.execute("PRAGMA foreign_keys=OFF")
+        # 注意：不关闭外键约束，依赖插入顺序保证引用完整性
+        # 先插入角色 → 再插入用户 → 再插入功能 → 最后关联
 
         existing = conn.execute("SELECT COUNT(*) as cnt FROM roles").fetchone()
         if existing["cnt"] == 0:
@@ -262,7 +263,6 @@ def seed_default_data():
             print("[种子] 管理员角色功能关联已创建")
 
         conn.commit()
-        conn.execute("PRAGMA foreign_keys=ON")
 
     _seed_default_sources()
     _seed_default_models()

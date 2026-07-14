@@ -91,7 +91,7 @@ class LoginHandler(BaseHandler):
             return self._redirect_by_role(self.current_user)
 
         username = self.get_body_argument("username", "").strip()
-        password = self.get_body_argument("password", "")
+        password = self.get_body_argument("password", "").strip()
 
         # 参数校验
         if not username or not password:
