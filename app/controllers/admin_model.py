@@ -5,6 +5,8 @@ admin_model.py — 模型引擎控制器
 支持：列表/新增/编辑/删除/启停/清零/设为默认。
 支持：SSE 流式对话（真实 API + Token 追踪 + 本地 Mock 回退）。
 """
+import asyncio
+import concurrent.futures
 import json
 import logging
 import tornado.web
@@ -12,6 +14,9 @@ from app.controllers.admin_base import AdminBaseHandler
 from app.models.ai_model import AiModelRepository, CATEGORIES, PROVIDERS
 
 logger = logging.getLogger(__name__)
+
+# 全局线程池（复用，避免每个请求创建销毁）
+_chat_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="chat")
 
 
 class ModelListHandler(AdminBaseHandler):
@@ -197,9 +202,6 @@ class ModelChatHandler(AdminBaseHandler):
         self.set_header("Connection", "keep-alive")
         self.set_header("X-Accel-Buffering", "no")
 
-        import asyncio
-        import concurrent.futures
-
         total_tokens = 0
         api_success = False
         is_mock = True  # 默认使用 Mock，真实 API 成功时改为 False
@@ -247,8 +249,7 @@ class ModelChatHandler(AdminBaseHandler):
                     return lines, str(e)
 
             loop = asyncio.get_event_loop()
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                lines, err = await loop.run_in_executor(pool, _sync_stream_call)
+            lines, err = await loop.run_in_executor(_chat_executor, _sync_stream_call)
 
             if err is None:
                 api_success = True
@@ -314,8 +315,6 @@ class ModelChatHandler(AdminBaseHandler):
         无需真实 API，用于演示/开发环境。
         返回估算 token 数。
         """
-        import asyncio
-
         system_prompt = model["system_prompt"] or ""
         mock_reply = (
             f"您好！我是 {model['name']}（{model['provider']}）。\n\n"
