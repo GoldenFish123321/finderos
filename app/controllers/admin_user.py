@@ -96,8 +96,15 @@ class UserDeleteHandler(AdminBaseHandler):
     def post(self):
         user_id = int(self.get_body_argument("id", 0))
         user = UserRepository.get_user_by_id(user_id)
-        if user and user["username"] == "admin":
+        if not user:
+            self.write('<script>alert("用户不存在");window.history.back();</script>')
+            return
+        if user["username"] == "admin":
             self.write('<script>alert("超级管理员 admin 不可删除");window.history.back();</script>')
+            return
+        # 禁止管理员删除自己
+        if user["username"] == self.current_user:
+            self.write('<script>alert("不能删除自己的账号");window.history.back();</script>')
             return
         UserRepository.delete_user(user_id)
         self.redirect("/admin/user?msg=已删除")
@@ -109,11 +116,20 @@ class UserToggleHandler(AdminBaseHandler):
     @tornado.web.authenticated
     def post(self):
         user_id = int(self.get_body_argument("id", 0))
-        status = UserRepository.toggle_enabled(user_id)
-        if status == -2:
-            self.write('<script>alert("超级管理员 admin 不可被禁用");window.history.back();</script>')
-        elif status == -1:
+        user = UserRepository.get_user_by_id(user_id)
+        if not user:
             self.write('<script>alert("用户不存在");window.history.back();</script>')
+            return
+        # 禁止管理员禁用自己
+        if user["username"] == self.current_user:
+            self.write('<script>alert("不能禁用自己的账号");window.history.back();</script>')
+            return
+        if user["username"] == "admin":
+            self.write('<script>alert("超级管理员 admin 不可被禁用");window.history.back();</script>')
+            return
+        status = UserRepository.toggle_enabled(user_id)
+        if status == -1:
+            self.write('<script>alert("禁用失败");window.history.back();</script>')
         else:
             self.redirect(f"/admin/user?msg={'已启用' if status == 1 else '已禁用'}")
 
@@ -129,6 +145,10 @@ class UserBatchDeleteHandler(AdminBaseHandler):
             return
         try:
             ids = [int(x) for x in ids_str.split(",") if x.strip()]
+            # 过滤掉自己的 ID
+            current_user = UserRepository.get_user_by_username(self.current_user)
+            if current_user:
+                ids = [uid for uid in ids if uid != current_user["id"]]
             count = UserRepository.batch_delete(ids)
             self.write({"code": 0, "msg": f"成功删除 {count} 个用户"})
         except (ValueError, TypeError):
@@ -147,6 +167,11 @@ class UserBatchToggleHandler(AdminBaseHandler):
             return
         try:
             ids = [int(x) for x in ids_str.split(",") if x.strip()]
+            # 过滤掉自己的 ID（禁用时）
+            if enable_str != "1":
+                current_user = UserRepository.get_user_by_username(self.current_user)
+                if current_user:
+                    ids = [uid for uid in ids if uid != current_user["id"]]
             enable = enable_str == "1"
             count = UserRepository.batch_toggle(ids, enable)
             action = "启用" if enable else "禁用"
