@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% end %}
+
+{% block content %}
+<style>
+    body {
+        background: linear-gradient(135deg, #0a0c15 0%, #141830 30%, #1a1040 60%, #0d1020 100%);
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 0;
+    }
+    .user-home {
+        position: relative; z-index: 1;
+        text-align: center;
+        padding: 60px 40px;
+        max-width: 600px;
+        width: 90%;
+    }
+    .user-home .logo-icon { font-size: 56px; margin-bottom: 16px; }
+    .user-home h1 {
+        font-size: 28px; font-weight: 800;
+        background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin: 0 0 8px;
+    }
+    .user-home .greeting { font-size: 15px; color: var(--text-secondary); margin-bottom: 32px; }
+    .user-home .stat-grid {
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+        margin-bottom: 32px;
+    }
+    .user-home .stat-card {
+        padding: 20px 12px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+    }
+    .user-home .stat-card .num {
+        font-size: 28px; font-weight: 700;
+        background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    .user-home .stat-card .label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    .user-home .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    .user-home .actions a {
+        padding: 10px 24px;
+        border-radius: var(--radius-md);
+        font-size: 14px;
+        transition: all var(--transition-smooth);
+    }
+    .user-home .actions .btn-primary {
+        background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+        color: #fff;
+    }
+    .user-home .actions .btn-secondary {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        color: var(--text-secondary);
+    }
+    .user-home .actions a:hover {
+        transform: translateY(-1px);
+        box-shadow: var(--glow-blue);
+    }
+    .user-home .footer { margin-top: 24px; font-size: 12px; color: var(--text-muted); }
+</style>
+
+<div class="user-home">
+    <div class="logo-icon">🔭</div>
+    <h1>瞭望与问数系统</h1>
+    <p class="greeting">欢迎回来，<strong>{{ username }}</strong>！</p>
+
+    <div class="stat-grid">
+        <div class="stat-card">
+            <div class="num">{{ result_stats['total'] }}</div>
+            <div class="label">采集结果</div>
+        </div>
+        <div class="stat-card">
+            <div class="num">{{ model_count }}</div>
+            <div class="label">AI 模型</div>
+        </div>
+        <div class="stat-card">
+            <div class="num">{{ source_count }}</div>
+            <div class="label">瞭望源</div>
+        </div>
+    </div>
+
+    <div class="actions">
+        <a href="/admin" class="btn-primary">进入管理后台</a>
+        <a href="/logout" class="btn-secondary">退出登录</a>
+    </div>
+
+    <div class="footer">DataFinderAgentOS v0.2</div>
+</div>
+{% end %}
