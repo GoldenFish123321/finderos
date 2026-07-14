@@ -231,7 +231,11 @@ class EmployeeInvokeHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     async def post(self):
-        emp_id = int(self.get_body_argument("employee_id", 0))
+        try:
+            emp_id = int(self.get_body_argument("employee_id", 0))
+        except (ValueError, TypeError):
+            self.write({"code": 1, "msg": "无效的员工ID"})
+            return
         message = self.get_body_argument("message", "").strip()
 
         if not message:

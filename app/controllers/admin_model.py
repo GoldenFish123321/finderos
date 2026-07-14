@@ -199,7 +199,11 @@ class ModelChatHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     async def post(self):
-        model_id = int(self.get_body_argument("model_id", 0))
+        try:
+            model_id = int(self.get_body_argument("model_id", 0))
+        except (ValueError, TypeError):
+            self.write({"code": 1, "msg": "无效的模型ID"})
+            return
         message = self.get_body_argument("message", "").strip()
         conversation_id = self.get_body_argument("conversation_id", None)
 
@@ -489,7 +493,11 @@ class ConversationDeleteHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def post(self):
-        conv_id = int(self.get_body_argument("id", 0))
+        try:
+            conv_id = int(self.get_body_argument("id", 0))
+        except (ValueError, TypeError):
+            self.write({"code": 1, "msg": "无效的对话ID"})
+            return
         conv = ConversationRepository.get_by_id(conv_id)
         if not conv:
             self.write({"code": 1, "msg": "对话不存在"})
