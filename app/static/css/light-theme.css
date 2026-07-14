@@ -1,10 +1,11 @@
 /* ============================================================
    light-theme.css — 瞭望与问数系统 浅色政务风主题 v1.0
    企业化 / 政务行业风格，简约、高级感、扁平化
+   注意: CSS 变量作用于 body.light-theme，不影响默认深色主题
    ============================================================ */
 
-/* ===== CSS 设计令牌 ===== */
-:root {
+/* ===== CSS 设计令牌（仅在浅色模式下生效） ===== */
+body.light-theme {
   --bg-deep: #f0f2f5;
   --bg-card: rgba(255, 255, 255, 0.95);
   --bg-card-hover: rgba(255, 255, 255, 1);
@@ -37,6 +38,7 @@ body.light-theme {
   color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
+/* body.light-theme 变量定义已合并至上方统一块 */
 
 /* ===== 玻璃拟态卡片（浅色版） ===== */
 body.light-theme .glass-panel {
