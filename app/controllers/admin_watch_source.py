@@ -13,7 +13,10 @@ class WatchSourceListHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def get(self):
-        page = int(self.get_query_argument("page", 1))
+        try:
+            page = int(self.get_query_argument("page", 1))
+        except (ValueError, TypeError):
+            page = 1
         keyword = self.get_query_argument("keyword", "").strip()
         rows, total = WatchSourceRepository.get_all(
             page=page, page_size=20, keyword=keyword

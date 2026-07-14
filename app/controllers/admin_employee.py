@@ -36,7 +36,10 @@ class EmployeeListHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def get(self):
-        page = max(1, int(self.get_query_argument("page", 1)))
+        try:
+            page = max(1, int(self.get_query_argument("page", 1)))
+        except (ValueError, TypeError):
+            page = 1
         employee_type = self.get_query_argument("type", "").strip()
         rows, total = DigitalEmployeeRepository.get_all(
             page=page, page_size=12, employee_type=employee_type

@@ -15,7 +15,10 @@ class RoleListHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def get(self):
-        page = int(self.get_query_argument("page", 1))
+        try:
+            page = int(self.get_query_argument("page", 1))
+        except (ValueError, TypeError):
+            page = 1
         rows, total = RoleRepository.get_all(page=page, page_size=20)
         total_pages = max(1, (total + 20 - 1) // 20)
 
