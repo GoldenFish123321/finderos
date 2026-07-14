@@ -108,6 +108,10 @@
     <input type="hidden" name="ids" id="batch-toggle-ids">
     <input type="hidden" name="enable" id="batch-toggle-enable">
 </form>
+<form id="form-toggle" method="post" action="/admin/user/toggle" style="display:none;">
+    {% module xsrf_form_html() %}
+    <input type="hidden" name="id" id="toggle-id">
+</form>
 {% end %}
 
 {% block admin_scripts %}
