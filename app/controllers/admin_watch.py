@@ -101,17 +101,22 @@ class WatchHandler(AdminBaseHandler):
             encoded_kw = urllib.parse.quote(keyword)
             request_url = url_template.replace("{keyword}", encoded_kw).replace("{page}", "0")
 
-            # 获取请求头并过滤不需要的字段
+            # 获取请求头并过滤不需要的字段，同时校验 CRLF 注入
             raw_headers = WatchSourceRepository.get_headers(sid)
-            headers = {
-                k: v for k, v in raw_headers.items()
-                if k.lower() not in (
+            from app.utils.security import has_crlf
+            headers = {}
+            for k, v in raw_headers.items():
+                if k.lower() in (
                     "accept-encoding", "host",
                     "sec-fetch-dest", "sec-fetch-mode",
                     "sec-fetch-site", "sec-fetch-user",
                     "connection", "cache-control",
-                )
-            }
+                ):
+                    continue
+                if has_crlf(k) or has_crlf(v):
+                    logger.warning(f"CRLF injection detected in header '{k}' for source {sid}, skipping")
+                    continue
+                headers[k] = v
 
             # 调用采集服务（教学视频架构: services/collector）
             # 根据 URL 自动选择解析器
