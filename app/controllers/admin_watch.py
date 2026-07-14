@@ -112,7 +112,7 @@ class WatchHandler(AdminBaseHandler):
                 for news in parsed_news:
                     result_id = WatchResultRepository.create(
                         source_id=sid,
-                        keyword=news.get("title", keyword),
+                        keyword=keyword,
                         request_url=news.get("link", request_url),
                         response_status=status,
                         response_size=len(news.get("summary", "")),
