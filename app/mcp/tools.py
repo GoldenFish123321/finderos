@@ -209,9 +209,20 @@ def _list_conversations(username: str = "", limit: int = 20) -> Dict[str, Any]:
     }
 
 
-def _get_conversation_messages(conversation_id: int, limit: int = 20) -> Dict[str, Any]:
-    """获取指定对话的消息历史。"""
+def _get_conversation_messages(conversation_id: int, limit: int = 20,
+                               username: str = "") -> Dict[str, Any]:
+    """获取指定对话的消息历史（含所有权验证）。"""
     from app.models.conversation import ConversationRepository
+    # 所有权验证：确保用户只能读取自己的对话
+    if username:
+        conv = ConversationRepository.get_by_id(conversation_id)
+        if not conv or conv.get("username", "") != username:
+            return {
+                "conversation_id": conversation_id,
+                "total": 0,
+                "messages": [],
+                "error": "对话不存在或无权访问",
+            }
     messages = ConversationRepository.get_messages(conversation_id, limit=limit)
     return {
         "conversation_id": conversation_id,
@@ -390,6 +401,10 @@ ALL_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
                     "type": "integer",
                     "description": "返回消息数量上限",
                     "default": 20,
+                },
+                "username": {
+                    "type": "string",
+                    "description": "当前用户名（由系统自动填充，用于所有权验证）",
                 },
             },
             "required": ["conversation_id"],

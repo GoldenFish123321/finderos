@@ -120,10 +120,11 @@ def _decompress(data: bytes, encoding: str) -> bytes:
             import brotli
             return brotli.decompress(data)
         except ImportError:
-            logger.warning("Brotli 压缩内容无法解压：未安装 brotli 包，返回原始数据")
-        except Exception:
-            pass
-    return data
+            logger.error("Brotli 压缩内容无法解压：未安装 brotli 包，内容将丢失。请执行: pip install brotli")
+            return b""
+        except Exception as e:
+            logger.error(f"Brotli 解压失败: {e}，内容将丢失")
+            return b""
 
 
 def _extract_title(html: str) -> str:

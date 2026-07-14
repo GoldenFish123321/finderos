@@ -119,8 +119,10 @@ class MCPClient:
         import threading
         ctx = getattr(threading.current_thread(), "_mcp_context", {})
         if ctx:
-            if tool_name == "list_conversations" and "username" not in arguments:
-                arguments["username"] = ctx.get("username", "")
+            username = ctx.get("username", "")
+            if tool_name in ("list_conversations", "get_conversation_messages"):
+                if "username" not in arguments:
+                    arguments["username"] = username
         return arguments
 
     # ── 智能意图匹配（无 API Key 时的回退方案）────────────

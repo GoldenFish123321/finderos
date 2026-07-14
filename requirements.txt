@@ -6,6 +6,9 @@ tornado>=6.4
 # 加密：API Key 存储加密
 cryptography>=41.0
 
+# HTTP 压缩：Brotli 解压支持（百度等主流网站使用）
+brotli>=1.1
+
 # 可选：AI 爬虫组件（深度采集增强）
 crawl4ai>=0.4
 

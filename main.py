@@ -13,6 +13,47 @@ import tornado.web
 from tornado.httpserver import HTTPServer
 
 from app.config.settings import settings
+
+# ── COOKIE_SECRET 持久化文件路径 ──
+_SECRET_KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".secret_key")
+
+
+def _load_or_create_secret_key() -> str:
+    """加载或创建持久化的 COOKIE_SECRET。
+
+    优先级：
+    1. 环境变量 COOKIE_SECRET（生产环境推荐）
+    2. .secret_key 文件（自动生成，跨重启持久化）
+    3. 自动生成并保存到 .secret_key 文件
+
+    这确保 API Key 加密密钥在重启后保持一致，避免数据丢失。
+    """
+    # 1. 环境变量优先
+    env_secret = os.environ.get("COOKIE_SECRET", "")
+    if env_secret:
+        return env_secret
+
+    # 2. 尝试从文件加载
+    try:
+        if os.path.exists(_SECRET_KEY_FILE):
+            with open(_SECRET_KEY_FILE, "r") as f:
+                saved = f.read().strip()
+                if saved:
+                    logger.info("已从 .secret_key 文件加载持久化密钥")
+                    return saved
+    except OSError as e:
+        logger.warning(f"读取 .secret_key 文件失败: {e}")
+
+    # 3. 生成新密钥并持久化
+    new_secret = secrets.token_hex(32)
+    try:
+        with open(_SECRET_KEY_FILE, "w") as f:
+            f.write(new_secret)
+        logger.info("已生成新的持久化密钥并保存到 .secret_key 文件")
+    except OSError as e:
+        logger.warning(f"无法保存 .secret_key 文件: {e}，密钥仅存在于本次会话")
+
+    return new_secret
 from app.controllers.auth import LoginHandler, LogoutHandler, RegisterHandler
 from app.controllers.home import IndexHandler
 from app.controllers.admin_home import AdminIndexHandler
@@ -70,12 +111,8 @@ def make_app() -> tornado.web.Application:
     创建 Tornado Web 应用实例。
     配置路由、安全策略和模式。
     """
-    # cookie_secret: 优先使用环境变量，否则随机生成
+    # cookie_secret: 使用 settings 中已有的值（在 __main__ 块中已初始化）
     cookie_secret = settings.COOKIE_SECRET
-    if not cookie_secret:
-        cookie_secret = secrets.token_hex(32)
-        settings.COOKIE_SECRET = cookie_secret  # 回写 settings，供加密模块使用
-        logger.warning("COOKIE_SECRET 未设置，使用随机值（重启后所有会话失效）")
 
     return tornado.web.Application(
         [
@@ -195,9 +232,9 @@ def make_app() -> tornado.web.Application:
 
 if __name__ == "__main__":
     # 确保 COOKIE_SECRET 在数据库初始化之前已设置（加密模块依赖此密钥）
+    # 使用持久化密钥加载策略，避免重启后 API Key 无法解密
     if not settings.COOKIE_SECRET:
-        settings.COOKIE_SECRET = secrets.token_hex(32)
-        logger.warning("COOKIE_SECRET 未设置，使用随机值（重启后所有会话失效）")
+        settings.COOKIE_SECRET = _load_or_create_secret_key()
 
     # 初始化数据库（自动建表）
     init_db()
