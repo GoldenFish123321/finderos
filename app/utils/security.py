@@ -31,6 +31,64 @@ def has_crlf(value: str) -> bool:
     return bool(_CRLF_PATTERN.search(value))
 
 
+# ── Prompt Injection 检测 ─────────────────────────────────────
+
+# 危险指令模式（匹配已知的 Prompt Injection / Jailbreak 攻击模式）
+_PROMPT_INJECTION_PATTERNS = [
+    re.compile(r"(?i)(ignore|forget|disregard)\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|prompts?|rules?|constraints?)"),
+    re.compile(r"(?i)you\s+are\s+now\s+(DAN|STAN|jailbroken|unchained|unleashed)"),
+    re.compile(r"(?i)pretend\s+(you\s+are|to\s+be)\s+(a\s+)?(different|another|new)"),
+    re.compile(r"(?i)system\s*(prompt|message|instruction)\s*(is|:|=)"),
+    re.compile(r"(?i)(DROP|DELETE|ALTER|TRUNCATE)\s+(TABLE|DATABASE|INDEX)"),
+    re.compile(r"(?i)SELECT\s+.*\s+FROM\s+.*\s+WHERE.*(--|;)"),
+    re.compile(r"(?i)<script[^>]*>|javascript\s*:|onerror\s*=|onload\s*="),
+    re.compile(r"(?i)(output|show|reveal|display|print|disclose)\s+(your|the)\s+(system\s+)?(prompt|instructions?|rules?)"),
+    re.compile(r"(?i)(为你|假装|忽略|忘记|跳过)\s*(之前的|所有的|前面的)?\s*(指令|提示|规则|约束|限制)"),
+]
+
+
+def detect_prompt_injection(user_input: str) -> tuple[bool, str]:
+    """检测用户输入中是否包含 Prompt Injection / SQL 注入 / XSS 攻击模式。
+
+    Returns:
+        (is_attack, matched_pattern_description)
+    """
+    if not user_input:
+        return False, ""
+
+    for pattern in _PROMPT_INJECTION_PATTERNS:
+        match = pattern.search(user_input)
+        if match:
+            return True, f"检测到潜在安全风险: {match.group(0)[:50]}"
+
+    # 检测过长的重复模式（DoS）
+    if len(user_input) > 5000:
+        # 检查重复字符比例
+        unique_ratio = len(set(user_input)) / len(user_input)
+        if unique_ratio < 0.05:
+            return True, "检测到异常重复输入模式"
+
+    return False, ""
+
+
+def sanitize_user_input(user_input: str) -> str:
+    """清洗用户输入：移除明显的危险字符序列，保留正常内容。
+
+    注意：此处采用"轻量过滤"策略，不彻底修改原文，
+    仅在明显攻击模式时做替换。主要的防护依赖 Prompt 层的指令隔离。
+    """
+    if not user_input:
+        return ""
+
+    cleaned = user_input
+    # 移除 SQL 关键字注入尝试
+    for keyword in ["DROP TABLE", "DROP DATABASE", "ALTER TABLE", "TRUNCATE TABLE",
+                     "DELETE FROM", "INSERT INTO", "UPDATE SET"]:
+        cleaned = re.sub(rf"(?i){keyword}", "[BLOCKED]", cleaned)
+
+    return cleaned
+
+
 # ── SSRF 防护 ──────────────────────────────────────────────────
 
 

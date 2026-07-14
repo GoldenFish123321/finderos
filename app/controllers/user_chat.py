@@ -60,9 +60,11 @@ _CHART_INSTRUCTION = (
     "可以在回复末尾附加图表标记，前端将自动渲染为交互式图表。\n\n"
     "图表标记格式：\n"
     "1. ECharts图表: [CHART:{\"title\":{\"text\":\"标题\"},\"xAxis\":{\"type\":\"category\",\"data\":[\"A\",\"B\",\"C\"]},\"yAxis\":{\"type\":\"value\"},\"series\":[{\"data\":[10,20,30],\"type\":\"bar\"}]}]\n"
-    "   支持类型: bar(柱状图), line(折线图), pie(饼图), scatter(散点图)\n"
+    "   支持类型: bar(柱状图), line(折线图), pie(饼图), scatter(散点图), radar(雷达图), funnel(漏斗图)\n"
+    "   饼图示例: [CHART:{\"title\":{\"text\":\"来源分布\"},\"series\":[{\"type\":\"pie\",\"data\":[{\"name\":\"百度\",\"value\":40},{\"name\":\"搜狗\",\"value\":30},{\"name\":\"其他\",\"value\":30}]}]}]\n"
     "2. 数据表格: [TABLE:{\"title\":\"表名\",\"columns\":[\"列1\",\"列2\"],\"rows\":[[\"v1\",\"v2\"],[\"v3\",\"v4\"]]}]\n\n"
-    "要求：图表数据必须基于真实查询结果；JSON 必须合法；图表标记放在回复末尾。"
+    "要求：图表数据必须基于真实查询结果；JSON 必须合法（键名用双引号）；图表标记放在回复末尾。"
+    "如果数据不适合图表展示（如纯粹文本回答），不要强制生成图表。"
 )
 
 _TOOL_USAGE_INSTRUCTION = (
@@ -413,6 +415,18 @@ class UserChatStreamHandler(BaseHandler):
         if len(message) > 10000:
             self.write({"code": 1, "msg": "消息过长（最多10000字符）"})
             return
+
+        # ── 安全检查: Prompt Injection / SQL 注入 / XSS 检测 ──
+        from app.utils.security import detect_prompt_injection, sanitize_user_input
+        is_attack, attack_reason = detect_prompt_injection(message)
+        if is_attack:
+            logger.warning(
+                f"Prompt Injection 拦截: user={self.current_user}, "
+                f"reason={attack_reason}, msg_preview={message[:100]}"
+            )
+            self.write({"code": 1, "msg": "输入包含不安全内容，已被拦截。"})
+            return
+        message = sanitize_user_input(message)
 
         # 快捷指令
         if message.startswith("/"):
@@ -963,6 +977,15 @@ class UserEmployeeInvokeHandler(BaseHandler):
         if len(message) > 10000:
             self.write({"code": 1, "msg": "消息过长（最多10000字符）"})
             return
+
+        # ── 安全检查 ──
+        from app.utils.security import detect_prompt_injection, sanitize_user_input
+        is_attack, attack_reason = detect_prompt_injection(message)
+        if is_attack:
+            logger.warning(f"数字员工 Prompt Injection 拦截: user={self.current_user}, reason={attack_reason}")
+            self.write({"code": 1, "msg": "输入包含不安全内容，已被拦截。"})
+            return
+        message = sanitize_user_input(message)
 
         emp = DigitalEmployeeRepository.get_by_id(emp_id)
         if not emp or emp.get("is_enabled") == 0:
