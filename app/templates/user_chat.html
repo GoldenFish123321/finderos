@@ -4,8 +4,9 @@
 
 {% block content %}
 <script>
-// 统一应用深色主题
-document.body.classList.add('dark-theme');
+// 主题由 base.html 中的 applyTheme() 统一管理，此处不再硬编码
+var isDarkTheme = document.body.classList.contains('dark-theme') ||
+                  (!document.body.classList.contains('light-theme'));
 </script>
 
 <style>
@@ -556,7 +557,11 @@ document.body.classList.add('dark-theme');
             <span class="model-badge" id="header-model-name">
                 {% if selected %}{{ selected['name'] }}{% else %}未选择模型{% end %}
             </span>
-            <span class="meta-info" id="header-meta"></span>
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span class="meta-info" id="header-meta"></span>
+                <button onclick="exportConversation('md')" title="导出 Markdown" style="background:none;border:1px solid var(--border-subtle);color:var(--text-muted);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;">📥 MD</button>
+                <button onclick="exportConversation('print')" title="打印对话" style="background:none;border:1px solid var(--border-subtle);color:var(--text-muted);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;">🖨 打印</button>
+            </div>
         </div>
 
         <!-- D区: 对话消息 -->
@@ -1168,14 +1173,24 @@ function detectAndRenderChart(aiContent, totalContent) {
         setTimeout(function() {
             var chartDom = document.getElementById(item.id);
             if (chartDom && typeof echarts !== 'undefined') {
-                var chart = echarts.init(chartDom);
+                var isDark = document.body.classList.contains('dark-theme');
+                var chart = echarts.init(chartDom, isDark ? 'dark' : null);
                 var defaultOpts = {
                     tooltip: { trigger: 'axis' },
                     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
                 };
+                // 深色主题适配文字颜色
+                if (isDark) {
+                    defaultOpts.backgroundColor = 'transparent';
+                }
                 chart.setOption(Object.assign({}, defaultOpts, item.config));
+                // 响应式缩放
                 var resizeObserver = new ResizeObserver(function() { chart.resize(); });
                 resizeObserver.observe(chartDom);
+                // 点击图表可导出为图片
+                chart.on('click', function() {
+                    // 不干扰正常交互，仅记录
+                });
             }
         }, 150);
     });
@@ -1350,6 +1365,76 @@ if (typeof marked !== 'undefined') {
         breaks: true,
         gfm: true,
     });
+}
+
+// ============================================================
+// 报告导出功能
+// ============================================================
+function exportConversation(format) {
+    var messages = document.getElementById('chat-messages');
+    var bubbles = messages.querySelectorAll('.chat-msg');
+    if (bubbles.length === 0) {
+        if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('当前对话为空，无法导出'); });
+        return;
+    }
+
+    if (format === 'md') {
+        // 导出为 Markdown 文件
+        var mdContent = '# 瞭望与问数系统 — 对话记录\n\n';
+        mdContent += '> 导出时间: ' + new Date().toLocaleString() + '\n\n---\n\n';
+        bubbles.forEach(function(bubble) {
+            var isUser = bubble.classList.contains('user');
+            var roleLabel = isUser ? '**👤 用户**' : '**🤖 AI**';
+            var content = bubble.querySelector('.bubble-content');
+            var text = content ? content.textContent.trim() : '';
+            var meta = bubble.querySelector('.msg-meta');
+            var metaText = meta ? meta.textContent.trim() : '';
+            mdContent += roleLabel + '\n\n' + text + '\n\n';
+            if (metaText) mdContent += '> ' + metaText + '\n\n';
+            mdContent += '---\n\n';
+        });
+
+        var blob = new Blob([mdContent], {type: 'text/markdown;charset=utf-8'});
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = '对话记录_' + new Date().toISOString().slice(0,10) + '.md';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('已导出 Markdown 文件'); });
+    } else if (format === 'print') {
+        // 打印模式
+        var printWindow = window.open('', '_blank', 'width=800,height=600');
+        var printContent = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">';
+        printContent += '<title>瞭望与问数系统 — 对话记录</title>';
+        printContent += '<style>body{font-family:"Microsoft YaHei",sans-serif;max-width:800px;margin:0 auto;padding:20px;line-height:1.8;}';
+        printContent += '.msg{margin:12px 0;padding:10px 16px;border-radius:8px;}';
+        printContent += '.user{background:#e8f0fe;text-align:right;}';
+        printContent += '.assistant{background:#f5f5f5;}';
+        printContent += '.meta{font-size:11px;color:#999;margin-top:4px;}';
+        printContent += 'h1{color:#1e6fff;border-bottom:2px solid #1e6fff;padding-bottom:8px;}';
+        printContent += '@media print{body{padding:0;} .msg{page-break-inside:avoid;}}</style></head><body>';
+        printContent += '<h1>🔭 瞭望与问数系统 — 对话记录</h1>';
+        printContent += '<p style="color:#999;">导出时间: ' + new Date().toLocaleString() + '</p>';
+        bubbles.forEach(function(bubble) {
+            var isUser = bubble.classList.contains('user');
+            var content = bubble.querySelector('.bubble-content');
+            var text = content ? content.innerHTML : '';
+            var meta = bubble.querySelector('.msg-meta');
+            var metaText = meta ? meta.textContent.trim() : '';
+            printContent += '<div class="msg ' + (isUser ? 'user' : 'assistant') + '">';
+            printContent += '<strong>' + (isUser ? '👤 用户' : '🤖 AI') + '</strong>';
+            printContent += '<div>' + text + '</div>';
+            if (metaText) printContent += '<div class="meta">' + metaText + '</div>';
+            printContent += '</div>';
+        });
+        printContent += '</body></html>';
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        setTimeout(function() { printWindow.print(); }, 500);
+    }
 }
 </script>
 {% end %}

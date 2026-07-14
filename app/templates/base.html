@@ -9,13 +9,43 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/layui@2.9.8/dist/css/layui.css">
     <link rel="stylesheet" href="{{ static_url('css/base.css') }}">
     <link rel="stylesheet" href="{{ static_url('css/dark-theme.css') }}">
+    <link rel="stylesheet" href="{{ static_url('css/light-theme.css') }}">
     <!-- marked.js for Markdown rendering in AI chat -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
+    <!-- 主题切换按钮 -->
+    <button class="theme-toggle-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="切换深色/浅色主题">
+        🌓
+    </button>
     {% block content %}{% end %}
     <script src="https://cdn.jsdelivr.net/npm/layui@2.9.8/dist/layui.js"></script>
     <script src="{{ static_url('js/base.js') }}"></script>
+    <script>
+    // ── 主题切换逻辑 ──
+    (function() {
+        var saved = localStorage.getItem('finderos-theme') || 'dark';
+        applyTheme(saved);
+    })();
+    function toggleTheme() {
+        var current = document.body.classList.contains('dark-theme') ? 'dark' : 'light';
+        var next = current === 'dark' ? 'light' : 'dark';
+        applyTheme(next);
+        localStorage.setItem('finderos-theme', next);
+    }
+    function applyTheme(theme) {
+        var btn = document.getElementById('theme-toggle-btn');
+        if (theme === 'light') {
+            document.body.classList.remove('dark-theme');
+            document.body.classList.add('light-theme');
+            if (btn) btn.textContent = '☀️';
+        } else {
+            document.body.classList.remove('light-theme');
+            document.body.classList.add('dark-theme');
+            if (btn) btn.textContent = '🌙';
+        }
+    }
+    </script>
     {% block scripts %}{% end %}
 </body>
 </html>
