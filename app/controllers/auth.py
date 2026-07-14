@@ -60,6 +60,7 @@ class LoginRateLimiter:
     def record_failure(self, ip: str, username: str):
         """记录一次登录失败。"""
         now = time.time()
+        self._cleanup_expired(now)
         key = (ip, username)
         count, first_ts = self._failures.get(key, (0, now))
         if now - first_ts > settings.LOGIN_LOCKOUT_SECONDS:
