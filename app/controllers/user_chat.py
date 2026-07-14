@@ -463,6 +463,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
 
     async def _invoke_llm_employee(self, emp: dict, message: str, start_time: float):
         """LLM 型员工调用。"""
+        import time as _time
 
         # 选择模型
         model = None
@@ -621,7 +622,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
         if total_tokens > 0 and model:
             AiModelRepository.add_tokens(model["id"], total_tokens)
 
-        elapsed = round(time.time() - start_time, 2)
+        elapsed = round(_time.time() - start_time, 2)
         self.write(
             f"event: stats\ndata: {json.dumps({'tokens': total_tokens, 'mock': not api_success, 'elapsed': elapsed})}\n\n"
         )
