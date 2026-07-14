@@ -228,9 +228,9 @@
                     <i class="layui-icon layui-icon-edit"></i> 编辑
                 </a>
                 {% if m['is_enabled'] == 1 %}
-                <button class="layui-btn layui-btn-xs btn-test" onclick="openChat({{ m['id'] }}, '{{ m['name'] }}')">
-                    <i class="layui-icon layui-icon-dialogue"></i> 测试对话
-                </button>
+                <a href="/chat" target="_blank" class="layui-btn layui-btn-xs btn-test">
+                    <i class="layui-icon layui-icon-dialogue"></i> 前台问数
+                </a>
                 {% end %}
                 {% if m['is_default'] == 0 %}
                 <form action="/admin/model/default" method="post" style="display:inline;">
@@ -271,35 +271,10 @@
     {% end %}
 </div>
 
-<!-- SSE 对话弹窗 -->
-<div class="chat-modal-overlay" id="chat-modal-overlay" style="display:none;">
-    <div class="chat-modal">
-        <div class="chat-header">
-            <h3>💬 <span id="chat-model-name">AI 对话</span></h3>
-            <button class="chat-close" onclick="closeChat()">✕</button>
-        </div>
-        <div class="chat-messages" id="chat-messages">
-            <div style="text-align:center;color:var(--text-muted);padding:40px;">
-                <div style="font-size:40px;margin-bottom:10px;">🤖</div>
-                <p>开始与 AI 对话吧</p>
-            </div>
-        </div>
-        <div class="chat-input-area">
-            <input type="text" id="chat-input" placeholder="输入消息，按 Enter 发送..."
-                   onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}">
-            <button id="chat-send-btn" onclick="sendChat()">➤</button>
-        </div>
-    </div>
-</div>
 {% end %}
 
 {% block admin_scripts %}
 <script>
-var chatModelId = 0;
-var chatModelName = '';
-var xsrf = '{% raw xsrf_token %}';
-var chatHistory = [];
-
 // 分页
 layui.use(['laypage', 'jquery'], function(){
     var laypage = layui.laypage, $ = layui.$;
@@ -319,179 +294,5 @@ layui.use(['laypage', 'jquery'], function(){
     });
     {% end %}
 });
-
-// 打开对话弹窗
-function openChat(modelId, modelName) {
-    chatModelId = modelId;
-    chatModelName = modelName;
-    chatHistory = [];
-    document.getElementById('chat-model-name').textContent = modelName;
-    document.getElementById('chat-messages').innerHTML =
-        '<div style="text-align:center;color:var(--text-muted);padding:40px;">' +
-        '<div style="font-size:40px;margin-bottom:10px;">🤖</div>' +
-        '<p>开始与 ' + modelName + ' 对话吧</p></div>';
-    document.getElementById('chat-modal-overlay').style.display = 'flex';
-    document.getElementById('chat-input').value = '';
-    document.getElementById('chat-input').focus();
-}
-
-// 关闭对话弹窗
-function closeChat() {
-    document.getElementById('chat-modal-overlay').style.display = 'none';
-    chatModelId = 0;
-}
-
-// 点击遮罩关闭
-document.getElementById('chat-modal-overlay').addEventListener('click', function(e) {
-    if (e.target === this) closeChat();
-});
-
-// 发送消息
-function sendChat() {
-    var input = document.getElementById('chat-input');
-    var msg = input.value.trim();
-    if (!msg || !chatModelId) return;
-
-    var messagesEl = document.getElementById('chat-messages');
-    // 清除空状态
-    var emptyHint = messagesEl.querySelector('div[style]');
-    if (emptyHint && emptyHint.textContent.includes('开始')) emptyHint.remove();
-
-    // 添加用户消息
-    messagesEl.insertAdjacentHTML('beforeend',
-        '<div class="chat-message user"><div class="msg-bubble">' + escapeHtml(msg) + '</div><div class="msg-avatar">👤</div></div>');
-
-    input.value = '';
-    input.disabled = true;
-    document.getElementById('chat-send-btn').disabled = true;
-
-    // 添加打字指示器
-    var typingDiv = document.createElement('div');
-    typingDiv.className = 'chat-message assistant';
-    typingDiv.id = 'typing-indicator';
-    typingDiv.innerHTML = '<div class="msg-avatar">🤖</div><div class="msg-bubble"><div class="typing-indicator"><span></span><span></span><span></span></div></div>';
-    messagesEl.appendChild(typingDiv);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-
-    chatHistory.push({role: 'user', content: msg});
-
-    // SSE 流式请求
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', '/admin/model/chat/stream', true);
-    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-
-    var buffer = '';
-    var fullContent = '';
-    var tokenCount = 0;
-    var pendingLine = '';
-
-    xhr.onprogress = function() {
-        var newData = pendingLine + xhr.responseText.substring(buffer.length);
-        buffer = xhr.responseText;
-        pendingLine = '';
-
-        // 处理跨 onprogress 事件被截断的行：保留末尾不完整行到下次
-        if (newData.length > 0 && newData.charAt(newData.length - 1) !== '\n') {
-            var lastNewline = newData.lastIndexOf('\n');
-            if (lastNewline >= 0) {
-                pendingLine = newData.substring(lastNewline + 1);
-                newData = newData.substring(0, lastNewline + 1);
-            } else {
-                pendingLine = newData;
-                return;
-            }
-        }
-
-        var lines = newData.split('\n');
-        var expectStats = false;
-
-        for (var i = 0; i < lines.length; i++) {
-            var line = lines[i].trim();
-            if (!line) continue;
-            if (line.startsWith('event: stats')) { expectStats = true; continue; }
-            if (expectStats && line.startsWith('data: ')) {
-                expectStats = false;
-                try {
-                    var stats = JSON.parse(line.substring(6));
-                    tokenCount = stats.tokens || 0;
-                } catch(e) {}
-                continue;
-            }
-            if (line.startsWith('data: ')) {
-                var dataStr = line.substring(6);
-                if (dataStr === '[DONE]') {
-                    // 完成
-                    var typingEl = document.getElementById('typing-indicator');
-                    if (typingEl) typingEl.remove();
-                    if (tokenCount > 0) {
-                        messagesEl.insertAdjacentHTML('beforeend',
-                            '<div style="text-align:center;font-size:11px;color:var(--text-muted);padding:4px;">Tokens: ' + tokenCount + '</div>');
-                    }
-                    chatHistory.push({role: 'assistant', content: fullContent});
-                    input.disabled = false;
-                    document.getElementById('chat-send-btn').disabled = false;
-                    input.focus();
-                    return;
-                }
-                try {
-                    var parsed = JSON.parse(dataStr);
-                    if (parsed.error) {
-                        var typingEl2 = document.getElementById('typing-indicator');
-                        if (typingEl2) typingEl2.remove();
-                        messagesEl.insertAdjacentHTML('beforeend',
-                            '<div class="chat-message assistant"><div class="msg-avatar">🤖</div><div class="msg-bubble" style="color:var(--accent-red);">❌ ' + parsed.error + '</div></div>');
-                        input.disabled = false;
-                        document.getElementById('chat-send-btn').disabled = false;
-                        return;
-                    }
-                    fullContent += (parsed.content || '');
-                } catch(e) {
-                    // JSON 解析失败（可能是跨块断行），跳过
-                }
-                // 用 marked.js 渲染
-                updateAssistantBubble(fullContent);
-            }
-        }
-    };
-
-    xhr.onerror = function() {
-        var typingEl = document.getElementById('typing-indicator');
-        if (typingEl) typingEl.remove();
-        messagesEl.insertAdjacentHTML('beforeend',
-            '<div class="chat-message assistant"><div class="msg-avatar">🤖</div><div class="msg-bubble" style="color:var(--accent-red);">⚠ 请求失败，请检查网络连接</div></div>');
-        input.disabled = false;
-        document.getElementById('chat-send-btn').disabled = false;
-    };
-
-    xhr.send('model_id=' + chatModelId + '&message=' + encodeURIComponent(msg) + '&_xsrf=' + xsrf);
-}
-
-// 实时更新 assistant 消息气泡（Markdown 渲染）
-function updateAssistantBubble(content) {
-    var messagesEl = document.getElementById('chat-messages');
-    var existingBubble = messagesEl.querySelector('#assistant-stream-bubble');
-    if (!existingBubble) {
-        var typingEl = document.getElementById('typing-indicator');
-        if (typingEl) typingEl.remove();
-        var wrapper = document.createElement('div');
-        wrapper.className = 'chat-message assistant';
-        wrapper.innerHTML = '<div class="msg-avatar">🤖</div><div class="msg-bubble" id="assistant-stream-bubble"></div>';
-        messagesEl.appendChild(wrapper);
-        existingBubble = document.getElementById('assistant-stream-bubble');
-    }
-    if (typeof marked !== 'undefined') {
-        existingBubble.innerHTML = marked.parse(content);
-    } else {
-        existingBubble.innerHTML = content.replace(/\n/g, '<br>');
-    }
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    var div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
 </script>
 {% end %}
