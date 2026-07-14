@@ -47,8 +47,9 @@
                     <th width="40"><input type="checkbox" id="check-all"></th>
                     <th>瞭望源</th>
                     <th>关键词</th>
+                    <th>标题</th>
+                    <th>深度采集</th>
                     <th>状态码</th>
-                    <th>大小</th>
                     <th>时间</th>
                     <th>操作</th>
                 </tr>
@@ -60,6 +61,18 @@
                     <td><input type="checkbox" name="wh_ids" value="{{ r['id'] }}"></td>
                     <td>{{ r['source_name'] or '未知' }}</td>
                     <td><b>{{ r['keyword'] }}</b></td>
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ r['title'] or '' }}">
+                        {{ r['title'] or '—' }}
+                    </td>
+                    <td>
+                        {% if r['is_deep_collected'] == 1 %}
+                        <span style="color:var(--accent-green);font-size:12px;">✅ 已采集</span>
+                        {% else %}
+                        <button class="btn-glass btn-sm btn-deep-collect" data-id="{{ r['id'] }}" data-link="{{ r['link'] or '' }}" style="font-size:11px;padding:2px 8px;">
+                            🔍 深度采集
+                        </button>
+                        {% end %}
+                    </td>
                     <td>
                         {% if r['response_status'] == 200 %}
                         <span class="st-200">200 ✓</span>
@@ -69,10 +82,13 @@
                         <span style="color:var(--accent-orange);">{{ r['response_status'] }}</span>
                         {% end %}
                     </td>
-                    <td>{{ "%.1f" % (r['response_size'] / 1024) if r['response_size'] > 1024 else str(r['response_size']) + 'B' }}{{ 'KB' if r['response_size'] > 1024 else '' }}</td>
                     <td>{{ r['created_at'] }}</td>
                     <td>
                         <a href="/admin/warehouse/detail?id={{ r['id'] }}" class="btn-glass btn-sm">📄 详情</a>
+                        <button class="btn-glass btn-sm btn-deep-view" data-id="{{ r['id'] }}" style="font-size:11px;padding:2px 6px;"
+                                {% if r['is_deep_collected'] != 1 %}disabled{% end %}>
+                            👁 查看
+                        </button>
                         <form action="/admin/warehouse/delete" method="post" style="display:inline;">
                             {% module xsrf_form_html() %}
                             <input type="hidden" name="id" value="{{ r['id'] }}">
@@ -82,7 +98,7 @@
                 </tr>
                 {% end %}
                 {% else %}
-                <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">
+                <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">
                     <div style="font-size:40px;margin-bottom:8px;">📭</div>
                     <p>暂无采集数据</p>
                 </td></tr>
@@ -150,6 +166,66 @@ layui.use(['laypage', 'jquery'], function(){
             }, 'json').fail(function(){
                 btn.disabled = false;
                 layer.msg('请求失败', {icon: 2});
+            });
+        });
+    });
+
+    // 深度采集按钮
+    document.querySelectorAll('.btn-deep-collect').forEach(function(btn){
+        btn.addEventListener('click', function(){
+            var id = this.getAttribute('data-id');
+            var link = this.getAttribute('data-link');
+            if (!link) { layer.msg('该记录没有可采集的链接', {icon: 2}); return; }
+            var origText = this.textContent;
+            this.textContent = '⏳ 采集中...';
+            this.disabled = true;
+            $.post('/admin/warehouse/deep-collect', {id: id, _xsrf: xsrf}, function(res){
+                if (res.code === 0) {
+                    layer.msg(res.msg, {icon: 1}, function(){ location.reload(); });
+                } else {
+                    layer.msg(res.msg, {icon: 2});
+                    btn.textContent = origText;
+                    btn.disabled = false;
+                }
+            }, 'json').fail(function(){
+                layer.msg('请求失败', {icon: 2});
+                btn.textContent = origText;
+                btn.disabled = false;
+            });
+        });
+    });
+
+    // 深度采集查看按钮（悬浮窗模式）
+    document.querySelectorAll('.btn-deep-view').forEach(function(btn){
+        btn.addEventListener('click', function(){
+            if (this.disabled) return;
+            var id = this.getAttribute('data-id');
+            $.get('/admin/warehouse/deep-collect?id=' + id, function(res){
+                if (res.code === 0) {
+                    var content = res.deep_content || '（暂无深度采集内容）';
+                    // 转义所有动态值防止 XSS
+                    var safeLink = escapeHtml(String(res.link || ''));
+                    var safeTitle = escapeHtml(String(res.title || '详情'));
+                    var safeTime = escapeHtml(String(res.deep_collected_at || '—'));
+                    var escaped = escapeHtml(content).replace(/\n/g, '<br>');
+                    var html = '<div style="max-height:460px;overflow-y:auto;font-size:14px;line-height:1.8;color:#d0d0d0;white-space:pre-wrap;word-break:break-word;">'
+                        + '<p style="color:#888;margin-bottom:10px;">📎 <a href="' + safeLink + '" target="_blank" rel="noopener noreferrer" style="color:#5ea3ff;">' + safeLink + '</a></p>'
+                        + '<p style="color:#888;margin-bottom:10px;">📅 采集时间: ' + safeTime + '</p>'
+                        + '<hr style="border-color:rgba(255,255,255,0.1);margin:10px 0;">'
+                        + escaped
+                        + '</div>';
+                    layer.open({
+                        type: 1,
+                        title: '📖 深度采集内容 — ' + safeTitle,
+                        area: ['700px', '560px'],
+                        shadeClose: true,
+                        content: html
+                    });
+                } else {
+                    layer.msg(res.msg, {icon: 2});
+                }
+            }, 'json').fail(function(){
+                layer.msg('获取深度采集内容失败', {icon: 2});
             });
         });
     });

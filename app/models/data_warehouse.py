@@ -177,3 +177,71 @@ class DataWarehouseRepository:
         """获取数据仓库总记录数。"""
         with get_db() as conn:
             return conn.execute("SELECT COUNT(*) as cnt FROM data_warehouse").fetchone()["cnt"]
+
+    @staticmethod
+    def mark_deep_collected(dw_id: int, content: str = "", content_size: int = 0) -> bool:
+        """标记为已深度采集，并保存提取的正文内容。
+
+        将提取的正文内容存入 raw_data 字段（JSON 格式），
+        同时更新 is_deep_collected 标志和 deep_collected_at 时间戳。
+        """
+        import json as _json
+        from datetime import datetime, timezone
+        try:
+            # 统一使用 Python UTC 时间，避免与 SQLite CURRENT_TIMESTAMP 时区不一致
+            now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            with get_db() as conn:
+                # 获取当前记录
+                row = conn.execute(
+                    "SELECT raw_data FROM data_warehouse WHERE id = ?", (dw_id,)
+                ).fetchone()
+                if not row:
+                    return False
+
+                # 合并深度采集内容到 raw_data
+                existing_raw = row["raw_data"] or ""
+                try:
+                    raw_obj = _json.loads(existing_raw) if existing_raw else {}
+                except (_json.JSONDecodeError, TypeError):
+                    raw_obj = {"original": existing_raw}
+
+                if isinstance(raw_obj, dict):
+                    raw_obj["deep_content"] = content
+                    raw_obj["deep_content_size"] = content_size
+                    raw_obj["deep_collected_at"] = now_utc
+                else:
+                    raw_obj = {
+                        "original": raw_obj,
+                        "deep_content": content,
+                        "deep_content_size": content_size,
+                        "deep_collected_at": now_utc,
+                    }
+
+                new_raw = _json.dumps(raw_obj, ensure_ascii=False)
+                conn.execute(
+                    "UPDATE data_warehouse SET raw_data = ?, is_deep_collected = 1, "
+                    "deep_collected_at = ? WHERE id = ?",
+                    (new_raw, now_utc, dw_id),
+                )
+                conn.commit()
+                return conn.total_changes > 0
+        except Exception:
+            return False
+
+    @staticmethod
+    def get_deep_collected(page: int = 1, page_size: int = 20) -> tuple:
+        """分页查询已深度采集的记录。返回 (rows, total)。"""
+        with get_db() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) as cnt FROM data_warehouse WHERE is_deep_collected = 1"
+            ).fetchone()["cnt"]
+            rows = conn.execute(
+                "SELECT dw.*, wr.keyword, ws.name as source_name "
+                "FROM data_warehouse dw "
+                "LEFT JOIN watch_results wr ON dw.result_id = wr.id "
+                "LEFT JOIN watch_sources ws ON wr.source_id = ws.id "
+                "WHERE dw.is_deep_collected = 1 "
+                "ORDER BY dw.deep_collected_at DESC LIMIT ? OFFSET ?",
+                (page_size, (page - 1) * page_size),
+            ).fetchall()
+        return rows, total
