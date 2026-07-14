@@ -58,12 +58,12 @@ class RoleRepository:
             ).fetchone()
             if not row or row["is_system"] == 1:
                 return False
-            conn.execute(
+            cursor = conn.execute(
                 "UPDATE roles SET name=?, description=? WHERE id=?",
                 (name.strip(), description.strip(), role_id),
             )
             conn.commit()
-            return conn.total_changes > 0
+            return cursor.rowcount > 0
 
     @staticmethod
     def delete(role_id: int) -> bool:
@@ -74,9 +74,9 @@ class RoleRepository:
             ).fetchone()
             if not row or row["is_system"] == 1:
                 return False
-            conn.execute("DELETE FROM roles WHERE id = ?", (role_id,))
+            cursor = conn.execute("DELETE FROM roles WHERE id = ?", (role_id,))
             conn.commit()
-            return conn.total_changes > 0
+            return cursor.rowcount > 0
 
     @staticmethod
     def get_count() -> int:

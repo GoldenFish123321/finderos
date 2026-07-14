@@ -114,9 +114,9 @@ class AiModelRepository:
     def delete(model_id: int) -> bool:
         """Delete an AI model."""
         with get_db() as conn:
-            conn.execute("DELETE FROM ai_models WHERE id = ?", (model_id,))
+            cursor = conn.execute("DELETE FROM ai_models WHERE id = ?", (model_id,))
             conn.commit()
-            return conn.total_changes > 0
+            return cursor.rowcount > 0
 
     @staticmethod
     def toggle_enabled(model_id: int) -> int:

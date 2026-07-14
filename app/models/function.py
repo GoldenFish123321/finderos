@@ -140,14 +140,14 @@ class FunctionRepository:
                parent_id: int | None = None, sort_order: int = 0) -> bool:
         """Update function info."""
         with get_db() as conn:
-            conn.execute(
+            cursor = conn.execute(
                 "UPDATE functions SET name=?, icon=?, route_path=?, parent_id=?, sort_order=? "
                 "WHERE id=?",
                 (name.strip(), icon.strip(), route_path.strip(),
                  parent_id if parent_id else None, sort_order, func_id),
             )
             conn.commit()
-            return conn.total_changes > 0
+            return cursor.rowcount > 0
 
     @staticmethod
     def delete(func_id: int) -> bool:

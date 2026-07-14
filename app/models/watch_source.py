@@ -91,9 +91,9 @@ class WatchSourceRepository:
     def delete(source_id: int) -> bool:
         """Delete a watch source."""
         with get_db() as conn:
-            conn.execute("DELETE FROM watch_sources WHERE id = ?", (source_id,))
+            cursor = conn.execute("DELETE FROM watch_sources WHERE id = ?", (source_id,))
             conn.commit()
-            return conn.total_changes > 0
+            return cursor.rowcount > 0
 
     @staticmethod
     def toggle_enabled(source_id: int) -> int:
