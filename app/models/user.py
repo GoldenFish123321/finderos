@@ -168,9 +168,10 @@ class UserRepository:
             return new_status
 
     @staticmethod
-    def batch_delete(ids: list[int]) -> int:
-        """批量删除用户（排除 admin）。返回成功删除数。"""
+    def batch_delete(ids: list[int]) -> tuple[int, int]:
+        """批量删除用户（排除 admin）。返回 (成功删除数, 跳过的admin数)。"""
         count = 0
+        skipped_admin = 0
         with get_db() as conn:
             for uid in ids:
                 user = conn.execute(
@@ -179,13 +180,16 @@ class UserRepository:
                 if user and user["username"] != "admin":
                     conn.execute("DELETE FROM users WHERE id = ?", (uid,))
                     count += 1
+                elif user and user["username"] == "admin":
+                    skipped_admin += 1
             conn.commit()
-        return count
+        return count, skipped_admin
 
     @staticmethod
-    def batch_toggle(ids: list[int], enable: bool) -> int:
-        """批量启用/禁用用户（排除 admin）。返回成功操作数。"""
+    def batch_toggle(ids: list[int], enable: bool) -> tuple[int, int]:
+        """批量启用/禁用用户（排除 admin）。返回 (成功操作数, 跳过的admin数)。"""
         count = 0
+        skipped_admin = 0
         new_status = 1 if enable else 0
         with get_db() as conn:
             for uid in ids:
@@ -198,5 +202,7 @@ class UserRepository:
                         (new_status, uid),
                     )
                     count += 1
+                elif user and user["username"] == "admin":
+                    skipped_admin += 1
             conn.commit()
-        return count
+        return count, skipped_admin
