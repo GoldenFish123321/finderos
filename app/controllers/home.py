@@ -27,15 +27,5 @@ class IndexHandler(BaseHandler):
             self.redirect("/admin")
             return
 
-        # 普通用户显示独立前台页面（不渲染 admin 模板）
-        source_count = WatchSourceRepository.get_count()
-        result_stats = WatchResultRepository.get_stats()
-        model_count = AiModelRepository.get_count()
-        self.render(
-            "user_index.html",
-            title="瞭望与问数系统 — 首页",
-            username=self.current_user,
-            source_count=source_count,
-            result_stats=result_stats,
-            model_count=model_count,
-        )
+        # 普通用户直接跳转到智能问数对话页面
+        self.redirect("/chat")

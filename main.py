@@ -48,6 +48,12 @@ from app.controllers.admin_employee import (
     EmployeeToggleHandler, EmployeeInvokeHandler, EmployeeApiListHandler,
     EmployeeTestPageHandler,
 )
+from app.controllers.user_chat import (
+    UserChatPageHandler, UserModelListHandler, UserEmployeeListHandler,
+    UserConversationListHandler, UserConversationCreateHandler,
+    UserConversationDeleteHandler, UserConversationMessagesHandler,
+    UserChatStreamHandler, UserEmployeeInvokeHandler,
+)
 from app.models.db import init_db, seed_default_data
 from app.services.scheduler import CollectionScheduler
 
@@ -160,6 +166,23 @@ def make_app() -> tornado.web.Application:
             (r"/admin/api/employee/list", EmployeeApiListHandler),
             # 员工测试对话页
             (r"/admin/employee/test", EmployeeTestPageHandler),
+
+            # ========== v0.3.0 用户前台-智能问数 ==========
+            # 前台对话主页
+            (r"/chat", UserChatPageHandler),
+            # 前台 SSE 流式 AI 对话
+            (r"/chat/stream", UserChatStreamHandler),
+            # 前台 @数字员工 SSE 流式调用
+            (r"/chat/employee/invoke", UserEmployeeInvokeHandler),
+            # 前台 API: 模型列表
+            (r"/api/chat/models", UserModelListHandler),
+            # 前台 API: 数字员工列表
+            (r"/api/chat/employees", UserEmployeeListHandler),
+            # 前台 API: 对话管理（列表/创建/删除/消息）
+            (r"/api/chat/conversation/list", UserConversationListHandler),
+            (r"/api/chat/conversation/create", UserConversationCreateHandler),
+            (r"/api/chat/conversation/delete", UserConversationDeleteHandler),
+            (r"/api/chat/conversation/messages", UserConversationMessagesHandler),
         ],
         template_path="app/templates",
         static_path="app/static",
