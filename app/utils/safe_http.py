@@ -124,12 +124,23 @@ def safe_http_request(
     try:
         conn.request(method, _target_path(parsed), body=body, headers=request_headers)
         resp = conn.getresponse()
+        content_length = (
+            resp.getheader("Content-Length") if hasattr(resp, "getheader") else None
+        )
+        if content_length:
+            try:
+                if int(content_length) > max_bytes:
+                    raise SafeHttpError(f"响应超过大小限制 ({max_bytes} bytes)")
+            except ValueError:
+                pass
         data = resp.read(max_bytes + 1)
+        if len(data) > max_bytes:
+            raise SafeHttpError(f"响应超过大小限制 ({max_bytes} bytes)")
         return SafeHttpResponse(
             status=resp.status,
             reason=resp.reason,
             headers=dict(resp.getheaders()),
-            body=data[:max_bytes],
+            body=data,
             resolved_ip=resolved_ip,
         )
     finally:

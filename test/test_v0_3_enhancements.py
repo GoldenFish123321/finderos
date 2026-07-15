@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.config.settings import settings
 from app.models.db import init_db, get_db
+import app.models.db as db_module
 from app.models.data_warehouse import DataWarehouseRepository
 from app.models.conversation import ConversationRepository
 
@@ -35,13 +36,16 @@ class BaseTestCase(unittest.TestCase):
         cls._tmpdir = tempfile.TemporaryDirectory()
         db_path = os.path.join(cls._tmpdir.name, "test.db")
         cls._orig_db_path = settings.DB_PATH
+        cls._orig_module_db_path = db_module.DB_PATH
         settings.DB_PATH = db_path
+        db_module.DB_PATH = db_path
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         init_db()
 
     @classmethod
     def tearDownClass(cls):
         settings.DB_PATH = cls._orig_db_path
+        db_module.DB_PATH = cls._orig_module_db_path
         cls._tmpdir.cleanup()
 
 
@@ -297,6 +301,7 @@ class TestStep3_CardAndEmployee(BaseTestCase):
 class TestStep4_IntentAndFTS5(BaseTestCase):
     """验证意图分类和 FTS5 全文检索。"""
 
+    @unittest.skip("v0.4.2 removed legacy intent detection; covered by test_mcp_refactor")
     def test_01_intent_data_query(self):
         """搜索类关键词应识别为 data_query。"""
         from app.controllers.user_chat import UserChatStreamHandler
@@ -315,6 +320,7 @@ class TestStep4_IntentAndFTS5(BaseTestCase):
             self.assertEqual(intent, "data_query", f"'{msg}' 应识别为 data_query")
         print("  ✅ 搜索类关键词 → data_query")
 
+    @unittest.skip("v0.4.2 removed legacy intent detection; covered by test_mcp_refactor")
     def test_02_intent_data_stats(self):
         """统计类关键词应识别为 data_stats。"""
         from app.controllers.user_chat import UserChatStreamHandler
@@ -332,6 +338,7 @@ class TestStep4_IntentAndFTS5(BaseTestCase):
             self.assertEqual(intent, "data_stats", f"'{msg}' 应识别为 data_stats")
         print("  ✅ 统计类关键词 → data_stats")
 
+    @unittest.skip("v0.4.2 removed legacy intent detection; covered by test_mcp_refactor")
     def test_03_intent_chart_request(self):
         """图表类关键词应识别为 chart_request。"""
         from app.controllers.user_chat import UserChatStreamHandler
@@ -348,6 +355,7 @@ class TestStep4_IntentAndFTS5(BaseTestCase):
             self.assertEqual(intent, "chart_request", f"'{msg}' 应识别为 chart_request")
         print("  ✅ 图表类关键词 → chart_request")
 
+    @unittest.skip("v0.4.2 removed legacy intent detection; covered by test_mcp_refactor")
     def test_04_intent_general(self):
         """普通对话应识别为 general。"""
         from app.controllers.user_chat import UserChatStreamHandler
@@ -364,6 +372,7 @@ class TestStep4_IntentAndFTS5(BaseTestCase):
             self.assertEqual(intent, "general", f"'{msg}' 应识别为 general")
         print("  ✅ 普通对话 → general")
 
+    @unittest.skip("v0.4.2 removed legacy intent detection; covered by test_mcp_refactor")
     def test_05_intent_priority(self):
         """搜索关键词优先于统计关键词。"""
         from app.controllers.user_chat import UserChatStreamHandler
@@ -435,6 +444,7 @@ class TestStep4_IntentAndFTS5(BaseTestCase):
         self.assertGreater(stats["total"], 0, "应有数据仓库记录")
         print(f"  ✅ get_stats: total={stats['total']}, deep={stats['deep_collected']}")
 
+    @unittest.skip("v0.4.2 uses bounded untrusted MCP tool messages instead")
     def test_10_warehouse_context_injection(self):
         """意图为 data_query 时上下文应包含数据仓库查询结果。"""
         from app.controllers.user_chat import UserChatStreamHandler

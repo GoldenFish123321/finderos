@@ -160,6 +160,26 @@ def sanitize_json_data(data):
     return data
 
 
+def sanitize_untrusted_llm_context(value, max_length: int = 12000) -> str:
+    """Serialize tool/web data as bounded, explicitly untrusted LLM context."""
+    import json
+    text = value if isinstance(value, str) else json.dumps(
+        value, ensure_ascii=False, default=str
+    )
+    text = text.replace("\x00", "").replace("```", "''' ")
+    replacements = {
+        "[SYSTEM]": "[DATA-SYSTEM]",
+        "[ASSISTANT]": "[DATA-ASSISTANT]",
+        "<system>": "[system]",
+        "</system>": "[/system]",
+        "<assistant>": "[assistant]",
+        "</assistant>": "[/assistant]",
+    }
+    for token, replacement in replacements.items():
+        text = text.replace(token, replacement)
+    return text[:max_length]
+
+
 # ── SSRF 防护 ──────────────────────────────────────────────────
 
 
@@ -218,17 +238,24 @@ def validate_url_safe(url: str) -> tuple[bool, str, str]:
     if not hostname:
         return False, "URL 缺少主机名", ""
 
-    # DNS 解析 hostname → IP（只解析一次，防止 TOCTOU）
+    # Resolve every A/AAAA result. A hostname is unsafe if any answer is private;
+    # checking a single answer permits round-robin and dual-stack bypasses.
     try:
-        ip = socket.gethostbyname(hostname)
+        addr_infos = socket.getaddrinfo(hostname, parsed.port or 443, type=socket.SOCK_STREAM)
     except socket.gaierror:
         return False, f"无法解析主机名: {hostname}", ""
+    ips = list(dict.fromkeys(info[4][0] for info in addr_infos))
+    if not ips:
+        return False, f"无法解析主机名: {hostname}", ""
+    for ip in ips:
+        try:
+            address = ipaddress.ip_address(ip)
+        except ValueError:
+            return False, f"主机名解析结果无效: {hostname}", ""
+        if not address.is_global or _is_ip_in_ranges(ip, settings.SSRF_BLOCKED_HOSTS):
+            return False, f"禁止访问非公网地址: {hostname} ({ip})", ""
 
-    # 检查是否命中内网/回环地址
-    if _is_ip_in_ranges(ip, settings.SSRF_BLOCKED_HOSTS):
-        return False, f"禁止访问内网地址: {hostname} ({ip})", ""
-
-    return True, "", ip
+    return True, "", ips[0]
 
 
 def pin_url_to_ip(url: str, resolved_ip: str) -> tuple[str, dict]:

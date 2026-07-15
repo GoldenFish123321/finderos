@@ -15,6 +15,7 @@ def _load_skill(skill_name: str) -> Dict[str, Any]:
 
     技能统一为 Prompt 模板，LLM 获取后按模板中的指示执行任务。
     模板中可以直接描述应使用哪些 MCP 工具及用法。
+    请使用确切的技能名称，不要猜测不存在的技能。
     """
     from app.models.skill import SkillRepository
     skill = SkillRepository.get_by_name(skill_name.strip())

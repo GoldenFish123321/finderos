@@ -237,7 +237,10 @@ audit_logs (独立审计)
 | **CSRF** | Tornado `xsrf_cookies=True` 全局开启 |
 | **XSS** | Tornado 模板默认转义 + 采集内容 HTML 清洗 |
 | **SQL 注入** | 全参数化查询 (`?` 占位符) |
-| **SSRF** | URL 协议白名单 + 内网 IP 段拦截 + DNS 解析校验；接口管理/ API 员工调用固定已校验 IP 且不自动跟随重定向 |
+| **SSRF** | 校验全部 A/AAAA 地址；所有服务端外呼固定已校验 IP、禁重定向并限制响应大小 |
+| **XSS** | 模板自动转义 + DOMPurify 净化 AI Markdown + 动态文本使用 DOM `textContent` |
+| **后台授权** | `AdminBaseHandler` 将请求路由映射到具体功能权限，禁止跨模块访问 |
+| **LLM 工具数据** | 外部工具/仓库结果作为有界不可信数据注入，建立显式信任边界并降低间接提示注入风险 |
 | **Header 注入** | CRLF 字符检测 |
 | **安全响应头** | CSP / X-Frame-Options / X-Content-Type-Options / X-XSS-Protection |
 | **登录限速** | IP+用户名维度，5次失败/15分钟锁定 |
@@ -257,4 +260,4 @@ audit_logs (独立审计)
 
 | 用户名 | 密码 | 角色 |
 |--------|------|------|
-| admin | admin888 | 系统管理员 |
+| admin | `ADMIN_DEFAULT_PASSWORD` 或首次启动生成的一次性随机密码 | 系统管理员 |

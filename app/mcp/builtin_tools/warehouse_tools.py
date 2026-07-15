@@ -12,7 +12,7 @@ from typing import Any, Dict
 
 
 def _search_warehouse(keyword: str, limit: int = 10) -> Dict[str, Any]:
-    """在数据仓库中搜索关键词相关内容。"""
+    """在数据仓库中搜索关键词相关内容。当用户询问已采集的行业、政策或新闻信息时使用此工具。"""
     from app.models.data_warehouse import DataWarehouseRepository
     items = DataWarehouseRepository.search(keyword, limit=limit)
     return {
@@ -53,7 +53,7 @@ def _get_recent_warehouse_data(limit: int = 10) -> Dict[str, Any]:
 
 
 def _get_warehouse_stats() -> Dict[str, Any]:
-    """获取数据仓库的统计信息。"""
+    """获取数据仓库的统计信息。当用户询问数据量、来源分布或仓库概况时使用此工具。"""
     from app.models.data_warehouse import DataWarehouseRepository
     stats = DataWarehouseRepository.get_stats()
     return stats if stats else {"total": 0, "deep_collected": 0, "top_sources": []}

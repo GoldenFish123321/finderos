@@ -18,6 +18,9 @@ class Settings:
     COOKIE_SECRET = os.environ.get("COOKIE_SECRET", "")
     """Tornado 安全 Cookie 签名密钥。生产环境必须通过环境变量注入。"""
 
+    ADMIN_DEFAULT_PASSWORD = os.environ.get("ADMIN_DEFAULT_PASSWORD", "")
+    """首次初始化管理员密码；未设置时生成一次性随机密码。"""
+
     DEBUG = os.environ.get("DEBUG", "").lower() == "true"
     """调试模式。默认关闭，不会在前端暴露堆栈跟踪。"""
 

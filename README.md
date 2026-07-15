@@ -1542,6 +1542,7 @@ python make_admin.py --reset --username admin --password newpassword
 
 > ⚠️ **首次登录后请立即修改默认密码！** 可使用管理后台的用户编辑功能或 `make_admin.py --reset` 命令。
 > 自助注册用户默认绑定“普通用户”角色，可访问 `/admin/model/config` 来配置模型 API；如需使用 MCP 工具管理、用户管理等页面，请由管理员在角色权限中额外授权。
+> 生产环境必须显式设置至少 12 字符的 `ADMIN_DEFAULT_PASSWORD`。
 
 ---
 

@@ -9,6 +9,7 @@ base.py — Controller 公共基础类 (BaseHandler)
 
 import tornado.web
 from app.config.settings import settings
+from app.models.user import UserRepository
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -37,7 +38,16 @@ class BaseHandler(tornado.web.RequestHandler):
         username = self.get_secure_cookie("username")
         if not username:
             return None
-        return username.decode("utf-8")
+        try:
+            username_text = username.decode("utf-8")
+        except UnicodeDecodeError:
+            self.clear_cookie("username")
+            return None
+        user = UserRepository.get_user_by_username(username_text)
+        if not user or user["is_enabled"] == 0:
+            self.clear_cookie("username")
+            return None
+        return username_text
 
     def write_error(self, status_code: int, **kwargs) -> None:
         """自定义错误页面。"""

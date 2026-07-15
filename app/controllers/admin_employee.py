@@ -459,21 +459,22 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             }).encode('utf-8')
 
             def _sync_stream_call():
-                """在线程池中执行的同步 HTTP 流式调用，使用块读取避免逐行全缓冲。"""
-                import urllib.request
+                """在线程池中执行受限、安全的模型 HTTP 调用。"""
                 try:
-                    req = urllib.request.Request(
+                    response = safe_http_request(
                         f"{api_base}/chat/completions",
-                        data=payload,
+                        method="POST",
+                        body=payload,
                         headers={
                             "Content-Type": "application/json; charset=utf-8",
                             "Authorization": f"Bearer {api_key}",
                         },
+                        timeout=120,
+                        max_bytes=8 * 1024 * 1024,
                     )
-                    with urllib.request.urlopen(req, timeout=120) as resp:
-                        # 使用 8KB 块读取减少内存占用
-                        raw_data = resp.read()
-                    return raw_data, None
+                    if 300 <= response.status < 400:
+                        return b"", "模型接口不允许重定向"
+                    return response.body, None
                 except Exception as e:
                     return b"", str(e)
 

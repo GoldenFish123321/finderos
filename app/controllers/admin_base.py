@@ -113,6 +113,35 @@ class AdminBaseHandler(BaseHandler):
             self._admin_allowed_routes = allowed_routes
         return route_path in allowed_routes
 
+    def _is_route_authorized(self, function_ids: list[int]) -> bool:
+        """Compatibility helper for checking action routes by function IDs."""
+        path = self.request.path.rstrip("/") or "/"
+        for api_prefix, owner in ADMIN_ROUTE_PERMISSION_ALIASES.items():
+            prefix = api_prefix.rstrip("/") or "/"
+            if path == prefix or path.startswith(prefix + "/"):
+                path = owner + path[len(prefix):]
+                break
+        if path == "/admin/user/change-password":
+            return bool(function_ids)
+        if not function_ids:
+            return False
+
+        from app.models.db import get_db
+        placeholders = ",".join("?" for _ in function_ids)
+        with get_db() as conn:
+            rows = conn.execute(
+                f"SELECT route_path FROM functions WHERE id IN ({placeholders}) "
+                "AND is_enabled = 1 AND route_path != ''",
+                function_ids,
+            ).fetchall()
+        routes = {row["route_path"].rstrip("/") or "/" for row in rows}
+        if path == "/admin":
+            return "/admin" in routes
+        return any(
+            route != "/admin" and (path == route or path.startswith(route + "/"))
+            for route in routes
+        )
+
     def _resolve_required_route(self, path: str) -> str | None:
         """Resolve the function route required by the current request path.
 

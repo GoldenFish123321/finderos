@@ -14,13 +14,15 @@ import os
 import sqlite3
 import sys
 import tempfile
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import app.models.db as db_module
 from app.models.db import get_db, init_db, _seed_default_skills, _seed_default_mcp_tools, _seed_default_employees
 
 
-def test_seed_data():
+def test_seed_data(monkeypatch):
     """使用临时内存数据库运行种子并验证所有修复。"""
     # 用临时内存数据库替代文件数据库
     conn = sqlite3.connect(":memory:")
@@ -90,7 +92,7 @@ def test_seed_data():
     )
 
     # 1. 种子 MCP 工具（先于 skills/employees）
-    _seed_default_mcp_tools.__globals__['get_db'] = lambda: conn
+    monkeypatch.setattr(db_module, "get_db", lambda: conn)
     _seed_default_mcp_tools()
 
     # 验证工具已种子
@@ -121,7 +123,6 @@ def test_seed_data():
     print("✓ #45: MCP 工具描述已更新为含使用提示的版本")
 
     # 2. 种子 Skills
-    _seed_default_skills.__globals__['get_db'] = lambda: conn
     _seed_default_skills()
 
     # ---- Issue #44: 至少 14 个技能 ----
@@ -160,7 +161,6 @@ def test_seed_data():
     print(f"✓ #44: 新增 9 个技能全部存在")
 
     # 3. 种子员工
-    _seed_default_employees.__globals__['get_db'] = lambda: conn
     _seed_default_employees()
 
     # ---- Issue #41: 所有 LLM 型员工都有 mcp_tool_ids ----
@@ -233,12 +233,12 @@ def test_seed_data():
 
     conn.close()
     print("\n✅ 所有 5 个种子数据 bug 已修复并通过验证！")
-    return True
 
 
 if __name__ == "__main__":
     try:
-        test_seed_data()
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            test_seed_data(monkeypatch)
         sys.exit(0)
     except AssertionError as e:
         print(f"\n❌ 验证失败: {e}")

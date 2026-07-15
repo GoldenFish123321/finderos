@@ -29,6 +29,9 @@
 
 - 📌 **版本号体系修正**：统一代码、文档、模板中所有版本引用，建立清晰的语义化版本体系
 - 📋 **独立 Changelog**：将更新日志从 README 中分离为独立的 `CHANGELOG.md`
+- 🔐 **安全加固**：按路由执行后台 RBAC；禁用用户旧会话失效；AI Markdown 经 DOMPurify 净化；服务端外呼统一 DNS 固定、禁重定向和响应上限
+- 🧠 **LLM 信任边界**：修复 Issue #1 间接 Prompt Injection 与 Issue #2 Mock 系统提示词泄露
+- 🧰 **MCP 种子一致性**：修复 Issue #41-#50，员工/Skill 按名称绑定工具，补齐 fresh-install 能力，迁移 Crawl4ai 权限并自动发现 builtin handler
 
 ---
 

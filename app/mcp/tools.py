@@ -212,24 +212,26 @@ async def _get_random_music() -> Dict[str, Any]:
     import json as _json
 
     def _sync_fetch():
+        from app.utils.safe_http import safe_http_request
         url = "https://api.injahow.cn/meting/?server=netease&type=playlist&id=3778678"
         headers = {"User-Agent": "FinderOS/1.0", "Accept": "application/json"}
         try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                body = resp.read().decode("utf-8", errors="replace")
-                songs = _json.loads(body)
-                if isinstance(songs, list) and len(songs) > 0:
-                    song = _random.choice(songs)
-                    return {
-                        "success": True,
-                        "name": song.get("name", ""),
-                        "artist": song.get("artist", ""),
-                        "cover": song.get("pic", ""),
-                        "url": song.get("url", ""),
-                        "source": "网易云音乐热歌榜",
-                    }
-                return {"success": False, "error": "歌曲列表为空"}
+            response = safe_http_request(
+                url, headers=headers, timeout=15, max_bytes=1024 * 1024
+            )
+            body = response.body.decode("utf-8", errors="replace")
+            songs = _json.loads(body)
+            if isinstance(songs, list) and len(songs) > 0:
+                song = _random.choice(songs)
+                return {
+                    "success": True,
+                    "name": song.get("name", ""),
+                    "artist": song.get("artist", ""),
+                    "cover": song.get("pic", ""),
+                    "url": song.get("url", ""),
+                    "source": "网易云音乐热歌榜",
+                }
+            return {"success": False, "error": "歌曲列表为空"}
         except Exception as e:
             logger.warning(f"get_random_music 调用失败: {e}")
             # 回退：返回本地 Mock 歌曲
@@ -727,9 +729,11 @@ def register_all_tools(server: Optional[MCPServer] = None) -> MCPServer:
     except Exception as e:
         logger.warning(f"从数据库加载工具失败，回退到代码定义: {e}")
 
-    # 回退：代码定义的 ALL_TOOL_DEFINITIONS
+    # 回退：自动发现 builtin_tools，避免此文件的旧重复定义发生漂移。
+    from app.mcp.registry import discover_builtin_tool_definitions
+    fallback_definitions = discover_builtin_tool_definitions()
     tools = []
-    for tool_def in ALL_TOOL_DEFINITIONS:
+    for tool_def in fallback_definitions:
         tool = MCPTool(
             name=tool_def["name"],
             description=tool_def["description"],
@@ -739,10 +743,11 @@ def register_all_tools(server: Optional[MCPServer] = None) -> MCPServer:
         tools.append(tool)
 
     server.register_tools(tools)
-    logger.info(f"已从代码定义注册 {len(tools)} 个 MCP 工具: {[t.name for t in tools]}")
+    logger.info(f"已从自动发现注册 {len(tools)} 个 MCP 工具: {[t.name for t in tools]}")
     return server
 
 
 def get_tool_names() -> List[str]:
     """获取所有已定义的工具名称列表。"""
-    return [t["name"] for t in ALL_TOOL_DEFINITIONS]
+    from app.mcp.registry import discover_builtin_tool_definitions
+    return [tool["name"] for tool in discover_builtin_tool_definitions()]

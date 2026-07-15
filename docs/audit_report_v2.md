@@ -35,21 +35,21 @@
 | SF-14 | CSP `frame-ancestors 'none'` 防点击劫持 | `app/config/settings.py` |
 | SF-15 | 用户端 API 员工 DNS 固定（`pin_url_to_ip()`） | `app/controllers/user_chat.py` |
 
-### 🔧 待修复（追踪中）
+### 🔧 2026-07-15 已修复
 
 | GitHub Issue | 对应审计编号 | 严重度 | 描述 | 状态 |
 |-------------|-------------|--------|------|------|
-| #1 | HIGH-007 | 🟠 高危 | Prompt Injection via Data Warehouse Content | Open |
-| #2 | HIGH-001 | 🟠 高危 | System Prompt Leaked in Mock Response | Open |
+| #1 | HIGH-007 | 🟠 高危 | Prompt Injection via Data Warehouse Content | ✅ 已修复 |
+| #2 | HIGH-001 | 🟠 高危 | System Prompt Leaked in Mock Response | ✅ 已修复 |
 | #35 | — | — | 本报告（安全审计文档补全） | ✅ 本 PR |
 
 ### 📋 计划修复（尚未创建 Issue）
 
 | 优先级 | 审计编号 | 描述 | 预计工时 |
 |--------|---------|------|---------|
-| P0 | CRITICAL-001 | 默认管理员密码改为环境变量 | 0.5h |
-| P1 | CRITICAL-003 | 采集器 DNS 重绑定 TOCTOU（添加 `pin_url_to_ip()`） | 1.5h |
-| P1 | HIGH-004 | 管理端 API 员工 DNS 固定 | 0.5h |
+| ✅ | CRITICAL-001 | 默认管理员密码改为环境变量/一次性随机密码 | 已完成 |
+| ✅ | CRITICAL-003 | 采集器、模型和 MCP 外呼统一安全客户端 | 已完成 |
+| ✅ | HIGH-004 | 管理端 API 员工 DNS 固定 | 已完成 |
 | P1 | HIGH-003 | 管理端 `self.write('<script>...')` 改为 `redirect()` | 1h |
 | P1 | HIGH-006 | API 员工自定义头部 CRLF 校验 | 0.5h |
 | P2 | HIGH-008 | CSP 移除 `unsafe-inline`（nonce/hash 替代） | 3h |

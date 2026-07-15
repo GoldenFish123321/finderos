@@ -135,7 +135,7 @@ def test_bug16_foreign_keys():
     with get_db() as conn:
         fk_status = conn.execute("PRAGMA foreign_keys").fetchone()
         print(f"  当前外键约束状态: {fk_status}")
-        assert fk_status and fk_status[0] == 1, "外键约束应处于启用状态"
+        assert fk_status and fk_status.get("foreign_keys") == 1, "外键约束应处于启用状态"
 
     print("  ✅ Bug #16 验证通过")
 
