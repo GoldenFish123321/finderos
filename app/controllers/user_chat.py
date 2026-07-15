@@ -1328,10 +1328,8 @@ class UserEmployeeInvokeHandler(BaseHandler):
         from app.utils.security import validate_url_safe, pin_url_to_ip
         safe, reason, resolved_ip = validate_url_safe(api_url)
         if not safe:
-            self.set_header("Content-Type", "text/event-stream")
-            self.set_header("Cache-Control", "no-cache")
-            await _sse_write(self, f"API URL 不安全: {reason}")
-            await _sse_done(self)
+            logger.warning(f"API 员工 [{emp.get('name', '数字员工')}] SSRF 校验失败: {reason}，回退到 Mock 模式")
+            await self._mock_api_employee_fallback(emp, message, _start, reason)
             return
 
         # DNS 重绑定防护：用已验证的 IP 替换 hostname，防止 TOCTOU 攻击 (Issue #11)
@@ -1372,9 +1370,8 @@ class UserEmployeeInvokeHandler(BaseHandler):
         body, status, err = await loop.run_in_executor(_user_chat_executor, _sync_api_call)
 
         if err:
-            await _sse_write(self, f"API 调用失败: {err}")
-            await _sse_done(self)
-            await _sse_stats(self, 0, False, round(_time.time() - _start, 2))
+            logger.warning(f"API 员工 [{emp_name}] 调用失败: {err}，回退到 Mock 模式")
+            await self._mock_api_employee_fallback(emp, message, _start, err)
             return
 
         # ── 响应模板渲染 ──
@@ -1434,5 +1431,114 @@ class UserEmployeeInvokeHandler(BaseHandler):
             username=self.current_user,
             target=f"employee:{emp['id']}",
             detail=f"api_call, status={status}, elapsed={elapsed}s, tokens={tokens}",
+            client_ip=self.request.remote_ip or "",
+        )
+
+    async def _mock_api_employee_fallback(
+        self, emp: dict, message: str, start_time: float,
+        fail_reason: str = ""
+    ):
+        """API 型员工 Mock 回退：当外部 API 不可达时，生成模拟音乐/数据卡片。
+
+        用于处理 DNS 解析失败、网络不通、API 超时等场景，
+        确保用户始终能看到卡片渲染效果。
+        """
+        import random as _random
+        import time as _time
+        emp_name = emp.get("name", "数字员工")
+
+        # ── 发送员工元信息 ──
+        self.set_header("Content-Type", "text/event-stream")
+        self.set_header("Cache-Control", "no-cache")
+        self.set_header("Connection", "keep-alive")
+        self.set_header("X-Accel-Buffering", "no")
+        self.write(
+            f"event: employee\ndata: {json.dumps({'name': emp_name, 'type': 'api'}, ensure_ascii=False)}\n\n"
+        )
+        await self.flush()
+
+        # ── 音乐类员工：生成模拟音乐卡片 ──
+        if "音乐" in emp_name or "music" in emp_name.lower():
+            mock_songs = [
+                {"name": "晴天", "artist": "周杰伦",
+                 "cover": "https://picsum.photos/seed/music1/160/160",
+                 "url": "https://music.163.com/"},
+                {"name": "夜曲", "artist": "周杰伦",
+                 "cover": "https://picsum.photos/seed/music2/160/160",
+                 "url": "https://music.163.com/"},
+                {"name": "稻香", "artist": "周杰伦",
+                 "cover": "https://picsum.photos/seed/music3/160/160",
+                 "url": "https://music.163.com/"},
+                {"name": "七里香", "artist": "周杰伦",
+                 "cover": "https://picsum.photos/seed/music4/160/160",
+                 "url": "https://music.163.com/"},
+                {"name": "青花瓷", "artist": "周杰伦",
+                 "cover": "https://picsum.photos/seed/music5/160/160",
+                 "url": "https://music.163.com/"},
+                {"name": "简单爱", "artist": "周杰伦",
+                 "cover": "https://picsum.photos/seed/music6/160/160",
+                 "url": "https://music.163.com/"},
+                {"name": "十年", "artist": "陈奕迅",
+                 "cover": "https://picsum.photos/seed/music7/160/160",
+                 "url": "https://music.163.com/"},
+                {"name": "好久不见", "artist": "陈奕迅",
+                 "cover": "https://picsum.photos/seed/music8/160/160",
+                 "url": "https://music.163.com/"},
+            ]
+            song = _random.choice(mock_songs)
+            card_data = {
+                "type": "music",
+                "title": f"{emp_name} · 随机音乐",
+                "data": song,
+            }
+            self.write(
+                f"event: card\ndata: {json.dumps(card_data, ensure_ascii=False)}\n\n"
+            )
+            await self.flush()
+
+            # ── 流式文本 ──
+            text_parts = [
+                f"🎵 **{emp_name}** 为您推荐一首歌曲：\n\n",
+                f"**{song['name']}** — {song['artist']}\n\n",
+            ]
+            if fail_reason:
+                text_parts.append(
+                    f"> ⚠️ 在线音乐 API 暂时不可用（{fail_reason}），"
+                    f"已为您从本地曲库随机推荐。\n"
+                )
+            else:
+                text_parts.append(
+                    "> 💡 在线音乐 API 暂时不可用，已为您从本地曲库随机推荐。\n"
+                )
+            full_text = "".join(text_parts)
+        else:
+            # ── 通用 API 员工 Mock ──
+            card_data = {
+                "type": "default",
+                "title": emp_name,
+                "content": f"🤖 {emp_name} 暂时无法连接外部 API。\n\n"
+                           f"原因: {fail_reason or '网络不可达'}\n\n"
+                           f"请检查网络连接后重试。",
+            }
+            self.write(
+                f"event: card\ndata: {json.dumps(card_data, ensure_ascii=False)}\n\n"
+            )
+            await self.flush()
+            full_text = card_data["content"]
+
+        for ch in full_text:
+            await _sse_write(self, ch)
+            await asyncio.sleep(0.01)
+        await _sse_done(self)
+
+        elapsed = round(_time.time() - start_time, 2)
+        tokens = _estimate_tokens(full_text)
+        await _sse_stats(self, tokens, False, elapsed)
+
+        write_audit_log(
+            action="USER_EMPLOYEE_INVOKE",
+            username=self.current_user,
+            target=f"employee:{emp['id']}",
+            detail=f"mock_fallback, reason={fail_reason}, elapsed={elapsed}s, tokens={tokens}",
             client_ip=self.request.remote_ip or "",
         )
