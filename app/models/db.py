@@ -726,42 +726,45 @@ def _seed_default_employees():
 
 
 def _seed_default_skills():
-    """种子：默认技能（5个，涵盖 prompt 增强 和 function 调用两种类型）。"""
+    """种子：默认技能（5个，纯 Prompt 模板，模板中直接描述 MCP 工具用法）。"""
     import json
     with get_db() as conn:
         existing = conn.execute("SELECT COUNT(*) as cnt FROM skills").fetchone()
         if existing["cnt"] == 0:
             skills_data = [
-                # Prompt 型技能 — 数据统计报告
-                (1, "数据统计", "生成数据仓库统计报告，含图表标记", "prompt",
+                # 数据统计报告
+                (1, "数据统计", "生成数据仓库统计报告，含图表标记",
                  "你正在进行数据统计分析任务。请遵循以下指令：\n"
                  "1. 首先调用 get_warehouse_stats 工具获取数据仓库概况\n"
                  "2. 根据统计结果生成自然语言报告，包含：总记录数、已深度采集数、来源分布\n"
                  "3. 如果数据适合可视化，请使用 [CHART:bar|pie|line] 标记建议图表类型\n"
                  "4. 报告格式清晰，使用 Markdown 标题和列表\n"
-                 "5. 最后给出数据利用建议（如：可对Top来源进行深度采集）",
-                 "", "{}", None),
-                # Function 型技能 — 数据搜索 (关联 search_warehouse)
-                (2, "数据搜索", "在数据仓库中按关键词搜索采集结果", "function",
-                 "", "search_warehouse",
-                 json.dumps({"keyword": "{user_query}", "limit": 10}, ensure_ascii=False),
-                 1),
-                # Prompt 型技能 — 新闻摘要
-                (3, "新闻摘要", "聚合多源新闻并生成结构化摘要", "prompt",
+                 "5. 最后给出数据利用建议（如：可对Top来源进行深度采集）"),
+                # 数据搜索（原 function 型，现改为在模板中说明用哪个 MCP 工具）
+                (2, "数据搜索", "在数据仓库中按关键词搜索采集结果",
+                 "你正在执行数据搜索任务。请遵循以下指令：\n"
+                 "1. 使用 search_warehouse 工具搜索数据仓库，参数 keyword 填写用户搜索的关键词，limit 默认 10\n"
+                 "2. 将搜索结果整理为清晰的列表格式\n"
+                 "3. 每条结果输出：标题、来源、50字摘要\n"
+                 "4. 如果结果较多，按相关性排序，优先展示最匹配的内容"),
+                # 新闻摘要
+                (3, "新闻摘要", "聚合多源新闻并生成结构化摘要",
                  "你正在执行新闻摘要任务。请遵循以下指令：\n"
                  "1. 调用 search_warehouse 或 get_recent_warehouse_data 获取新闻数据\n"
                  "2. 按主题分类整理新闻（如：科技/财经/政策/社会）\n"
                  "3. 每条新闻输出：标题、来源、50字摘要、发布时间\n"
                  "4. 在末尾生成一份「今日要闻速览」（3-5条最重要新闻）\n"
-                 "5. 使用 Markdown 格式，标题用 ###，列表用 -",
-                 "", "{}", None),
-                # Function 型技能 — 深度采集 (关联 deep_collect_url)
-                (4, "深度采集", "对指定 URL 进行正文深度抓取和内容提取", "function",
-                 "", "deep_collect_url",
-                 json.dumps({"url": "{user_query}"}, ensure_ascii=False),
-                 6),
-                # Prompt 型技能 — 翻译助手
-                (5, "翻译助手", "高质量中英文双向翻译，保持专业术语准确", "prompt",
+                 "5. 使用 Markdown 格式，标题用 ###，列表用 -"),
+                # 深度采集（原 function 型，现改为在模板中说明 URL 采集流程）
+                (4, "深度采集", "对指定 URL 进行正文深度抓取和内容提取",
+                 "你正在执行深度采集任务。请遵循以下指令：\n"
+                 "1. 使用 deep_collect_url 工具对用户提供的 URL 进行深度采集\n"
+                 "2. 如果 URL 内容复杂，可额外使用 collect_with_crawl4ai 工具获取更完整内容\n"
+                 "3. 提取文章正文、标题、关键信息\n"
+                 "4. 输出结构化内容：标题 → 正文摘要 → 关键数据 → 来源链接\n"
+                 "5. 用 Markdown 格式组织输出"),
+                # 翻译助手
+                (5, "翻译助手", "高质量中英文双向翻译，保持专业术语准确",
                  "你正在执行翻译任务。请遵循以下指令：\n"
                  "1. 识别用户输入的源语言和目标语言\n"
                  "2. 执行高质量翻译，注意：\n"
@@ -769,13 +772,11 @@ def _seed_default_skills():
                  "   - 专业术语使用行业标准译法\n"
                  "   - 长句合理断句，符合目标语言习惯\n"
                  "3. 输出格式：先给出翻译结果，再附加【术语注释】（如有专业术语）\n"
-                 "4. 如涉及中文成语/典故，添加简短解释",
-                 "", "{}", None),
+                 "4. 如涉及中文成语/典故，添加简短解释"),
             ]
             conn.executemany(
-                "INSERT INTO skills (id, name, description, skill_type, "
-                "prompt_template, function_name, function_params, mcp_tool_id) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO skills (id, name, description, prompt_template) "
+                "VALUES (?, ?, ?, ?)",
                 skills_data,
             )
             print("[种子] 默认技能已创建（5个：数据统计/数据搜索/新闻摘要/深度采集/翻译助手）")
