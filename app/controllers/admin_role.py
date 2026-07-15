@@ -77,7 +77,11 @@ class RoleFormHandler(AdminBaseHandler):
             return
 
         if role_id:  # 编辑
-            role_id = int(role_id)
+            try:
+                role_id = int(role_id)
+            except (ValueError, TypeError):
+                self.write('<script>alert("无效的角色ID");window.history.back();</script>')
+                return
             role = RoleRepository.get_by_id(role_id)
             if role and role["is_system"] == 1:
                 self.write('<script>alert("系统默认角色不可编辑");window.history.back();</script>')
@@ -116,7 +120,11 @@ class RoleDeleteHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def post(self):
-        role_id = int(self.get_body_argument("id", 0))
+        try:
+            role_id = int(self.get_body_argument("id", 0))
+        except (ValueError, TypeError):
+            self.write('<script>alert("无效的角色ID");window.history.back();</script>')
+            return
         role = RoleRepository.get_by_id(role_id)
         if not role:
             self.write('<script>alert("角色不存在");window.history.back();</script>')
