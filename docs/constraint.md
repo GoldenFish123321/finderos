@@ -149,14 +149,14 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
-| result_id | INTEGER FK | 关联 watch_results.id |
-| title | TEXT | 标题 |
-| link | TEXT | 链接（`WHERE link != ''` 部分唯一索引去重） |
-| summary | TEXT | 摘要 |
-| source_name | TEXT | 来源名称（与 title 组合唯一索引 `WHERE link IS NULL OR link = ''`，防止无链接记录重复） |
-| raw_data | TEXT | 原始数据（JSON） |
+| result_id | INTEGER DEFAULT NULL FK | 关联 watch_results.id |
+| title | TEXT DEFAULT '' | 标题 |
+| link | TEXT DEFAULT '' | 链接（`WHERE link != ''` 部分唯一索引去重） |
+| summary | TEXT DEFAULT '' | 摘要 |
+| source_name | TEXT DEFAULT '' | 来源名称（与 title 组合唯一索引 `WHERE link IS NULL OR link = ''`，防止无链接记录重复） |
+| raw_data | TEXT DEFAULT '' | 原始数据（JSON） |
 | is_deep_collected | INTEGER DEFAULT 0 | 是否已深度采集 |
-| deep_collected_at | TIMESTAMP | 深度采集时间 |
+| deep_collected_at | TIMESTAMP DEFAULT NULL | 深度采集时间 |
 | created_at | TIMESTAMP | 入库时间 |
 
 ### audit_logs 表（操作审计日志）
@@ -196,16 +196,16 @@
 | id | INTEGER PK | 自增主键 |
 | name | TEXT NOT NULL | 员工名称 |
 | employee_type | TEXT NOT NULL DEFAULT 'llm' | 类型（llm/api） |
-| description | TEXT | 能力描述 |
-| model_id | INTEGER FK | 绑定模型（LLM 型），`FOREIGN KEY REFERENCES ai_models(id) ON DELETE SET NULL` |
-| system_prompt | TEXT | 系统提示词（LLM 型） |
-| skills | TEXT | 技能列表 JSON（LLM 型） |
+| description | TEXT DEFAULT '' | 能力描述 |
+| model_id | INTEGER DEFAULT NULL FK | 绑定模型（LLM 型），`FOREIGN KEY REFERENCES ai_models(id) ON DELETE SET NULL` |
+| system_prompt | TEXT DEFAULT '' | 系统提示词（LLM 型） |
+| skills | TEXT DEFAULT '[]' | 技能列表 JSON（LLM 型） |
 | crawl4ai_enabled | INTEGER DEFAULT 0 | 启用深度采集（LLM 型） |
-| api_url | TEXT | API 地址（API 型） |
-| api_method | TEXT | HTTP 方法（API 型） |
-| api_headers | TEXT | 请求头 JSON（API 型） |
-| api_params_template | TEXT | 参数模板（API 型） |
-| response_render_template | TEXT | 响应渲染模板（API 型） |
-| api_secret | TEXT | API 密钥（API 型，加密存储） |
+| api_url | TEXT DEFAULT '' | API 地址（API 型） |
+| api_method | TEXT DEFAULT 'GET' | HTTP 方法（API 型） |
+| api_headers | TEXT DEFAULT '{}' | 请求头 JSON（API 型） |
+| api_params_template | TEXT DEFAULT '' | 参数模板（API 型） |
+| response_render_template | TEXT DEFAULT '' | 响应渲染模板（API 型） |
+| api_secret | TEXT DEFAULT '' | API 密钥（API 型，加密存储） |
 | is_enabled | INTEGER DEFAULT 1 | 启用状态 |
 | created_at | TIMESTAMP | 创建时间 |
