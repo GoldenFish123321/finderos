@@ -21,6 +21,9 @@
 - **成功**: 自动登录并 302 跳转（管理员→/admin，普通用户→/index）
 - **失败**: 渲染注册页 + 错误提示（用户名已存在 / 密码不一致 / 密码强度不足等）
 
+### GET /register — 注册页面
+- 渲染 `register.html` 注册表单页面
+
 ### GET /logout — 登出
 - 清除 Cookie，302 跳转到 `/`
 
@@ -86,14 +89,12 @@
 
 #### POST /admin/watch 请求参数
 
-```json
-{
-  "keyword": "搜索关键词",
-  "source_ids": "1,2,3"  // 瞭源ID列表，逗号分隔；为空则使用所有启用的瞭源
-}
-```
+> **Content-Type**: `application/x-www-form-urlencoded`
 
-> **兼容格式**：同时支持 jQuery 数组语法 `source_ids[]=1&source_ids[]=2`。
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `keyword` | string | 搜索关键词 |
+| `source_ids` | string | 瞭源ID列表，逗号分隔；为空则使用所有启用的瞭源。兼容 jQuery 数组语法 `source_ids[]=1&source_ids[]=2` |
 
 #### POST /admin/watch 响应
 
@@ -135,7 +136,7 @@
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/warehouse` | 数据仓库列表（?page=&search=） |
+| GET | `/admin/warehouse` | 数据仓库列表（?page=&keyword=&source_id=） |
 | GET | `/admin/warehouse/detail?id=` | 查看详情 |
 | POST | `/admin/warehouse/delete` | 删除记录 (id) |
 | POST | `/admin/warehouse/batch-delete` | 批量删除 (ids) |
@@ -169,7 +170,7 @@
 ### 4.4 Token 消耗说明
 
 - Token 消耗通过 `/chat/stream` 对话自动累加到 `ai_models.total_tokens`
-- 数据迁移脚本 `migrate_db.py` 支持旧表 Token 数据迁移
+- `migrate_db.py` 提供 `ai_models.total_tokens` 列的 DDL 迁移（v0.2.5），不涉及跨表数据搬运
 
 ---
 
@@ -182,7 +183,7 @@
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/admin/user/batch-delete` | 批量删除用户 (ids) |
-| POST | `/admin/user/batch-toggle` | 批量启用/禁用 (ids, action) |
+| POST | `/admin/user/batch-toggle` | 批量启用/禁用 (ids, enable) |
 | GET/POST | `/admin/user/change-password` | 修改密码 |
 
 ### 5.2 菜单管理（补充）
@@ -232,11 +233,26 @@
 | POST | `/chat/stream` | **SSE 流式 AI 对话**（含 MCP Function Calling） |
 | POST | `/chat/employee/invoke` | **SSE 流式 @数字员工调用** |
 
+#### POST /chat/stream 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `model_id` | int | 是 | 使用的 AI 模型 ID |
+| `message` | string | 是 | 用户消息内容 |
+| `conversation_id` | int | 否 | 对话 ID（多轮对话上下文） |
+
+#### POST /chat/employee/invoke 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `employee_id` | int | 是 | 数字员工 ID |
+| `message` | string | 是 | 用户消息内容（含 @员工名） |
+
 ### 7.2 前台 API
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/chat/models` | 获取可用模型列表（JSON） |
+| GET | `/api/chat/models` | 获取可用模型列表（JSON）。仅返回已启用模型（`is_enabled=1`），字段：`id`, `name`, `provider`, `model_name`, `category`, `is_default` |
 | GET | `/api/chat/employees` | 获取数字员工列表（JSON） |
 
 ### 7.3 对话管理 API
@@ -245,5 +261,5 @@
 |------|------|------|
 | GET | `/api/chat/conversation/list` | 当前用户对话历史列表 |
 | POST | `/api/chat/conversation/create` | 创建新对话 |
-| POST | `/api/chat/conversation/delete` | 删除对话（?id=） |
+| POST | `/api/chat/conversation/delete` | 删除对话（body 参数 `id`） |
 | GET | `/api/chat/conversation/messages` | 获取对话消息（?id=） |

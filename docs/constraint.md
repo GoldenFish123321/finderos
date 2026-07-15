@@ -46,7 +46,7 @@
 - 登录拦截: `login_url="/"` + `@tornado.web.authenticated`
 - 管理员权限: 继承 `AdminBaseHandler`，prepare() 中校验用户是否有关联的后台功能权限（非硬编码角色名）
 - 系统角色保护: `is_system=1` 的角色不允许编辑/删除
-- 超级管理员保护: `admin` 用户不允许禁用/删除自身
+- 超级管理员保护: `admin` 用户不允许禁用/删除；任何管理员均不可禁用/删除自身
 
 ## 5. 数据模型
 
@@ -66,7 +66,7 @@
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | name | TEXT UNIQUE NOT NULL | 角色名称 |
-| description | TEXT | 角色描述 |
+| description | TEXT DEFAULT '' | 角色描述 |
 | is_system | INTEGER DEFAULT 0 | 系统角色(1=不可删除/编辑) |
 | created_at | TIMESTAMP | 创建时间 |
 
@@ -151,9 +151,9 @@
 | id | INTEGER PK | 自增主键 |
 | result_id | INTEGER FK | 关联 watch_results.id |
 | title | TEXT | 标题 |
-| link | TEXT | 链接（UNIQUE 去重） |
+| link | TEXT | 链接（`WHERE link != ''` 部分唯一索引去重） |
 | summary | TEXT | 摘要 |
-| source_name | TEXT | 来源名称 |
+| source_name | TEXT | 来源名称（与 title 组合唯一索引 `WHERE link IS NULL OR link = ''`，防止无链接记录重复） |
 | raw_data | TEXT | 原始数据（JSON） |
 | is_deep_collected | INTEGER DEFAULT 0 | 是否已深度采集 |
 | deep_collected_at | TIMESTAMP | 深度采集时间 |
