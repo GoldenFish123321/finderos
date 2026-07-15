@@ -10,6 +10,10 @@ import os
 class Settings:
     """全局应用配置"""
 
+    # === 应用版本（唯一硬编码位置） ===
+    VERSION = "0.4.0"
+    """应用版本号。项目中所有版本展示均由此处统一管理。"""
+
     # === 安全配置 ===
     COOKIE_SECRET = os.environ.get("COOKIE_SECRET", "")
     """Tornado 安全 Cookie 签名密钥。生产环境必须通过环境变量注入。"""

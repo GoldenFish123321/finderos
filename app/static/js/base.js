@@ -4,7 +4,9 @@
 
 // 页面加载完成后执行
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('瞭望与问数系统 v0.4 已启动');
+    var versionMeta = document.querySelector('meta[name="app-version"]');
+    var version = versionMeta ? versionMeta.getAttribute('content') : 'unknown';
+    console.log('瞭望与问数系统 v' + version + ' 已启动');
 });
 
 /**
