@@ -1,8 +1,8 @@
-# 🔭 瞭望与问数系统 (DataFinderAgentOS) v0.4.1
+# 🔭 瞭望与问数系统 (DataFinderAgentOS) v0.4.2
 
 > 基于 Tornado 异步 Web 框架构建的轻量级智能数据采集与 AI 问数一体化平台。  
-> **v0.4.1 新增**：Edge TTS 语音合成播报（🔊 AI 回复一键朗读）。  
-> **v0.4.0 新增**：MCP 协议工具调用、LLM Function Calling 智能意图识别、/tools 指令。
+> **v0.4.2 新增**：MCP 工具数据库驱动注册中心 + 管理后台（18+工具、热重载、在线测试）、数字员工 MCP 权限控制、Skill 模型简化。  
+> **v0.4.1 新增**：Edge TTS 语音合成播报（🔊 AI 回复一键朗读）。
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Tornado](https://img.shields.io/badge/Tornado-6.4+-00ADD8?style=flat)](https://www.tornadoweb.org/)
