@@ -146,7 +146,6 @@
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
-{% import json %}
 <script>
 (function() {
     // 等待 ECharts 加载
@@ -159,9 +158,9 @@
 
     function initDashboardCharts() {
         var isDark = document.body.classList.contains('dark-theme');
-        // 从后端注入 JSON 数据
-        var collectTrend = {% raw json.dumps(collect_trend) %};
-        var sourceDist = {% raw json.dumps(source_distribution) %};
+        // 从后端注入 JSON 数据（控制器已序列化）
+        var collectTrend = {% raw collect_trend %};
+        var sourceDist = {% raw source_distribution %};
 
         // 采集趋势柱状图
         var trendDom = document.getElementById('chart-collect-trend');

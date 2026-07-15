@@ -31,9 +31,9 @@ class AdminIndexHandler(AdminBaseHandler):
         result_stats = WatchResultRepository.get_stats()
         model_stats = AiModelRepository.get_stats()
 
-        # ── ECharts 图表数据（传原生 Python 对象，模板用 json.dumps 序列化）──
-        source_distribution = self._get_source_distribution()
-        collect_trend = self._get_collect_trend()
+        # ── ECharts 图表数据（已在控制器序列化为 JSON 字符串）──
+        source_distribution = json.dumps(self._get_source_distribution(), ensure_ascii=False)
+        collect_trend = json.dumps(self._get_collect_trend(), ensure_ascii=False)
         deep_stats = DataWarehouseRepository.get_stats()
 
         self.render(
