@@ -7,6 +7,7 @@
 - **语言**: Python 3.11+ (venv 中的解释器版本，推荐 3.13+)
 - **Web 框架**: Tornado (`tornado.web` / `tornado.ioloop` / `tornado.httpserver`)
 - **数据库**: SQLite3 (`sqlite3` 内置模块，零外部依赖)，DB 文件 `database/finderos.db`
+  - **row_factory**: 使用自定义 `_dict_factory` 返回 `dict`（而非 `sqlite3.Row`），以确保 `.get()` 方法可用
 - **模板**: Tornado 原生模板 (`{% extends %}` / `{% block %}` / `{% module xsrf_form_html() %}`)
 - **前端**: Layui 2.x + 原生 HTML + CSS + JS (未引入构建工具与前端框架)
 - **虚拟环境**: `.venv/`；一切依赖安装与运行必须激活 venv

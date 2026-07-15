@@ -1572,6 +1572,7 @@ python -m pytest test/test_login_rate_limiter.py::TestLoginRateLimiter::test_rat
 
 ## 更新日志
 
+<<<<<<< HEAD
 ### v0.4.2 (2026-07-15) — MCP 重构完成
 
 - 🔧 **MCP 工具种子数据**：18 个内置工具迁移至数据库驱动，含完整 description 和 input_schema
@@ -1582,6 +1583,16 @@ python -m pytest test/test_login_rate_limiter.py::TestLoginRateLimiter::test_rat
 - 🔐 **SSRF 防护增强**：crawl4ai 工具新增 `validate_url_safe` URL 安全校验
 - 📋 **员工前端增强**：`UserEmployeeListHandler` API 返回三色徽章数据
 - 🧪 **测试覆盖**：6 项测试全部通过（工具查询/CRUD/注册表/员工权限/技能关联/测试日志）
+
+### v0.4.2 (2026-07-15) — Bug 修复：sqlite3.Row .get() AttributeError
+
+- 🐛 **修复 `list_watch_sources` 工具崩溃**：`sqlite3.Row` 对象不支持 `.get()` 方法，导致 `AttributeError: 'sqlite3.Row' object has no attribute 'get'`
+- 🔧 **根因修复**：将 `db.py` 的 `row_factory` 从 `sqlite3.Row` 改为自定义 `_dict_factory`，所有数据库查询统一返回 `dict`
+- 📝 **影响范围**：全局修复了所有潜在的 `.get()` 调用兼容性问题（`collect_tools.py`、`chat_tools.py`、`employee_tools.py`、`warehouse_tools.py`、`system_tools.py`、`scheduler.py` 等）
+- 🔄 **PRAGMA 兼容**：5 处 `row[1]` 迁移检查改为 `row["name"]` 键访问
+- 🧹 **注释清理**：移除 `admin_warehouse.py` 中过时的 `sqlite3.Row 不支持 .get()` 注释
+- 🧪 **测试补充**：新增 `test/test_dict_factory.py` 验证 dict 返回类型与 `.get()` 支持
+- 📄 **文档更新**：`constraint.md` 增加 row_factory 约束说明
 
 ### v0.4.1 (2026-07) — 管理侧接口管理（Issue #26）
 
