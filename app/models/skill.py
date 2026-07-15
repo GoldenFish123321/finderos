@@ -2,40 +2,29 @@
 skill.py — 技能 Repository
 
 管理「技能库」的 CRUD，供管理后台和数字员工技能选择使用。
-技能类型：
-- prompt:  加载后注入一段 prompt 增强指令（通过 MCP load_skill 工具按需获取）
-- function: 加载后映射到 MCP 工具（如 search_warehouse），LLM 通过 Function Calling 执行
+技能统一为 Prompt 模板：LLM 通过 MCP load_skill 工具按需获取指令内容，
+在模板中直接描述应使用哪些 MCP 工具及用法即可。
+
+skill_type / function_name / function_params 列已废弃，保留兼容旧数据。
 """
 import json
 import sqlite3
 from app.models.db import get_db
-
-SKILL_TYPES = [
-    {"value": "prompt", "name": "Prompt 增强"},
-    {"value": "function", "name": "Function 调用"},
-]
 
 
 class SkillRepository:
     """技能数据访问类 (Repository Pattern)。"""
 
     @staticmethod
-    def get_all(page: int = 1, page_size: int = 20, skill_type: str = "") -> tuple:
+    def get_all(page: int = 1, page_size: int = 20) -> tuple:
         """分页查询技能列表。返回 (rows, total)。"""
         with get_db() as conn:
-            conditions = []
-            params = []
-            if skill_type:
-                conditions.append("skill_type = ?")
-                params.append(skill_type)
-            where = "WHERE " + " AND ".join(conditions) if conditions else ""
             total = conn.execute(
-                f"SELECT COUNT(*) as cnt FROM skills {where}", params
+                "SELECT COUNT(*) as cnt FROM skills"
             ).fetchone()["cnt"]
             rows = conn.execute(
-                f"SELECT * FROM skills {where} ORDER BY id ASC "
-                f"LIMIT ? OFFSET ?",
-                (*params, page_size, (page - 1) * page_size),
+                "SELECT * FROM skills ORDER BY id ASC LIMIT ? OFFSET ?",
+                (page_size, (page - 1) * page_size),
             ).fetchall()
         return [dict(r) for r in rows], total
 
@@ -58,18 +47,12 @@ class SkillRepository:
         return dict(row) if row else None
 
     @staticmethod
-    def get_enabled(skill_type: str = ""):
+    def get_enabled():
         """获取所有启用的技能。"""
         with get_db() as conn:
-            if skill_type:
-                rows = conn.execute(
-                    "SELECT * FROM skills WHERE is_enabled = 1 AND skill_type = ? "
-                    "ORDER BY id ASC", (skill_type,)
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT * FROM skills WHERE is_enabled = 1 ORDER BY id ASC"
-                ).fetchall()
+            rows = conn.execute(
+                "SELECT * FROM skills WHERE is_enabled = 1 ORDER BY id ASC"
+            ).fetchall()
         return [dict(r) for r in rows]
 
     @staticmethod
@@ -129,23 +112,14 @@ class SkillRepository:
         ]
 
     @staticmethod
-    def create(name: str, description: str = "", skill_type: str = "prompt",
-               prompt_template: str = "", function_name: str = "",
-               function_params: str = "{}") -> int:
+    def create(name: str, description: str = "", prompt_template: str = "") -> int:
         """创建技能。返回新 ID 或 -1。"""
         try:
-            # 校验 function_params JSON 格式
-            try:
-                json.loads(function_params)
-            except (json.JSONDecodeError, TypeError):
-                function_params = "{}"
             with get_db() as conn:
                 cur = conn.execute(
-                    "INSERT INTO skills (name, description, skill_type, "
-                    "prompt_template, function_name, function_params) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
-                    (name.strip(), description.strip(), skill_type,
-                     prompt_template.strip(), function_name.strip(), function_params),
+                    "INSERT INTO skills (name, description, prompt_template) "
+                    "VALUES (?, ?, ?)",
+                    (name.strip(), description.strip(), prompt_template.strip()),
                 )
                 conn.commit()
                 return cur.lastrowid
@@ -154,22 +128,14 @@ class SkillRepository:
 
     @staticmethod
     def update(skill_id: int, name: str, description: str = "",
-               skill_type: str = "prompt", prompt_template: str = "",
-               function_name: str = "", function_params: str = "{}") -> bool:
+               prompt_template: str = "") -> bool:
         """更新技能。返回是否成功。"""
         try:
-            try:
-                json.loads(function_params)
-            except (json.JSONDecodeError, TypeError):
-                function_params = "{}"
             with get_db() as conn:
                 conn.execute(
-                    "UPDATE skills SET name = ?, description = ?, skill_type = ?, "
-                    "prompt_template = ?, function_name = ?, function_params = ? "
-                    "WHERE id = ?",
-                    (name.strip(), description.strip(), skill_type,
-                     prompt_template.strip(), function_name.strip(),
-                     function_params, skill_id),
+                    "UPDATE skills SET name = ?, description = ?, "
+                    "prompt_template = ? WHERE id = ?",
+                    (name.strip(), description.strip(), prompt_template.strip(), skill_id),
                 )
                 conn.commit()
             return True
@@ -210,15 +176,7 @@ class SkillRepository:
             enabled = conn.execute(
                 "SELECT COUNT(*) as cnt FROM skills WHERE is_enabled = 1"
             ).fetchone()["cnt"]
-            prompt_count = conn.execute(
-                "SELECT COUNT(*) as cnt FROM skills WHERE skill_type = 'prompt'"
-            ).fetchone()["cnt"]
-            function_count = conn.execute(
-                "SELECT COUNT(*) as cnt FROM skills WHERE skill_type = 'function'"
-            ).fetchone()["cnt"]
         return {
             "total": total,
             "enabled": enabled,
-            "prompt_count": prompt_count,
-            "function_count": function_count,
         }

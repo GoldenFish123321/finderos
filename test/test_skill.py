@@ -7,7 +7,7 @@ test_skill.py — 技能管理模块测试
   - resolve_by_ids / resolve_by_names
   - get_skill_summaries (轻量摘要)
   - load_skill MCP 工具
-  - 分页查询 + 类型筛选
+  - 分页查询
 """
 import json
 import os
@@ -46,6 +46,7 @@ def _setup_test_db():
         prompt_template TEXT DEFAULT '',
         function_name   TEXT DEFAULT '',
         function_params TEXT DEFAULT '{}',
+        mcp_tool_id     INTEGER DEFAULT NULL,
         is_enabled      INTEGER DEFAULT 1,
         created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
@@ -56,9 +57,9 @@ def _setup_test_db():
 def _seed_test_data():
     """插入测试技能数据。"""
     from app.models.skill import SkillRepository
-    SkillRepository.create("测试技能1", "描述1", "prompt", "这是prompt模板1", "", "{}")
-    SkillRepository.create("测试技能2", "描述2", "function", "", "search_warehouse", '{"keyword":"test"}')
-    SkillRepository.create("测试技能3", "描述3", "prompt", "这是prompt模板3", "", "{}")
+    SkillRepository.create("测试技能1", "描述1", "这是prompt模板1")
+    SkillRepository.create("测试技能2", "描述2", "使用 search_warehouse 工具搜索数据")
+    SkillRepository.create("测试技能3", "描述3", "这是prompt模板3")
 
 
 class TestSkillRepository(unittest.TestCase):
@@ -82,12 +83,6 @@ class TestSkillRepository(unittest.TestCase):
         self.assertEqual(total, 3)
         self.assertEqual(len(rows), 3)
 
-    def test_get_all_filter_by_type(self):
-        from app.models.skill import SkillRepository
-        rows, total = SkillRepository.get_all(page=1, page_size=10, skill_type="prompt")
-        self.assertEqual(total, 2)
-        self.assertTrue(all(r["skill_type"] == "prompt" for r in rows))
-
     def test_get_by_id(self):
         from app.models.skill import SkillRepository
         skill = SkillRepository.get_by_id(1)
@@ -98,7 +93,7 @@ class TestSkillRepository(unittest.TestCase):
         from app.models.skill import SkillRepository
         skill = SkillRepository.get_by_name("测试技能2")
         self.assertIsNotNone(skill)
-        self.assertEqual(skill["skill_type"], "function")
+        self.assertEqual(skill["name"], "测试技能2")
 
     def test_get_enabled(self):
         from app.models.skill import SkillRepository
@@ -109,30 +104,29 @@ class TestSkillRepository(unittest.TestCase):
 
     def test_create_duplicate_name(self):
         from app.models.skill import SkillRepository
-        new_id = SkillRepository.create("测试技能1", "重复", "prompt", "模板", "", "{}")
+        new_id = SkillRepository.create("测试技能1", "重复", "模板")
         self.assertEqual(new_id, -1)  # 唯一约束
 
     def test_create_and_verify(self):
         from app.models.skill import SkillRepository
-        new_id = SkillRepository.create("新技能", "新描述", "prompt", "新模板", "", "{}")
+        new_id = SkillRepository.create("新技能", "新描述", "新模板内容")
         self.assertGreater(new_id, 0)
         skill = SkillRepository.get_by_id(new_id)
         self.assertEqual(skill["name"], "新技能")
+        self.assertEqual(skill["prompt_template"], "新模板内容")
         # 清理
         SkillRepository.delete(new_id)
 
     def test_update(self):
         from app.models.skill import SkillRepository
         skill = SkillRepository.get_by_id(3)
-        ok = SkillRepository.update(skill["id"], "更新技能", "更新描述",
-                                     "function", "", "deep_collect_url", '{"url":"test"}')
+        ok = SkillRepository.update(skill["id"], "更新技能", "更新描述", "更新后的模板")
         self.assertTrue(ok)
         updated = SkillRepository.get_by_id(3)
         self.assertEqual(updated["name"], "更新技能")
-        self.assertEqual(updated["function_name"], "deep_collect_url")
+        self.assertEqual(updated["prompt_template"], "更新后的模板")
         # 还原
-        SkillRepository.update(skill["id"], "测试技能3", "描述3",
-                               "prompt", "这是prompt模板3", "", "{}")
+        SkillRepository.update(skill["id"], "测试技能3", "描述3", "这是prompt模板3")
 
     def test_toggle_enabled(self):
         from app.models.skill import SkillRepository
@@ -182,8 +176,7 @@ class TestSkillRepository(unittest.TestCase):
         from app.models.skill import SkillRepository
         stats = SkillRepository.get_stats()
         self.assertEqual(stats["total"], 3)
-        self.assertEqual(stats["prompt_count"], 2)
-        self.assertEqual(stats["function_count"], 1)
+        self.assertEqual(stats["enabled"], 3)
 
 
 class TestLoadSkillMCPTool(unittest.TestCase):
@@ -199,23 +192,14 @@ class TestLoadSkillMCPTool(unittest.TestCase):
         if os.path.exists(TEST_DB_PATH):
             os.remove(TEST_DB_PATH)
 
-    def test_load_skill_prompt_type(self):
-        """加载 prompt 型技能，返回完整模板。"""
+    def test_load_skill_returns_prompt_template(self):
+        """加载技能，返回 prompt 模板内容。"""
         from app.mcp.tools import _load_skill
         result = _load_skill("测试技能1")
         self.assertTrue(result["success"])
-        self.assertEqual(result["skill_type"], "prompt")
+        self.assertEqual(result["skill_name"], "测试技能1")
         self.assertIn("这是prompt模板1", result["content"])
         self.assertIn("usage", result)
-
-    def test_load_skill_function_type(self):
-        """加载 function 型技能，返回工具映射。"""
-        from app.mcp.tools import _load_skill
-        result = _load_skill("测试技能2")
-        self.assertTrue(result["success"])
-        self.assertEqual(result["skill_type"], "function")
-        self.assertEqual(result["function_name"], "search_warehouse")
-        self.assertIsInstance(result["function_params"], dict)
 
     def test_load_skill_not_found(self):
         """加载不存在的技能。"""
@@ -228,6 +212,36 @@ class TestLoadSkillMCPTool(unittest.TestCase):
         """加载已禁用的技能。"""
         from app.models.skill import SkillRepository
         from app.mcp.tools import _load_skill
+        # 禁用技能1
+        SkillRepository.toggle_enabled(1)
+        result = _load_skill("测试技能1")
+        self.assertFalse(result["success"])
+        self.assertIn("已被禁用", result["error"])
+        # 还原
+        SkillRepository.toggle_enabled(1)
+
+
+class TestSkillMCPRegistration(unittest.TestCase):
+    """验证 load_skill 工具是否注册到 MCP Server。"""
+
+    def test_tool_registered(self):
+        from app.mcp.tools import register_all_tools, get_tool_names
+        from app.mcp.server import MCPServer
+        # 创建独立的 server 实例避免单例污染
+        server = MCPServer()
+        register_all_tools(server)
+        names = get_tool_names()
+        self.assertIn("load_skill", names)
+
+    def test_load_skill_schema(self):
+        """验证 load_skill 的 JSON Schema 包含 skill_name 参数。"""
+        from app.mcp.tools import ALL_TOOL_DEFINITIONS
+        load_skill_def = None
+        for t in ALL_TOOL_DEFINITIONS:
+            if t["name"] == "load_skill":
+                load_skill_def = t
+                break
+        self.assertIsNotNone(load_skill_def)
         # 禁用技能1
         SkillRepository.toggle_enabled(1)
         result = _load_skill("测试技能1")

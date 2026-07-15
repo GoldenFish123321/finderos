@@ -297,11 +297,9 @@ def _get_conversation_messages(conversation_id: int, limit: int = 20,
 
 
 def _load_skill(skill_name: str) -> Dict[str, Any]:
-    """加载指定技能的完整指令（v0.5.0 新增）。
+    """加载指定技能的 prompt 模板指令。
 
-    根据技能类型返回不同内容：
-    - prompt 型：返回完整 prompt_template（供 LLM 注入系统指令）
-    - function 型：返回 function_name + function_params（供 LLM 后续调用对应工具）
+    技能统一为 Prompt 模板，LLM 获取后按模板中的指示执行任务。
     """
     from app.models.skill import SkillRepository
     skill = SkillRepository.get_by_name(skill_name.strip())
@@ -317,36 +315,13 @@ def _load_skill(skill_name: str) -> Dict[str, Any]:
             "error": f"技能「{skill_name}」已被禁用",
         }
 
-    skill_type = skill.get("skill_type", "prompt")
-    if skill_type == "prompt":
-        return {
-            "success": True,
-            "skill_type": "prompt",
-            "skill_name": skill["name"],
-            "description": skill.get("description", ""),
-            "content": skill.get("prompt_template", ""),
-            "usage": "请将以上 content 作为你的系统指令严格遵循，完成用户的任务。",
-        }
-    else:  # function
-        func_name = skill.get("function_name", "")
-        func_params_str = skill.get("function_params", "{}")
-        try:
-            import json as _json
-            func_params = _json.loads(func_params_str)
-        except Exception:
-            func_params = {}
-        return {
-            "success": True,
-            "skill_type": "function",
-            "skill_name": skill["name"],
-            "description": skill.get("description", ""),
-            "function_name": func_name,
-            "function_params": func_params,
-            "usage": (
-                f"此技能映射到 MCP 工具「{func_name}」。"
-                f"请根据用户需求调用该工具，默认参数: {func_params_str}。"
-            ),
-        }
+    return {
+        "success": True,
+        "skill_name": skill["name"],
+        "description": skill.get("description", ""),
+        "content": skill.get("prompt_template", ""),
+        "usage": "请将以上 content 作为你的系统指令严格遵循，完成用户的任务。",
+    }
 
 
 # ============================================================
@@ -561,7 +536,10 @@ ALL_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
 
 
 def register_all_tools(server: Optional[MCPServer] = None) -> MCPServer:
-    """向 MCP Server 注册所有工具。
+    """向 MCP Server 注册所有工具 (v0.6.0: 优先从数据库加载)。
+
+    优先使用 MCPToolRegistry 从数据库加载；
+    如果数据库没有工具记录，回退到代码定义的 ALL_TOOL_DEFINITIONS。
 
     Args:
         server: MCP Server 实例，为 None 时使用全局单例。
@@ -572,6 +550,18 @@ def register_all_tools(server: Optional[MCPServer] = None) -> MCPServer:
     if server is None:
         server = MCPServer.get_instance()
 
+    # 优先从数据库加载
+    try:
+        from app.mcp.registry import MCPToolRegistry
+        registry = MCPToolRegistry.get_instance(server)
+        count = registry.load_all_from_db()
+        if count > 0:
+            logger.info(f"已从数据库注册 {count} 个 MCP 工具")
+            return server
+    except Exception as e:
+        logger.warning(f"从数据库加载工具失败，回退到代码定义: {e}")
+
+    # 回退：代码定义的 ALL_TOOL_DEFINITIONS
     tools = []
     for tool_def in ALL_TOOL_DEFINITIONS:
         tool = MCPTool(
@@ -583,7 +573,7 @@ def register_all_tools(server: Optional[MCPServer] = None) -> MCPServer:
         tools.append(tool)
 
     server.register_tools(tools)
-    logger.info(f"已注册 {len(tools)} 个 MCP 工具: {[t.name for t in tools]}")
+    logger.info(f"已从代码定义注册 {len(tools)} 个 MCP 工具: {[t.name for t in tools]}")
     return server
 
 
