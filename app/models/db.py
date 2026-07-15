@@ -622,7 +622,7 @@ def _seed_default_employees():
                     1,
                 ),
             )
-            # 随机音乐 — API 型数字员工（免费随机音乐 API）
+            # 随机音乐 — API 型数字员工（Meting API，基于网易云音乐热歌榜）
             conn.execute(
                 "INSERT INTO digital_employees (id, name, employee_type, description, "
                 "api_url, api_method, api_headers, api_params_template, response_render_template, is_enabled) "
@@ -630,16 +630,16 @@ def _seed_default_employees():
                 (
                     8, "随机音乐", "api",
                     "随机推荐一首歌曲，返回歌曲名、歌手、封面图片和试听链接",
-                    "https://api.uomg.com/api/rand.music",
+                    "https://api.injahow.cn/meting/?server=netease&type=playlist&id=3778678",
                     "GET",
-                    json.dumps({"Accept": "application/json"}, ensure_ascii=False),
-                    "sort=热歌榜&format=json",
+                    json.dumps({"Accept": "application/json", "User-Agent": "FinderOS/1.0"}, ensure_ascii=False),
+                    "",
                     json.dumps({
                         "type": "music_card",
                         "title": "{{name}}",
                         "fields": [
-                            {"label": "歌手", "value": "{{artistsname}}"},
-                            {"label": "封面", "value": "{{coverurl}}"},
+                            {"label": "歌手", "value": "{{artist}}"},
+                            {"label": "封面", "value": "{{pic}}"},
                             {"label": "试听", "value": "{{url}}"},
                         ]
                     }, ensure_ascii=False),
