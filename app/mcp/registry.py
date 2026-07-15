@@ -16,9 +16,12 @@ app/mcp/registry.py — MCP 工具注册中心 (v0.10 新增)
 """
 
 import importlib
+import inspect
 import json
 import logging
-from typing import Any, Callable, Dict, List, Optional
+import pkgutil
+import types
+from typing import Any, Callable, Dict, List, Optional, Union, get_args, get_origin, get_type_hints
 
 from app.mcp.server import MCPServer, MCPTool
 
@@ -26,38 +29,88 @@ logger = logging.getLogger(__name__)
 
 # 内置工具处理函数映射表（快速查找，避免每次 importlib）
 _BUILTIN_HANDLERS: Dict[str, Callable] = {}
+_BUILTIN_SCAN_COMPLETE = False
 
 
 def _load_builtin_handlers():
     """预加载所有 builtin_tools 模块中的处理函数。"""
-    global _BUILTIN_HANDLERS
-    if _BUILTIN_HANDLERS:
+    global _BUILTIN_HANDLERS, _BUILTIN_SCAN_COMPLETE
+    if _BUILTIN_SCAN_COMPLETE:
         return
 
+    import app.mcp.builtin_tools as builtin_package
     modules = [
-        "app.mcp.builtin_tools.warehouse_tools",
-        "app.mcp.builtin_tools.collect_tools",
-        "app.mcp.builtin_tools.employee_tools",
-        "app.mcp.builtin_tools.model_tools",
-        "app.mcp.builtin_tools.chat_tools",
-        "app.mcp.builtin_tools.entertainment_tools",
-        "app.mcp.builtin_tools.crawl4ai_tools",
-        "app.mcp.builtin_tools.system_tools",
+        info.name for info in pkgutil.iter_modules(
+            builtin_package.__path__, builtin_package.__name__ + "."
+        ) if not info.name.rsplit(".", 1)[-1].startswith("_")
     ]
 
     for module_name in modules:
         try:
             module = importlib.import_module(module_name)
             for attr_name in dir(module):
-                if attr_name.startswith("_"):
+                if not attr_name.startswith("_") or attr_name.startswith("__"):
                     continue
                 attr = getattr(module, attr_name)
-                if callable(attr):
+                if callable(attr) and getattr(attr, "__module__", "") == module_name:
                     _BUILTIN_HANDLERS[f"{module_name}.{attr_name}"] = attr
         except Exception as e:
             logger.warning(f"加载内置工具模块失败: {module_name} — {e}")
 
     logger.info(f"预加载了 {len(_BUILTIN_HANDLERS)} 个内置工具处理函数")
+    _BUILTIN_SCAN_COMPLETE = True
+
+
+def _annotation_schema(annotation) -> Dict[str, Any]:
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+    if origin in (list, tuple, set) or "Sequence" in str(origin):
+        return {"type": "array", "items": _annotation_schema(args[0] if args else str)}
+    if origin is dict:
+        return {"type": "object"}
+    if origin in (Union, types.UnionType):
+        concrete = [arg for arg in args if arg is not type(None)]
+        return _annotation_schema(concrete[0]) if len(concrete) == 1 else {"type": "string"}
+    if annotation is bool:
+        return {"type": "boolean"}
+    if annotation is int:
+        return {"type": "integer"}
+    if annotation is float:
+        return {"type": "number"}
+    if annotation is dict:
+        return {"type": "object"}
+    return {"type": "string"}
+
+
+def discover_builtin_tool_definitions() -> List[Dict[str, Any]]:
+    """Build fallback MCP definitions from every discovered builtin handler."""
+    _load_builtin_handlers()
+    definitions = []
+    for full_path, handler in sorted(_BUILTIN_HANDLERS.items()):
+        try:
+            hints = get_type_hints(handler)
+        except Exception:
+            hints = {}
+        properties = {}
+        required = []
+        for name, parameter in inspect.signature(handler).parameters.items():
+            annotation = hints.get(name, parameter.annotation)
+            properties[name] = {**_annotation_schema(annotation), "description": name}
+            if parameter.default is inspect.Parameter.empty:
+                required.append(name)
+            else:
+                properties[name]["default"] = parameter.default
+        schema = {"type": "object", "properties": properties}
+        if required:
+            schema["required"] = required
+        definitions.append({
+            "name": handler.__name__.lstrip("_"),
+            "description": inspect.getdoc(handler) or handler.__name__.lstrip("_"),
+            "input_schema": schema,
+            "handler": handler,
+            "handler_module": full_path,
+        })
+    return definitions
 
 
 def _resolve_handler(handler_module: str) -> Optional[Callable]:

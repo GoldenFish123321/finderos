@@ -563,9 +563,11 @@ def register_all_tools(server: Optional[MCPServer] = None) -> MCPServer:
     except Exception as e:
         logger.warning(f"从数据库加载工具失败，回退到代码定义: {e}")
 
-    # 回退：代码定义的 ALL_TOOL_DEFINITIONS
+    # 回退：自动发现 builtin_tools，避免此文件的旧重复定义发生漂移。
+    from app.mcp.registry import discover_builtin_tool_definitions
+    fallback_definitions = discover_builtin_tool_definitions()
     tools = []
-    for tool_def in ALL_TOOL_DEFINITIONS:
+    for tool_def in fallback_definitions:
         tool = MCPTool(
             name=tool_def["name"],
             description=tool_def["description"],
@@ -575,10 +577,11 @@ def register_all_tools(server: Optional[MCPServer] = None) -> MCPServer:
         tools.append(tool)
 
     server.register_tools(tools)
-    logger.info(f"已从代码定义注册 {len(tools)} 个 MCP 工具: {[t.name for t in tools]}")
+    logger.info(f"已从自动发现注册 {len(tools)} 个 MCP 工具: {[t.name for t in tools]}")
     return server
 
 
 def get_tool_names() -> List[str]:
     """获取所有已定义的工具名称列表。"""
-    return [t["name"] for t in ALL_TOOL_DEFINITIONS]
+    from app.mcp.registry import discover_builtin_tool_definitions
+    return [tool["name"] for tool in discover_builtin_tool_definitions()]

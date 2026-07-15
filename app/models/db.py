@@ -541,10 +541,11 @@ def seed_default_data():
 
     _seed_default_sources()
     _seed_default_models()
-    _seed_default_skills()
-    _seed_default_interfaces()
-    _seed_default_employees()
     _seed_default_mcp_tools()
+    skills_created = _seed_default_skills()
+    _seed_default_interfaces()
+    employees_created = _seed_default_employees()
+    _synchronize_default_capabilities(skills_created, employees_created)
 
 
 def _seed_default_sources():
@@ -679,12 +680,16 @@ def _seed_default_employees():
     """种子：默认数字化员工（产业专员 + 天机助手 + 天气 + 采集专员 + 文案编写 + 新闻聚合 + 科普助手 + 随机音乐）。"""
     import json
     with get_db() as conn:
+        tool_rows = conn.execute("SELECT id, name FROM mcp_tools WHERE is_enabled = 1").fetchall()
+        tool_ids_by_name = {row["name"]: row["id"] for row in tool_rows}
+        resolve_tools = lambda names: [tool_ids_by_name[name] for name in names if name in tool_ids_by_name]
         weather_interface = conn.execute(
             "SELECT id FROM api_interfaces WHERE name = ?", ("天气查询接口",)
         ).fetchone()
         weather_interface_id = weather_interface["id"] if weather_interface else None
         existing = conn.execute("SELECT COUNT(*) as cnt FROM digital_employees").fetchone()
-        if existing["cnt"] == 0:
+        created = existing["cnt"] == 0
+        if created:
             # 产业专员 — LLM 型数字员工
             conn.execute(
                 "INSERT INTO digital_employees (id, name, employee_type, description, "
@@ -769,7 +774,7 @@ def _seed_default_employees():
                     "请高效、准确地完成采集任务，输出清晰的结构化结果。",
                     json.dumps(["数据搜索", "深度采集", "内容提取", "数据整理"], ensure_ascii=False),
                     0,  # v0.8: crawl4ai_enabled 已废弃，改用 mcp_tool_ids
-                    json.dumps([15, 16], ensure_ascii=False),  # collect_with_crawl4ai + batch_deep_collect
+                    json.dumps(resolve_tools(["collect_with_crawl4ai", "batch_deep_collect"]), ensure_ascii=False),
                     1,
                 ),
             )
@@ -853,7 +858,7 @@ def _seed_default_employees():
                     "- 展示格式：先介绍歌曲名和歌手，再引导用户点击试听",
                     json.dumps(["随机音乐", "歌曲推荐", "音乐点播"], ensure_ascii=False),
                     0,
-                    json.dumps([14], ensure_ascii=False),  # v0.8: get_random_music 工具
+                    json.dumps(resolve_tools(["get_random_music"]), ensure_ascii=False),
                     1,
                 ),
             )
@@ -866,13 +871,15 @@ def _seed_default_employees():
                 "AND (api_interface_id IS NULL OR api_interface_id = '')",
                 (weather_interface_id, "天气"),
             )
+        return created
 
 def _seed_default_skills():
     """种子：默认技能（5个，纯 Prompt 模板，模板中直接描述 MCP 工具用法）。"""
     import json
     with get_db() as conn:
         existing = conn.execute("SELECT COUNT(*) as cnt FROM skills").fetchone()
-        if existing["cnt"] == 0:
+        created = existing["cnt"] == 0
+        if created:
             skills_data = [
                 # 数据统计报告
                 (1, "数据统计", "生成数据仓库统计报告，含图表标记",
@@ -922,15 +929,18 @@ def _seed_default_skills():
                 skills_data,
             )
             print("[种子] 默认技能已创建（5个：数据统计/数据搜索/新闻摘要/深度采集/翻译助手）")
+        return created
 
 
 def _seed_default_mcp_tools():
     """种子：MCP 工具注册表（20+ 工具）。"""
     import json
     with get_db() as conn:
-        existing = conn.execute("SELECT COUNT(*) as cnt FROM mcp_tools").fetchone()
-        if existing["cnt"] > 0:
-            return
+        from app.mcp.catalog import upsert_builtin_tools
+        inserted = upsert_builtin_tools(conn)
+        conn.commit()
+        print(f"[种子] MCP 工具目录已同步（{inserted}个内置工具）")
+        return
 
         tools_data = [
             # ── 数据仓库类 (warehouse) ──
@@ -1030,3 +1040,99 @@ def _seed_default_mcp_tools():
             tools_data,
         )
         print("[种子] 默认 MCP 工具已创建（18个工具，覆盖7个分类）")
+
+
+def _synchronize_default_capabilities(skills_created: bool, employees_created: bool):
+    """Resolve default Skill and employee tool grants by stable names."""
+    import json
+
+    skill_specs = {
+        "数据统计": "get_warehouse_stats",
+        "数据搜索": "search_warehouse",
+        "新闻摘要": "get_recent_warehouse_data",
+        "深度采集": "deep_collect_url",
+        "翻译助手": None,
+        "产业分析": "search_warehouse_fulltext",
+        "政策解读": "search_warehouse",
+        "竞品分析": "search_warehouse",
+        "趋势预判": "get_warehouse_stats",
+        "文案撰写": "load_skill",
+        "代码辅助": "load_skill",
+        "百科问答": "search_warehouse",
+        "随机音乐": "get_random_music",
+    }
+    tag_to_skill = {
+        "信息检索": "数据搜索", "数据分析": "数据统计",
+        "内容提取": "深度采集", "数据整理": "数据统计",
+        "报告撰写": "文案撰写", "方案策划": "文案撰写",
+        "公文起草": "文案撰写", "宣传文案": "文案撰写",
+        "演讲稿": "文案撰写", "新闻检索": "新闻摘要",
+        "资讯聚合": "新闻摘要", "热点追踪": "新闻摘要",
+        "每日简报": "新闻摘要", "知识科普": "百科问答",
+        "概念解释": "百科问答", "学术参考": "百科问答",
+        "歌曲推荐": "随机音乐", "音乐点播": "随机音乐",
+    }
+    employee_tools = {
+        "产业专员": ["search_warehouse", "get_recent_warehouse_data", "get_warehouse_stats",
+                     "search_warehouse_fulltext", "collect_web_data", "list_watch_sources"],
+        "天机助手": ["search_warehouse", "get_recent_warehouse_data", "get_warehouse_stats",
+                    "search_warehouse_fulltext", "collect_web_data", "list_digital_employees",
+                    "list_ai_models", "list_conversations", "load_skill"],
+        "采集专员": ["search_warehouse", "get_recent_warehouse_data", "search_warehouse_fulltext",
+                    "collect_web_data", "deep_collect_url", "list_watch_sources",
+                    "collect_with_crawl4ai", "batch_deep_collect"],
+        "文案编写": ["search_warehouse", "get_recent_warehouse_data", "list_conversations", "load_skill"],
+        "新闻聚合": ["search_warehouse", "get_recent_warehouse_data", "get_warehouse_stats",
+                    "search_warehouse_fulltext", "collect_web_data", "list_conversations"],
+        "科普助手": ["search_warehouse", "get_recent_warehouse_data", "search_warehouse_fulltext", "load_skill"],
+        "随机音乐": ["get_random_music"],
+    }
+
+    with get_db() as conn:
+        tool_rows = conn.execute("SELECT id, name FROM mcp_tools WHERE is_enabled = 1").fetchall()
+        tool_ids = {row["name"]: row["id"] for row in tool_rows}
+
+        for skill_name, tool_name in skill_specs.items():
+            tool_id = tool_ids.get(tool_name) if tool_name else None
+            conn.execute(
+                "INSERT OR IGNORE INTO skills "
+                "(name, description, prompt_template, mcp_tool_id) VALUES (?, ?, ?, ?)",
+                (skill_name, f"{skill_name}任务能力",
+                 f"你正在执行「{skill_name}」任务。请按用户目标完成任务，并仅在需要时调用已授权工具。",
+                 tool_id),
+            )
+            if skills_created and tool_id:
+                conn.execute(
+                    "UPDATE skills SET mcp_tool_id = ? WHERE name = ? AND mcp_tool_id IS NULL",
+                    (tool_id, skill_name),
+                )
+
+        skill_rows = conn.execute("SELECT id, name FROM skills").fetchall()
+        skill_ids = {row["name"]: row["id"] for row in skill_rows}
+        employees = conn.execute(
+            "SELECT id, name, skills, mcp_tool_ids FROM digital_employees"
+        ).fetchall()
+        for employee in employees:
+            try:
+                old_skills = json.loads(employee.get("skills") or "[]")
+            except (json.JSONDecodeError, TypeError):
+                old_skills = []
+            if employees_created and old_skills and isinstance(old_skills[0], str):
+                resolved = []
+                for tag in old_skills:
+                    skill_id = skill_ids.get(tag_to_skill.get(tag, tag))
+                    if skill_id and skill_id not in resolved:
+                        resolved.append(skill_id)
+                conn.execute(
+                    "UPDATE digital_employees SET skills = ? WHERE id = ?",
+                    (json.dumps(resolved, ensure_ascii=False), employee["id"]),
+                )
+
+            names = employee_tools.get(employee["name"])
+            current_tools = employee.get("mcp_tool_ids") or "[]"
+            if employees_created and names and current_tools == "[]":
+                resolved_tools = [tool_ids[name] for name in names if name in tool_ids]
+                conn.execute(
+                    "UPDATE digital_employees SET mcp_tool_ids = ? WHERE id = ?",
+                    (json.dumps(resolved_tools, ensure_ascii=False), employee["id"]),
+                )

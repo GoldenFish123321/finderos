@@ -25,6 +25,7 @@ Usage:
 """
 
 import logging
+import json
 import os
 import sqlite3
 import sys
@@ -333,9 +334,7 @@ def run_migrations():
         # v0.10: MCP 工具种子数据（18 个内置工具）
         {
             "name": "seed_mcp_tools_v042",
-            "check": lambda c: _table_exists(c, "mcp_tools") and c.execute(
-                "SELECT COUNT(*) as cnt FROM mcp_tools"
-            ).fetchone()["cnt"] >= 18,
+            "check": _check_mcp_catalog_complete,
             "run": _seed_mcp_tools,
         },
         # v0.10: 旧 TAG 迁移 — 将员工 skills 字符串数组迁移为 Skill ID 数组
@@ -343,6 +342,11 @@ def run_migrations():
             "name": "migrate_legacy_tags_to_skills_v042",
             "check": _check_legacy_tags_migrated,
             "run": _migrate_legacy_tags_to_skills,
+        },
+        {
+            "name": "migrate_crawl4ai_permissions_v100",
+            "check": _check_crawl4ai_permissions_migrated,
+            "run": _migrate_crawl4ai_permissions,
         },
     ]
 
@@ -407,6 +411,10 @@ def _trigger_exists(conn, trigger_name: str) -> bool:
 
 def _seed_mcp_tools(conn):
     """v0.10: 向 mcp_tools 表插入 18 个内置工具种子数据。"""
+    from app.mcp.catalog import upsert_builtin_tools
+    count = upsert_builtin_tools(conn)
+    logger.info(f"已同步 {count} 个 MCP 工具规范记录")
+    return
     import json as _json
 
     tools = [
@@ -823,6 +831,63 @@ def _migrate_legacy_tags_to_skills(conn):
         migrated_count += 1
 
     logger.info(f"旧 TAG 迁移完成: {migrated_count} 个员工的 skills 已转换为 Skill ID 格式")
+
+
+def _crawl4ai_tool_ids(conn) -> list[int]:
+    rows = conn.execute(
+        "SELECT id FROM mcp_tools WHERE name IN (?, ?)",
+        ("collect_with_crawl4ai", "batch_deep_collect"),
+    ).fetchall()
+    return [row["id"] for row in rows]
+
+
+def _check_mcp_catalog_complete(conn) -> bool:
+    if not _table_exists(conn, "mcp_tools"):
+        return False
+    from app.mcp.catalog import canonical_tool_names
+    rows = conn.execute("SELECT name FROM mcp_tools").fetchall()
+    return canonical_tool_names().issubset({row["name"] for row in rows})
+
+
+def _check_crawl4ai_permissions_migrated(conn) -> bool:
+    if not _column_exists(conn, "digital_employees", "mcp_tool_ids"):
+        return False
+    tool_ids = set(_crawl4ai_tool_ids(conn))
+    if not tool_ids:
+        return False
+    rows = conn.execute(
+        "SELECT mcp_tool_ids FROM digital_employees WHERE crawl4ai_enabled = 1"
+    ).fetchall()
+    for row in rows:
+        try:
+            assigned = set(json.loads(row["mcp_tool_ids"] or "[]"))
+        except (json.JSONDecodeError, TypeError):
+            return False
+        if not tool_ids.issubset(assigned):
+            return False
+    return True
+
+
+def _migrate_crawl4ai_permissions(conn):
+    """Preserve deprecated Crawl4ai capability as explicit MCP grants."""
+    tool_ids = _crawl4ai_tool_ids(conn)
+    if not tool_ids:
+        raise RuntimeError("Crawl4ai MCP 工具尚未初始化")
+    rows = conn.execute(
+        "SELECT id, mcp_tool_ids FROM digital_employees WHERE crawl4ai_enabled = 1"
+    ).fetchall()
+    for row in rows:
+        try:
+            assigned = list(json.loads(row["mcp_tool_ids"] or "[]"))
+        except (json.JSONDecodeError, TypeError):
+            assigned = []
+        for tool_id in tool_ids:
+            if tool_id not in assigned:
+                assigned.append(tool_id)
+        conn.execute(
+            "UPDATE digital_employees SET mcp_tool_ids = ? WHERE id = ?",
+            (json.dumps(assigned, ensure_ascii=False), row["id"]),
+        )
 
 
 def show_status():

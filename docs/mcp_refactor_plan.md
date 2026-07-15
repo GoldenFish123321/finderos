@@ -96,7 +96,7 @@ prompt_template     TEXT    -- prompt 增强模板
 │                      Digital Employee                             │
 │  ┌──────────────────────────────────────────────────────┐        │
 │  │ 员工 = 名称 + 类型(llm/api/mcp) + 模型 + SystemPrompt │        │
-│  │       + [mcp_tool_ids] + [skill_ids]                 │        │
+│  │       + [mcp_tool_ids] + [skills: Skill ID数组]       │        │
 │  └──────────────────────────────────────────────────────┘        │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -104,6 +104,10 @@ prompt_template     TEXT    -- prompt 增强模板
 ---
 
 ## 三、数据库变更方案
+
+> 实现说明：原计划中的 `skill_ids_new` 未单独建列。实际实现复用了历史
+> `digital_employees.skills` 列，并将其数据从字符串标签迁移为 Skill ID JSON 数组；
+> 这是当前正式数据契约。
 
 ### 3.1 新增表: `mcp_tools`
 
