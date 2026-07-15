@@ -41,6 +41,8 @@
 - 内置解析器：百度新闻/搜狗新闻/通用
 - SSRF 防护：协议白名单 + 内网 IP 拦截 + DNS 校验 + CRLF 检测
 - 反爬策略：Cookie 预热 + Chrome TLS 指纹 + 自定义 Headers
+- 实时进度：`/admin/watch/stream` 通过 SSE 推送 `collect_progress`（百分比、当前 URL、成功/失败数）
+- 采集日志：`/admin/watch/log` 从 `audit_logs` 读取 `WATCH_COLLECT`/深度采集/定时采集记录
 
 ### 7. 瞭源管理 (`/admin/watch/source`)
 

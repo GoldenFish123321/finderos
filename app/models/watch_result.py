@@ -154,17 +154,9 @@ class WatchResultRepository:
                 (source_id, keyword, request_url,
                  response_status, response_size, result_data),
             )
-            if cur.lastrowid:
+            if cur.rowcount > 0:
                 conn.commit()
                 return cur.lastrowid, True
-            # 已存在：查询已有记录 ID
-            if request_url:
-                existing = conn.execute(
-                    "SELECT id FROM watch_results WHERE request_url = ?",
-                    (request_url,),
-                ).fetchone()
-                if existing:
-                    return existing["id"], False
             return 0, False
 
     @staticmethod

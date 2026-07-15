@@ -50,6 +50,9 @@ document.body.classList.add('dark-theme');
                 <a href="/admin/watch" class="{{ 'active' if handler.request.path == '/admin/watch' else '' }}">
                     <span class="nav-icon">🔍</span> <span>瞭望采集</span>
                 </a>
+                <a href="/admin/watch/log" class="{{ 'active' if '/admin/watch/log' in handler.request.path else '' }}">
+                    <span class="nav-icon">📜</span> <span>采集日志</span>
+                </a>
                 <a href="/admin/watch/source" class="{{ 'active' if '/admin/watch/source' in handler.request.path else '' }}">
                     <span class="nav-icon">📡</span> <span>瞭源管理</span>
                 </a>

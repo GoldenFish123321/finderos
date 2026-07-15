@@ -1,0 +1,112 @@
+{% extends "base_layout.html" %}
+
+{% block admin_content %}
+<style>
+.log-stat { text-align: center; padding: 18px 14px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.log-stat .num { font-size: 30px; font-weight: 700; }
+.log-stat .lbl { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.log-search { display: flex; gap: 10px; align-items: center; margin: 16px 0; flex-wrap: wrap; }
+.log-table-wrap { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden; }
+.log-table-wrap table { width: 100%; border-collapse: collapse; }
+.log-table-wrap th { background: rgba(255,255,255,0.03); color: var(--text-muted); font-size: 12px; font-weight: 500; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border-subtle); }
+.log-table-wrap td { padding: 10px 12px; font-size: 13px; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
+.log-table-wrap tr:hover td { background: rgba(94,163,255,0.04); }
+.log-action { display: inline-block; padding: 2px 8px; border-radius: 12px; background: rgba(94,163,255,0.12); color: var(--accent-blue); font-size: 11px; font-weight: 600; }
+.log-detail { max-width: 460px; white-space: normal; word-break: break-word; color: var(--text-muted); line-height: 1.5; }
+</style>
+
+<div class="glass-panel" style="padding:20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h3 style="margin:0;font-size:17px;color:var(--text-primary);">📜 采集日志</h3>
+        <a href="/admin/watch" class="btn-glass btn-sm">← 返回瞭望采集</a>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px;">
+        <div class="log-stat"><div class="num" style="color:var(--accent-blue);">{{ stats['total'] }}</div><div class="lbl">当前筛选日志</div></div>
+        <div class="log-stat"><div class="num" style="color:var(--accent-green);">{{ stats['watch_collect'] }}</div><div class="lbl">瞭望采集</div></div>
+        <div class="log-stat"><div class="num" style="color:var(--accent-orange);">{{ stats['deep_collect'] }}</div><div class="lbl">深度/定时采集</div></div>
+    </div>
+
+    <div class="log-search">
+        <input type="text" class="input-dark" id="search-kw" placeholder="搜索动作/用户/IP/详情..." value="{{ keyword }}" style="width:300px;">
+        <button class="btn-glass btn-sm" id="btn-search">🔍 搜索</button>
+        {% if keyword %}
+        <a href="/admin/watch/log" class="btn-glass btn-sm">清空筛选</a>
+        {% end %}
+    </div>
+
+    <div class="log-table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th width="80">ID</th>
+                    <th width="160">时间</th>
+                    <th width="150">动作</th>
+                    <th width="120">用户</th>
+                    <th width="150">目标</th>
+                    <th>详情</th>
+                    <th width="140">客户端 IP</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if logs %}
+                {% for log in logs %}
+                <tr>
+                    <td>#{{ log['id'] }}</td>
+                    <td>{{ log['created_at'] }}</td>
+                    <td><span class="log-action">{{ log['action'] }}</span></td>
+                    <td>{{ log['username'] or '—' }}</td>
+                    <td>{{ log['target'] or '—' }}</td>
+                    <td class="log-detail">{{ log['detail'] or '—' }}</td>
+                    <td>{{ log['client_ip'] or '—' }}</td>
+                </tr>
+                {% end %}
+                {% else %}
+                <tr><td colspan="7" style="text-align:center;padding:42px;color:var(--text-muted);">
+                    <div style="font-size:42px;margin-bottom:8px;">📭</div>
+                    <p>暂无采集日志</p>
+                </td></tr>
+                {% end %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if total_pages > 1 %}
+    <div style="text-align:center;margin-top:16px;"><div id="log-pagination"></div></div>
+    {% end %}
+</div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+layui.use(['laypage', 'jquery'], function(){
+    var laypage = layui.laypage, $ = layui.$;
+
+    $('#btn-search').on('click', function(){
+        var kw = $('#search-kw').val().trim();
+        location.href = '/admin/watch/log' + (kw ? '?keyword=' + encodeURIComponent(kw) : '');
+    });
+    $('#search-kw').on('keydown', function(e){
+        if (e.key === 'Enter') $('#btn-search').click();
+    });
+
+    {% if total_pages > 1 %}
+    laypage.render({
+        elem: 'log-pagination',
+        count: {{ total }},
+        limit: 20,
+        curr: {{ page }},
+        layout: ['prev', 'page', 'next', 'skip', 'count'],
+        jump: function(obj, first){
+            if (!first) {
+                var url = '/admin/watch/log?page=' + obj.curr;
+                var kw = $('#search-kw').val().trim();
+                if (kw) url += '&keyword=' + encodeURIComponent(kw);
+                location.href = url;
+            }
+        }
+    });
+    {% end %}
+});
+</script>
+{% end %}
