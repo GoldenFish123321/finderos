@@ -134,38 +134,39 @@ def _build_tool_from_db_row(row: Dict[str, Any]) -> Optional[MCPTool]:
 
         async def api_handler(**kwargs) -> Any:
             import urllib.request
+            import urllib.parse
+            import asyncio
             # 构建 URL（替换路径参数）
             final_url = api_url
             for key, value in kwargs.items():
                 final_url = final_url.replace(f"{{{key}}}", str(value))
 
             # 对于 GET 请求，剩余参数作为 query string
-            import urllib.parse
             query_params = {k: v for k, v in kwargs.items() if f"{{{k}}}" not in api_url}
             if query_params and api_method.upper() == "GET":
                 qs = urllib.parse.urlencode(query_params)
                 final_url += ("&" if "?" in final_url else "?") + qs
 
-            try:
-                req = urllib.request.Request(final_url, headers=api_headers, method=api_method)
-                # POST 请求带 body
-                if api_method.upper() == "POST" and query_params:
-                    data = json.dumps(query_params).encode("utf-8")
-                    req.add_header("Content-Type", "application/json")
-                    import asyncio
-                    loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(
-                        None, lambda: urllib.request.urlopen(req, data=data, timeout=30)
-                    )
-                    # 简化处理...
-                with urllib.request.urlopen(req, timeout=30) as resp:
-                    body = resp.read().decode("utf-8", errors="replace")
+            def _sync_call():
+                try:
+                    req = urllib.request.Request(final_url, headers=api_headers, method=api_method)
+                    if api_method.upper() == "POST" and query_params:
+                        data = json.dumps(query_params).encode("utf-8")
+                        req.add_header("Content-Type", "application/json")
+                        with urllib.request.urlopen(req, data=data, timeout=30) as resp:
+                            body = resp.read().decode("utf-8", errors="replace")
+                    else:
+                        with urllib.request.urlopen(req, timeout=30) as resp:
+                            body = resp.read().decode("utf-8", errors="replace")
                     try:
                         return json.loads(body)
                     except json.JSONDecodeError:
                         return {"raw": body[:5000]}
-            except Exception as e:
-                return {"error": str(e)}
+                except Exception as e:
+                    return {"error": str(e)}
+
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, _sync_call)
 
         return MCPTool(
             name=row["name"],

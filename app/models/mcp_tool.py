@@ -116,7 +116,11 @@ class MCPToolRepository:
 
     @staticmethod
     def get_by_employee(emp_id: int) -> List[Dict[str, Any]]:
-        """获取某数字员工可用的 MCP 工具列表。"""
+        """获取某数字员工可用的 MCP 工具列表。
+
+        如果员工未配置 mcp_tool_ids，返回空列表（最小权限原则）。
+        调用方如需兜底逻辑应自行处理。
+        """
         from app.models.digital_employee import DigitalEmployeeRepository
         emp = DigitalEmployeeRepository.get_by_id(emp_id)
         if not emp:
@@ -126,7 +130,7 @@ class MCPToolRepository:
         except (json.JSONDecodeError, TypeError):
             tool_ids = []
         if not tool_ids:
-            return MCPToolRepository.get_enabled()  # 未配置则返回所有
+            return []  # 最小权限：未配置则无权使用任何工具
         return MCPToolRepository.get_by_ids(tool_ids)
 
     @staticmethod

@@ -10,7 +10,9 @@ from typing import Any, Dict
 
 
 def _list_conversations(username: str = "", limit: int = 20) -> Dict[str, Any]:
-    """列出用户的对话历史。"""
+    """列出用户的对话历史。需要有效的 username。"""
+    if not username:
+        return {"total": 0, "conversations": [], "error": "用户名不能为空"}
     from app.models.conversation import ConversationRepository
     conversations = ConversationRepository.get_all(username=username, limit=limit)
     return {
@@ -29,17 +31,26 @@ def _list_conversations(username: str = "", limit: int = 20) -> Dict[str, Any]:
 
 def _get_conversation_messages(conversation_id: int, limit: int = 20,
                                username: str = "") -> Dict[str, Any]:
-    """获取指定对话的消息历史（含所有权验证）。"""
+    """获取指定对话的消息历史（含所有权验证）。
+    
+    强制要求 username 非空，防止未授权访问。
+    """
+    if not username:
+        return {
+            "conversation_id": conversation_id,
+            "total": 0,
+            "messages": [],
+            "error": "用户名不能为空，无法验证访问权限",
+        }
     from app.models.conversation import ConversationRepository
-    if username:
-        conv = ConversationRepository.get_by_id(conversation_id)
-        if not conv or conv.get("username", "") != username:
-            return {
-                "conversation_id": conversation_id,
-                "total": 0,
-                "messages": [],
-                "error": "对话不存在或无权访问",
-            }
+    conv = ConversationRepository.get_by_id(conversation_id)
+    if not conv or conv.get("username", "") != username:
+        return {
+            "conversation_id": conversation_id,
+            "total": 0,
+            "messages": [],
+            "error": "对话不存在或无权访问",
+        }
     messages = ConversationRepository.get_messages(conversation_id, limit=limit)
     return {
         "conversation_id": conversation_id,
