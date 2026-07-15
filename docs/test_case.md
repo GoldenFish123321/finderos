@@ -49,7 +49,7 @@
 | TC-MODEL-03 | 无 API Key 对话 | 无 API Key 时发送消息 | 走 MCP 语义匹配路径，匹配最佳工具并返回结果 |
 | TC-MODEL-04 | 真实API对话 | 配置有效API Key后发送 | SSE流式返回AI回复 |
 | TC-MODEL-05 | Token统计 | 多次对话 | total_tokens累计增长 |
-| TC-MODEL-06 | 审计日志 | 发送对话消息 | audit_logs表新增CHAT记录 |
+| TC-MODEL-06 | 审计日志 | 发送对话消息 | audit_logs表新增USER_CHAT记录 |
 
 ## 6. 安全测试
 

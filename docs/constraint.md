@@ -102,12 +102,12 @@
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | name | TEXT NOT NULL | 瞭望源名称 |
-| description | TEXT | 描述 |
+| description | TEXT DEFAULT '' | 描述 |
 | url_template | TEXT NOT NULL | URL模板（支持{keyword}/{page}占位符） |
-| request_headers | TEXT | HTTP请求头（JSON格式） |
+| request_headers | TEXT DEFAULT '{}' | HTTP请求头（JSON格式） |
 | is_enabled | INTEGER DEFAULT 1 | 启用状态 |
 | sort_order | INTEGER DEFAULT 0 | 排序 |
-| schedule_interval | INTEGER DEFAULT 0 | 定时采集间隔（分钟，0=不启用） |
+| schedule_interval | INTEGER DEFAULT 0 | 定时采集间隔（分钟，0=不启用，v0.4.0 迁移新增） |
 | created_at | TIMESTAMP | 创建时间 |
 
 ### watch_results 表（采集结果记录）
@@ -129,12 +129,12 @@
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | name | TEXT NOT NULL | 模型名称 |
-| provider | TEXT | 提供商（openai/deepseek/zhipu/baidu/custom） |
-| api_base | TEXT | API Base URL |
-| api_key | TEXT | API密钥（Fernet 对称加密存储） |
-| model_name | TEXT | 模型标识 |
-| category | TEXT | 分类（text/image/audio/video/multimodal/embedding） |
-| system_prompt | TEXT | 系统提示词 |
+| provider | TEXT DEFAULT 'openai' | 提供商（openai/deepseek/zhipu/baidu/custom） |
+| api_base | TEXT DEFAULT '' | API Base URL |
+| api_key | TEXT DEFAULT '' | API密钥（Fernet 对称加密存储） |
+| model_name | TEXT DEFAULT '' | 模型标识 |
+| category | TEXT DEFAULT 'text' | 分类（text/image/audio/video/multimodal/embedding） |
+| system_prompt | TEXT DEFAULT '' | 系统提示词 |
 | temperature | REAL | 温度参数 |
 | top_p | REAL | Top-P 参数 |
 | top_k | INTEGER | Top-K 参数 |
@@ -176,7 +176,7 @@
 | id | INTEGER PK | 自增主键 |
 | title | TEXT | 对话标题 |
 | username | TEXT | 所属用户 |
-| model_id | INTEGER FK | 使用的模型 ID |
+| model_id | INTEGER FK | 使用的模型 ID，`FOREIGN KEY REFERENCES ai_models(id) ON DELETE SET NULL` |
 | created_at | TIMESTAMP | 创建时间 |
 | updated_at | TIMESTAMP | 最后更新时间 |
 

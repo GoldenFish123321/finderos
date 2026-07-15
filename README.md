@@ -435,9 +435,9 @@ python migrate_db.py --status
     → 频率限制检查（IP + 用户名维度，5 次/15 分钟）
     → PBKDF2-SHA256 密码验证（60 万轮迭代）
     → 检查 is_enabled 状态
-    → 成功: set_secure_cookie + 按角色跳转
-        ├── 系统管理员 → /admin（管理后台仪表盘）
-        └── 普通用户   → /index（前台主页）
+    → 成功: set_secure_cookie + 按功能权限跳转
+        ├── 有后台功能权限 → /admin（管理后台仪表盘）
+        └── 无后台功能权限 → /index（前台主页）
     → 失败: 记录失败次数 + 返回错误提示
     → 锁定: 超过阈值后返回"账户已锁定"提示
 ```
