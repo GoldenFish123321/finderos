@@ -16,6 +16,7 @@ from app.models.digital_employee import (
 )
 from app.models.ai_model import AiModelRepository
 from app.models.skill import SkillRepository
+from app.models.mcp_tool import MCPToolRepository
 from app.models.data_warehouse import DataWarehouseRepository
 from app.utils.security import write_audit_log
 
@@ -64,6 +65,16 @@ class EmployeeListHandler(AdminBaseHandler):
                 emp["skills_list"] = [s["name"] for s in resolved_names] if resolved_names else raw_skills
                 # 标记为旧格式（模板中可区分显示）
                 emp["skills_legacy"] = True
+            # v0.6.0: 解析 MCP 工具名称
+            try:
+                raw_tool_ids = _json.loads(emp.get("mcp_tool_ids", "[]"))
+            except (_json.JSONDecodeError, TypeError):
+                raw_tool_ids = []
+            if raw_tool_ids:
+                mcp_tool_rows = MCPToolRepository.get_by_ids(raw_tool_ids)
+                emp["mcp_tools_list"] = [t["display_name"] for t in mcp_tool_rows]
+            else:
+                emp["mcp_tools_list"] = []
             # JS 安全转义员工名称（用于 confirm 对话框）
             emp["name_js"] = _json.dumps(emp.get("name", ""), ensure_ascii=False)
 
@@ -106,6 +117,10 @@ class EmployeeFormHandler(AdminBaseHandler):
         # 获取启用的技能库（供技能选择器使用）
         skills_library = SkillRepository.get_enabled()
 
+        # 获取启用的 MCP 工具（供工具选择器使用，v0.6.0）
+        mcp_tools = MCPToolRepository.get_enabled()
+        mcp_categories = MCPToolRepository.get_categories()
+
         self.render(
             "admin/employee_form.html",
             title="编辑员工" if emp else "新增员工",
@@ -114,6 +129,8 @@ class EmployeeFormHandler(AdminBaseHandler):
             employee_types=EMPLOYEE_TYPES,
             models=enabled_models,
             skills_library=skills_library,
+            mcp_tools=mcp_tools,
+            mcp_categories=mcp_categories,
         )
 
     @tornado.web.authenticated
@@ -136,6 +153,14 @@ class EmployeeFormHandler(AdminBaseHandler):
         except (ValueError, TypeError):
             skills = []
         skills_json = json.dumps(skills, ensure_ascii=False)
+
+        # 解析 MCP 工具选择（v0.6.0: 从工具库多选，存储工具 ID 数组）
+        tool_ids = self.get_body_arguments("mcp_tool_ids")
+        try:
+            mcp_ids = [int(tid) for tid in tool_ids if tid.strip()]
+        except (ValueError, TypeError):
+            mcp_ids = []
+        mcp_tool_ids_json = json.dumps(mcp_ids, ensure_ascii=False)
 
         # API 型字段
         api_url = self.get_body_argument("api_url", "").strip()
@@ -166,6 +191,7 @@ class EmployeeFormHandler(AdminBaseHandler):
             ok = DigitalEmployeeRepository.update(
                 emp_id, name, employee_type, description,
                 model_id, system_prompt, skills_json, crawl4ai_enabled,
+                mcp_tool_ids_json,
                 api_url, api_method, api_headers, api_params_template,
                 response_render_template, api_secret,
             )
@@ -181,6 +207,7 @@ class EmployeeFormHandler(AdminBaseHandler):
             new_id = DigitalEmployeeRepository.create(
                 name, employee_type, description,
                 model_id, system_prompt, skills_json, crawl4ai_enabled,
+                mcp_tool_ids_json,
                 api_url, api_method, api_headers, api_params_template,
                 response_render_template, api_secret,
             )

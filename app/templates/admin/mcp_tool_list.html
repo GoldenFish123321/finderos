@@ -1,0 +1,185 @@
+{% extends "base_layout.html" %}
+
+{% block title %}{{ title }}{% end %}
+
+{% block admin_content %}
+<style>
+.cat-tabs { display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
+.cat-tabs a { padding:5px 14px; border-radius:16px; font-size:12px; color:var(--text-muted); background:var(--bg-card); border:1px solid var(--border-subtle); text-decoration:none; transition:all var(--transition-fast); }
+.cat-tabs a.active, .cat-tabs a:hover { color:#fff; background:var(--accent-blue); border-color:var(--accent-blue); }
+.tool-card { background:var(--bg-card); border-radius:var(--radius-md); padding:16px 18px; margin-bottom:10px; border:1px solid var(--border-subtle); transition:all var(--transition-fast); }
+.tool-card:hover { border-color:var(--accent-blue); box-shadow:0 2px 12px rgba(94,163,255,0.1); }
+.tool-card.disabled { opacity:0.55; }
+.tool-card .tool-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; flex-wrap:wrap; gap:8px; }
+.tool-card .tool-name { font-size:15px; font-weight:600; color:var(--text-primary); }
+.tool-card .tool-desc { font-size:12px; color:var(--text-muted); margin-bottom:10px; line-height:1.5; }
+.tool-card .tool-meta { display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:11px; }
+.cat-badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; }
+.status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:4px; }
+.status-dot.on { background:#5FB878; }
+.status-dot.off { background:#FF5722; }
+.quick-filter { display:flex; gap:6px; margin-bottom:10px; }
+.quick-filter a { padding:3px 10px; border-radius:12px; font-size:11px; color:var(--text-muted); background:var(--bg-card); border:1px solid var(--border-subtle); text-decoration:none; }
+.quick-filter a.active { background:var(--accent-blue); color:#fff; border-color:var(--accent-blue); }
+</style>
+
+<div class="layui-card">
+    <div class="layui-card-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <span><i class="layui-icon layui-icon-util"></i> MCP 工具管理</span>
+        <div style="display:flex;gap:8px;">
+            <button class="layui-btn layui-btn-sm layui-btn-normal" onclick="reloadTools()" title="从数据库重新加载所有工具到 MCP Server">
+                <i class="layui-icon layui-icon-refresh"></i> 热重载
+            </button>
+            <a href="/admin/mcp/tool/add" class="layui-btn layui-btn-sm">
+                <i class="layui-icon layui-icon-add-1"></i> 新增工具
+            </a>
+        </div>
+    </div>
+    <div class="layui-card-body">
+        <!-- 分类筛选 -->
+        <div class="cat-tabs">
+            <a href="/admin/mcp/tool" class="{{ 'active' if not category else '' }}">全部</a>
+            {% for c in categories %}
+            <a href="/admin/mcp/tool?category={{ c['value'] }}" class="{{ 'active' if category == c['value'] else '' }}">
+                {{ c['name'] }} <span style="opacity:0.7;">({{ c['count'] }})</span>
+            </a>
+            {% end %}
+        </div>
+
+        <div class="quick-filter">
+            <a href="/admin/mcp/tool" class="{{ 'active' if not is_enabled else '' }}">全部状态</a>
+            <a href="/admin/mcp/tool?enabled=1{{ '&category=' + category if category else '' }}" class="{{ 'active' if is_enabled == '1' else '' }}">✓ 已启用</a>
+            <a href="/admin/mcp/tool?enabled=0{{ '&category=' + category if category else '' }}" class="{{ 'active' if is_enabled == '0' else '' }}">✗ 已禁用</a>
+        </div>
+
+        <div style="margin-bottom:8px;font-size:12px;color:var(--text-muted);">
+            已加载 <b style="color:var(--accent-blue);">{{ len(loaded_names) }}</b> 个工具到 MCP Server，共 {{ total }} 个已注册
+        </div>
+
+        {% for tool in tools %}
+        <div class="tool-card {{ 'disabled' if not tool['is_enabled'] else '' }}">
+            <div class="tool-header">
+                <div>
+                    <span class="tool-name">{{ tool['display_name'] }}</span>
+                    <code style="font-size:11px;color:var(--text-muted);margin-left:8px;">{{ tool['name'] }}</code>
+                    {% if tool['is_system'] %}
+                    <span style="font-size:10px;background:rgba(107,114,128,0.15);color:#6B7280;padding:1px 6px;border-radius:8px;margin-left:6px;">系统</span>
+                    {% end %}
+                </div>
+                <div class="layui-btn-group">
+                    <button class="layui-btn layui-btn-xs layui-btn-normal" onclick="testTool({{ tool['id'] }}, '{{ tool['name'] }}')">🧪 测试</button>
+                    <a href="/admin/mcp/tool/edit?id={{ tool['id'] }}" class="layui-btn layui-btn-xs"><i class="layui-icon layui-icon-edit"></i> 编辑</a>
+                    {% if not tool['is_system'] %}
+                    <button class="layui-btn layui-btn-xs layui-btn-danger btn-delete-mcp" data-id="{{ tool['id'] }}" data-name="{{ tool['name'] }}"><i class="layui-icon layui-icon-delete"></i></button>
+                    {% end %}
+                    <button class="layui-btn layui-btn-xs {{ 'layui-btn-warm' if tool['is_enabled'] else 'layui-btn-normal' }} btn-toggle-mcp" data-id="{{ tool['id'] }}">
+                        {{ '禁用' if tool['is_enabled'] else '启用' }}
+                    </button>
+                </div>
+            </div>
+            <div class="tool-desc">{{ tool.get('description', '') or '（无描述）' }}</div>
+            <div class="tool-meta">
+                {% set cat_info = None %}
+                {% for c in all_categories %}
+                    {% if c['value'] == tool['category'] %}{% set cat_info = c %}{% end %}
+                {% end %}
+                <span class="cat-badge" style="background:{{ cat_info['color'] if cat_info else '#6B7280' }}20;color:{{ cat_info['color'] if cat_info else '#6B7280' }};border:1px solid {{ cat_info['color'] if cat_info else '#6B7280' }}30;">
+                    {{ cat_info['name'] if cat_info else tool['category'] }}
+                </span>
+                <span style="color:var(--text-muted);">类型: {{ tool['tool_type'] }}</span>
+                <span class="status-dot {{ 'on' if tool['is_enabled'] else 'off' }}"></span>
+                <span style="color:var(--text-muted);">{{ '已启用' if tool['is_enabled'] else '已禁用' }}</span>
+                {% if tool['name'] in loaded_names %}
+                <span style="color:#5FB878;font-size:11px;">● 已加载</span>
+                {% end %}
+            </div>
+        </div>
+        {% end %}
+
+        {% if not tools %}
+        <div style="text-align:center;padding:40px;color:var(--text-muted);">
+            <i class="layui-icon layui-icon-note" style="font-size:40px;"></i>
+            <p>暂无 MCP 工具，请运行数据库迁移并初始化种子数据</p>
+        </div>
+        {% end %}
+
+        {% if total_pages > 1 %}
+        <div style="text-align:center;margin-top:16px;">
+            {% for p in range(1, total_pages + 1) %}
+            <a href="/admin/mcp/tool?page={{ p }}{{ '&category=' + category if category else '' }}{{ '&enabled=' + is_enabled if is_enabled else '' }}" 
+               class="layui-btn layui-btn-xs {{ 'layui-btn-normal' if p != page else '' }}">{{ p }}</a>
+            {% end %}
+        </div>
+        {% end %}
+    </div>
+</div>
+
+<form id="form-toggle" method="post" action="/admin/mcp/tool/toggle" style="display:none;">
+    {% module xsrf_form_html() %}
+    <input type="hidden" name="id" id="form-toggle-id">
+</form>
+<form id="form-delete" method="post" action="/admin/mcp/tool/delete" style="display:none;">
+    {% module xsrf_form_html() %}
+    <input type="hidden" name="id" id="form-delete-id">
+</form>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+function testTool(id, name) {
+    var params = prompt('输入测试参数 (JSON 格式):\n示例: {"keyword":"AI","limit":5}', '{}');
+    if (params === null) return;
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/admin/mcp/tool/test', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.setRequestHeader('X-XSRFToken', getCookie('_xsrf'));
+    xhr.onload = function() {
+        try {
+            var resp = JSON.parse(xhr.responseText);
+            if (resp.code === 0) {
+                var resultStr = JSON.stringify(resp.result, null, 2);
+                alert('✓ 执行成功 (' + resp.duration_ms + 'ms)\n\n' + resultStr.substring(0, 1000));
+            } else {
+                alert('✗ ' + resp.msg);
+            }
+        } catch(e) { alert('响应解析失败'); }
+    };
+    xhr.send('id=' + id + '&params=' + encodeURIComponent(params));
+}
+
+document.querySelectorAll('.btn-toggle-mcp').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        if (!confirm('确认切换此工具的启用状态？')) return;
+        document.getElementById('form-toggle-id').value = this.getAttribute('data-id');
+        document.getElementById('form-toggle').submit();
+    });
+});
+
+document.querySelectorAll('.btn-delete-mcp').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var name = this.getAttribute('data-name');
+        if (!confirm('确认删除工具「' + name + '」？此操作不可撤销！')) return;
+        document.getElementById('form-delete-id').value = this.getAttribute('data-id');
+        document.getElementById('form-delete').submit();
+    });
+});
+
+function reloadTools() {
+    if (!confirm('热重载将清除所有已注册工具并从数据库重新加载。\n确认继续？')) return;
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/admin/mcp/reload', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.setRequestHeader('X-XSRFToken', getCookie('_xsrf'));
+    xhr.onload = function() {
+        try { var resp = JSON.parse(xhr.responseText); alert(resp.msg); location.reload(); }
+        catch(e) { alert('热重载失败'); }
+    };
+    xhr.send();
+}
+
+function getCookie(name) {
+    var r = document.cookie.match("\\b" + name + "=([^;]*)\\b");
+    return r ? r[1] : "";
+}
+</script>
+{% end %}

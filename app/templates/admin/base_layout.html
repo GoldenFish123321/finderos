@@ -68,6 +68,12 @@ document.body.classList.add('dark-theme');
                 <a href="/admin/employee" class="{{ 'active' if '/admin/employee' in handler.request.path else '' }}">
                     <span class="nav-icon">🧑‍💼</span> <span>数字员工</span>
                 </a>
+                <a href="/admin/skill" class="{{ 'active' if '/admin/skill' in handler.request.path else '' }}">
+                    <span class="nav-icon">🎯</span> <span>技能管理</span>
+                </a>
+                <a href="/admin/mcp/tool" class="{{ 'active' if '/admin/mcp/tool' in handler.request.path else '' }}">
+                    <span class="nav-icon">🔧</span> <span>MCP 工具</span>
+                </a>
             </div>
             <div class="nav-group-title">快速入口</div>
             <div class="nav-group">

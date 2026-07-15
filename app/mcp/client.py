@@ -52,6 +52,22 @@ class MCPClient:
         """获取 MCP 格式的工具列表。"""
         return self._server.list_tools()
 
+    def get_openai_tools_for_employee(self, emp_id: int = None) -> List[Dict[str, Any]]:
+        """获取按员工权限过滤后的 OpenAI 格式工具列表 (v0.6.0 新增)。
+
+        Args:
+            emp_id: 数字员工 ID。None 或 0 表示返回所有工具。
+        """
+        if not emp_id:
+            return self.get_openai_tools()
+
+        from app.models.mcp_tool import MCPToolRepository
+        tools = MCPToolRepository.get_by_employee(emp_id)
+        if not tools:
+            return []  # 未配置工具时返回空列表，最小权限原则
+        tool_names = [t["name"] for t in tools]
+        return self._server.get_openai_tools(tool_names)
+
     # ── 工具执行 ─────────────────────────────────────────
 
     async def execute_tool_call(self, tool_call: Dict[str, Any]) -> Dict[str, Any]:

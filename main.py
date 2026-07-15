@@ -51,6 +51,11 @@ from app.controllers.admin_employee import (
 from app.controllers.admin_skill import (
     SkillListHandler, SkillFormHandler, SkillDeleteHandler, SkillToggleHandler,
 )
+from app.controllers.admin_mcp import (
+    MCPToolListHandler, MCPToolFormHandler, MCPToolDeleteHandler,
+    MCPToolToggleHandler, MCPToolTestHandler, MCPToolReloadHandler,
+    MCPToolTestLogsHandler,
+)
 from app.controllers.user_chat import (
     UserChatPageHandler, UserModelListHandler, UserEmployeeListHandler,
     UserConversationListHandler, UserConversationCreateHandler,
@@ -162,6 +167,16 @@ def make_app() -> tornado.web.Application:
             (r"/admin/skill/edit", SkillFormHandler),
             (r"/admin/skill/delete", SkillDeleteHandler),
             (r"/admin/skill/toggle", SkillToggleHandler),
+
+            # ========== v0.6.0 MCP 工具管理 ==========
+            (r"/admin/mcp/tool", MCPToolListHandler),
+            (r"/admin/mcp/tool/add", MCPToolFormHandler),
+            (r"/admin/mcp/tool/edit", MCPToolFormHandler),
+            (r"/admin/mcp/tool/delete", MCPToolDeleteHandler),
+            (r"/admin/mcp/tool/toggle", MCPToolToggleHandler),
+            (r"/admin/mcp/tool/test", MCPToolTestHandler),
+            (r"/admin/mcp/tool/test-logs", MCPToolTestLogsHandler),
+            (r"/admin/mcp/reload", MCPToolReloadHandler),
 
             # ========== v0.3.0 用户前台-智能问数 ==========
             # 前台对话主页

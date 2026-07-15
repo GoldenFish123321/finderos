@@ -77,6 +77,7 @@ class DigitalEmployeeRepository:
     def create(name: str, employee_type: str = "llm", description: str = "",
                model_id: int = None, system_prompt: str = "",
                skills: str = "[]", crawl4ai_enabled: int = 0,
+               mcp_tool_ids: str = "[]",
                api_url: str = "", api_method: str = "GET",
                api_headers: str = "{}", api_params_template: str = "",
                response_render_template: str = "",
@@ -88,12 +89,12 @@ class DigitalEmployeeRepository:
             with get_db() as conn:
                 cur = conn.execute(
                     "INSERT INTO digital_employees (name, employee_type, description, "
-                    "model_id, system_prompt, skills, crawl4ai_enabled, "
+                    "model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids, "
                     "api_url, api_method, api_headers, api_params_template, "
                     "response_render_template, api_secret) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (name.strip(), employee_type, description,
-                     model_id, system_prompt, skills, crawl4ai_enabled,
+                     model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids,
                      api_url.strip(), api_method, api_headers, api_params_template,
                      response_render_template, encrypted_secret),
                 )
@@ -106,6 +107,7 @@ class DigitalEmployeeRepository:
     def update(emp_id: int, name: str, employee_type: str = "llm", description: str = "",
                model_id: int = None, system_prompt: str = "",
                skills: str = "[]", crawl4ai_enabled: int = 0,
+               mcp_tool_ids: str = "[]",
                api_url: str = "", api_method: str = "GET",
                api_headers: str = "{}", api_params_template: str = "",
                response_render_template: str = "",
@@ -120,11 +122,11 @@ class DigitalEmployeeRepository:
             with get_db() as conn:
                 conn.execute(
                     "UPDATE digital_employees SET name=?, employee_type=?, description=?, "
-                    "model_id=?, system_prompt=?, skills=?, crawl4ai_enabled=?, "
+                    "model_id=?, system_prompt=?, skills=?, crawl4ai_enabled=?, mcp_tool_ids=?, "
                     "api_url=?, api_method=?, api_headers=?, api_params_template=?, "
                     "response_render_template=?, api_secret=? WHERE id=?",
                     (name.strip(), employee_type, description,
-                     model_id, system_prompt, skills, crawl4ai_enabled,
+                     model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids,
                      api_url.strip(), api_method, api_headers, api_params_template,
                      response_render_template, encrypted_secret, emp_id),
                 )
