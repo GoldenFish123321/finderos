@@ -1,15 +1,15 @@
 """
-Bug #5: ModelChatHandler 每个请求创建新 ThreadPoolExecutor — 修复验证
+Bug #5: ChatHandler 每个请求创建新 ThreadPoolExecutor — 修复验证
 
 验证: 全局线程池单例复用，不再每次创建
-相关功能: 模型 SSE 流式聊天不受影响
+相关功能: v0.4 已将 SSE 聊天迁移到 user_chat.py，前台模型对话不受影响
 """
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.controllers.admin_model import _chat_executor
+from app.controllers.user_chat import _user_chat_executor
 from app.models.ai_model import AiModelRepository
 from app.models.db import get_db
 
@@ -18,8 +18,8 @@ def test_global_executor_singleton():
     """验证全局线程池是单例且可复用"""
     print("\n=== Bug #5: 全局线程池单例验证 ===")
 
-    from app.controllers.admin_model import _chat_executor as e1
-    from app.controllers.admin_model import _chat_executor as e2
+    from app.controllers.user_chat import _user_chat_executor as e1
+    from app.controllers.user_chat import _user_chat_executor as e2
 
     assert e1 is e2, "全局线程池应该是同一个单例"
     assert not e1._shutdown, "线程池应处于运行状态"

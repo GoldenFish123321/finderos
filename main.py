@@ -43,6 +43,10 @@ from app.controllers.admin_model import (
     ModelListHandler, ModelFormHandler, ModelDeleteHandler,
     ModelToggleHandler, ModelDefaultHandler, ModelApiListHandler,
 )
+from app.controllers.admin_interface import (
+    InterfaceListHandler, InterfaceFormHandler, InterfaceDeleteHandler,
+    InterfaceToggleHandler, InterfaceTestHandler, InterfaceApiListHandler,
+)
 from app.controllers.admin_employee import (
     EmployeeListHandler, EmployeeFormHandler, EmployeeDeleteHandler,
     EmployeeToggleHandler, EmployeeInvokeHandler, EmployeeApiListHandler,
@@ -148,6 +152,14 @@ def make_app() -> tornado.web.Application:
             (r"/admin/model/toggle", ModelToggleHandler),
             (r"/admin/model/default", ModelDefaultHandler),
             (r"/admin/api/model/list", ModelApiListHandler),
+            # 接口管理：API 接口模板 CRUD / 测试 / 数字员工联动
+            (r"/admin/interface", InterfaceListHandler),
+            (r"/admin/interface/add", InterfaceFormHandler),
+            (r"/admin/interface/edit", InterfaceFormHandler),
+            (r"/admin/interface/delete", InterfaceDeleteHandler),
+            (r"/admin/interface/toggle", InterfaceToggleHandler),
+            (r"/admin/interface/test", InterfaceTestHandler),
+            (r"/admin/api/interface/list", InterfaceApiListHandler),
             # ========== v0.3.0 新增模块 ==========
             # 数字化员工
             (r"/admin/employee", EmployeeListHandler),

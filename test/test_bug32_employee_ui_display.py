@@ -22,10 +22,39 @@ TEST_DB_PATH = _temp_db.name
 _temp_db.close()
 
 import app.config.settings as settings
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+_ORIGINAL_SETTINGS_DB_PATH = settings.settings.DB_PATH
+_ORIGINAL_MODULE_DB_PATH = getattr(settings, "DB_PATH", None)
+_ORIGINAL_DB_MODULE_DB_PATH = (
+    _ORIGINAL_SETTINGS_DB_PATH
+    if os.path.isabs(_ORIGINAL_SETTINGS_DB_PATH)
+    else os.path.join(_PROJECT_ROOT, "database", os.path.basename(_ORIGINAL_SETTINGS_DB_PATH))
+)
 settings.DB_PATH = TEST_DB_PATH
+settings.settings.DB_PATH = TEST_DB_PATH
 
 import app.models.db as db_module
 db_module.DB_PATH = TEST_DB_PATH
+
+
+def _reset_db_path():
+    """重置全局 DB 路径，避免其他测试模块污染。"""
+    settings.DB_PATH = TEST_DB_PATH
+    settings.settings.DB_PATH = TEST_DB_PATH
+    db_module.DB_PATH = TEST_DB_PATH
+
+
+def _restore_db_path():
+    """测试结束后恢复全局 DB 路径，避免污染后续测试模块。"""
+    if _ORIGINAL_MODULE_DB_PATH is None:
+        try:
+            delattr(settings, "DB_PATH")
+        except AttributeError:
+            pass
+    else:
+        settings.DB_PATH = _ORIGINAL_MODULE_DB_PATH
+    settings.settings.DB_PATH = _ORIGINAL_SETTINGS_DB_PATH
+    db_module.DB_PATH = _ORIGINAL_DB_MODULE_DB_PATH
 
 
 def _setup_test_db():
@@ -119,18 +148,32 @@ def _seed_test_data():
     conn.close()
 
 
+def _reset_test_db():
+    """每个测试前重建独立数据库，避免跨测试模块污染。"""
+    _reset_db_path()
+    if os.path.exists(TEST_DB_PATH):
+        os.remove(TEST_DB_PATH)
+    _setup_test_db()
+    _seed_test_data()
+
+
 class TestEmployeeUISkillsDisplay(unittest.TestCase):
     """测试技能列表在 UI 中的显示格式。"""
 
     @classmethod
     def setUpClass(cls):
+        _reset_db_path()
         _setup_test_db()
         _seed_test_data()
+
+    def setUp(self):
+        _reset_test_db()
 
     @classmethod
     def tearDownClass(cls):
         if os.path.exists(TEST_DB_PATH):
             os.remove(TEST_DB_PATH)
+        _restore_db_path()
 
     def test_skills_list_are_strings_not_dicts(self):
         """Bug #32: 验证 skills_list 中的元素是字符串（技能名称），而非 dict。"""
@@ -228,13 +271,18 @@ class TestEmployeeUIResolutionEdgeCases(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        _reset_db_path()
         _setup_test_db()
         _seed_test_data()
+
+    def setUp(self):
+        _reset_test_db()
 
     @classmethod
     def tearDownClass(cls):
         if os.path.exists(TEST_DB_PATH):
             os.remove(TEST_DB_PATH)
+        _restore_db_path()
 
     def test_empty_skills(self):
         """空技能列表返回空数组。"""

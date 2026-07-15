@@ -65,6 +65,9 @@ document.body.classList.add('dark-theme');
             </div>
             <div class="nav-group-title">数字员工</div>
             <div class="nav-group">
+                <a href="/admin/interface" class="{{ 'active' if '/admin/interface' in handler.request.path else '' }}">
+                    <span class="nav-icon">🔗</span> <span>接口管理</span>
+                </a>
                 <a href="/admin/employee" class="{{ 'active' if '/admin/employee' in handler.request.path else '' }}">
                     <span class="nav-icon">🧑‍💼</span> <span>数字员工</span>
                 </a>

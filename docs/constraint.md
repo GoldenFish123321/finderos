@@ -47,6 +47,8 @@
 - 管理员权限: 继承 `AdminBaseHandler`，prepare() 中校验用户是否有关联的后台功能权限（非硬编码角色名）
 - 系统角色保护: `is_system=1` 的角色不允许编辑/删除
 - 超级管理员保护: `admin` 用户不允许禁用/删除；任何管理员均不可禁用/删除自身
+- 接口测试与 API 型员工调用: 必须执行 SSRF 校验，使用已校验 DNS 解析 IP 发起请求，不自动跟随 30x 重定向；Headers 必须是 JSON 对象且禁止 CR/LF
+- API 密钥与敏感 Header: `ai_models.api_key`、`api_interfaces.api_secret`、`digital_employees.api_secret` 必须加密存储；`Authorization`、`Cookie`、`X-API-Key` 等在联动 API/表单中必须脱敏展示
 
 ## 5. 数据模型
 
@@ -190,6 +192,23 @@
 | token_count | INTEGER DEFAULT 0 | Token 消耗 |
 | created_at | TIMESTAMP | 创建时间 |
 
+### api_interfaces 表（接口管理，Issue #26）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| name | TEXT UNIQUE NOT NULL | 接口模板名称 |
+| description | TEXT DEFAULT '' | 接口说明 |
+| api_url | TEXT NOT NULL | 接口 URL 模板，支持 `{message}` |
+| api_method | TEXT DEFAULT 'GET' | HTTP 方法 |
+| api_headers | TEXT DEFAULT '{}' | 请求头 JSON 对象 |
+| api_params_template | TEXT DEFAULT '' | 查询串或请求体参数模板 |
+| response_render_template | TEXT DEFAULT '' | 数字员工响应渲染模板 |
+| api_secret | TEXT DEFAULT '' | 加密存储的接口密钥 |
+| is_enabled | INTEGER DEFAULT 1 | 启用状态 |
+| sort_order | INTEGER DEFAULT 0 | 排序 |
+| created_at | TIMESTAMP | 创建时间 |
+| updated_at | TIMESTAMP | 更新时间 |
+
 ### digital_employees 表（数字化员工）
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -207,5 +226,6 @@
 | api_params_template | TEXT DEFAULT '' | 参数模板（API 型） |
 | response_render_template | TEXT DEFAULT '' | 响应渲染模板（API 型） |
 | api_secret | TEXT DEFAULT '' | API 密钥（API 型，加密存储） |
+| api_interface_id | INTEGER DEFAULT NULL FK | API 型员工来源接口模板，删除接口后置空 |
 | is_enabled | INTEGER DEFAULT 1 | 启用状态 |
 | created_at | TIMESTAMP | 创建时间 |

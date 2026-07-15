@@ -302,3 +302,38 @@
 - 相同文本 + 语音不重复生成，永久缓存
 - 生成失败自动清理损坏的缓存文件
 
+---
+
+## 八、接口管理（Issue #26）
+
+### 8.1 管理侧接口模板
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/interface` | 接口模板列表（`?page=&keyword=`） |
+| GET/POST | `/admin/interface/add` | 新增接口模板 |
+| GET/POST | `/admin/interface/edit` | 编辑接口模板（`?id=`） |
+| POST | `/admin/interface/delete` | 删除接口模板 |
+| POST | `/admin/interface/toggle` | 启用/禁用接口模板 |
+| POST | `/admin/interface/test` | 测试接口模板（支持保存接口或表单草稿配置） |
+| GET | `/admin/api/interface/list` | 获取已启用接口模板，供 API 型数字员工联动 |
+
+### 8.2 接口测试
+
+请求可传已保存接口 `id + message`，也可提交表单草稿字段：
+
+```json
+{
+  "api_url": "https://wttr.in/{message}?format=j1",
+  "api_method": "GET",
+  "api_headers": "{\"Accept\":\"application/json\"}",
+  "api_params_template": "",
+  "message": "成都"
+}
+```
+
+响应包含 `code`、`status`、`elapsed_ms`、`headers`、`raw` 与可解析的 `data`。安全约束：仅允许 `http/https`，Headers 必须是 JSON 对象且不得包含 CR/LF；接口测试不自动跟随 30x 重定向，并使用已校验的 DNS 解析 IP 发起请求。
+
+### 8.3 数字员工联动
+
+API 型数字员工新增/编辑页可通过 `api_interface_id` 选择接口模板，自动填充 URL / Method / Headers / Params / Response Template。接口密钥不通过列表 API 回显；`Authorization`、`Cookie`、`X-API-Key` 等敏感 Header 以 `******` 脱敏展示，提交未修改的脱敏值时服务端保留原始 Header。
