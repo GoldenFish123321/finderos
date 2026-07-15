@@ -115,6 +115,29 @@ def _estimate_tokens(text: str) -> int:
     return max(1, chinese + other // 4)
 
 
+def _sanitize_link(link: str) -> str:
+    """净化数据仓库链接，防止 XSS 攻击。
+
+    规则：
+    1. 仅允许 http:// 和 https:// 协议
+    2. 对 HTML 特殊字符进行转义
+    3. 危险协议（javascript:, data:, vbscript: 等）替换为安全占位符
+    """
+    if not link or not isinstance(link, str):
+        return ""
+    link = link.strip()
+    if not link:
+        return ""
+    # 检查是否为安全协议
+    lower = link.lower()
+    safe_protocols = ("http://", "https://")
+    if not any(lower.startswith(p) for p in safe_protocols):
+        # 危险协议：html 转义后标记为不可点击文本
+        return html.escape(f"[被屏蔽的非安全链接: {link[:50]}{'...' if len(link) > 50 else ''}]")
+    # 安全链接：html 转义防止注入
+    return html.escape(link)
+
+
 def _build_employee_card(emp: dict, api_data: dict, user_message: str = "") -> dict:
     """根据数字员工类型和 API 返回数据构建前端卡片。
 
@@ -778,7 +801,7 @@ class UserChatStreamHandler(BaseHandler):
                     lines.append(f"   > {summary}")
                 lines.append(f"   📎 来源: {source}")
                 if link:
-                    lines.append(f"   🔗 {link}")
+                    lines.append(f"   🔗 {_sanitize_link(link)}")
                 lines.append("")
             if total > 8:
                 lines.append(f"... 还有 {total - 8} 条结果未显示")
@@ -801,7 +824,7 @@ class UserChatStreamHandler(BaseHandler):
                     lines.append(f"   > {summary}")
                 lines.append(f"   📎 来源: {source}")
                 if link:
-                    lines.append(f"   🔗 {link}")
+                    lines.append(f"   🔗 {_sanitize_link(link)}")
                 lines.append("")
             return "\n".join(lines)
 
@@ -1198,7 +1221,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
                             lines.append(f"   > {summary}")
                         lines.append(f"   📎 {source}")
                         if link:
-                            lines.append(f"   🔗 {link}")
+                            lines.append(f"   🔗 {_sanitize_link(link)}")
                         lines.append("")
                 elif "total" in result:
                     lines.append(
