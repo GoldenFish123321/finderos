@@ -1,4 +1,4 @@
-# 瞭望与问数系统 (DataFinderAgentOS) — 设计文档 v0.6.0
+# 瞭望与问数系统 (DataFinderAgentOS) — 设计文档 v0.4.1
 
 ## 1. 项目概述
 
