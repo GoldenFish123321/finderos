@@ -690,6 +690,27 @@ class UserChatStreamHandler(BaseHandler):
                         f"🔧 正在执行: {tool_name}...",
                         event="tool_status"
                     )
+                    # 音乐工具：发送卡片事件
+                    if tool_name == "get_random_music":
+                        try:
+                            result_data = json.loads(tr.get("content", "{}"))
+                            if isinstance(result_data, dict) and result_data.get("success"):
+                                music_card = {
+                                    "type": "music",
+                                    "title": "随机音乐",
+                                    "data": {
+                                        "name": result_data.get("name", "未知歌曲"),
+                                        "artist": result_data.get("artist", "未知歌手"),
+                                        "cover": result_data.get("cover", ""),
+                                        "url": result_data.get("url", ""),
+                                    }
+                                }
+                                self.write(
+                                    f"event: card\ndata: {json.dumps(music_card, ensure_ascii=False)}\n\n"
+                                )
+                                await self.flush()
+                        except Exception:
+                            pass
                 continue
 
             elif tool_calls:
@@ -701,6 +722,32 @@ class UserChatStreamHandler(BaseHandler):
                 tool_results = await _mcp_client.execute_tool_calls(tool_calls)
                 for tr in tool_results:
                     messages.append(tr)
+                    # 音乐工具：发送卡片事件
+                    try:
+                        tool_name_2 = ""
+                        for tc in tool_calls:
+                            if tc.get("id") == tr.get("tool_call_id"):
+                                tool_name_2 = tc.get("function", {}).get("name", "")
+                                break
+                        if tool_name_2 == "get_random_music":
+                            result_data = json.loads(tr.get("content", "{}"))
+                            if isinstance(result_data, dict) and result_data.get("success"):
+                                music_card = {
+                                    "type": "music",
+                                    "title": "随机音乐",
+                                    "data": {
+                                        "name": result_data.get("name", "未知歌曲"),
+                                        "artist": result_data.get("artist", "未知歌手"),
+                                        "cover": result_data.get("cover", ""),
+                                        "url": result_data.get("url", ""),
+                                    }
+                                }
+                                self.write(
+                                    f"event: card\ndata: {json.dumps(music_card, ensure_ascii=False)}\n\n"
+                                )
+                                await self.flush()
+                    except Exception:
+                        pass
                 continue
 
             else:
@@ -792,6 +839,22 @@ class UserChatStreamHandler(BaseHandler):
             if tool:
                 try:
                     result = await tool.call(arguments)
+                    # 音乐工具：发送卡片事件
+                    if tool_name == "get_random_music" and isinstance(result, dict) and result.get("success"):
+                        music_card = {
+                            "type": "music",
+                            "title": "随机音乐",
+                            "data": {
+                                "name": result.get("name", "未知歌曲"),
+                                "artist": result.get("artist", "未知歌手"),
+                                "cover": result.get("cover", ""),
+                                "url": result.get("url", ""),
+                            }
+                        }
+                        self.write(
+                            f"event: card\ndata: {json.dumps(music_card, ensure_ascii=False)}\n\n"
+                        )
+                        await self.flush()
                     reply = self._format_tool_result_as_reply(
                         tool_name, arguments, result, user_message, model
                     )
@@ -816,6 +879,18 @@ class UserChatStreamHandler(BaseHandler):
     ) -> str:
         """将工具执行结果格式化为自然语言回复。"""
         model_name = model.get("name", "AI助手") if isinstance(model, dict) else "AI助手"
+
+        if tool_name == "get_random_music" and isinstance(result, dict) and result.get("success"):
+            source = result.get("source", "网易云音乐热歌榜")
+            note = result.get("note", "")
+            lines = [
+                f"🎵 **{result.get('name', '未知歌曲')}** — *{result.get('artist', '未知歌手')}*\n",
+                f"> 💿 来自{source}",
+            ]
+            if note:
+                lines.append(f"> ⚠️ {note}")
+            lines.append("\n💡 下方有音乐卡片，可点击封面查看、点击试听链接播放。")
+            return "\n".join(lines)
 
         if tool_name == "search_warehouse":
             items = result.get("items", []) if isinstance(result, dict) else []
