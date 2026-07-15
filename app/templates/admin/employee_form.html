@@ -116,6 +116,47 @@
                                {% if employee and employee.get('crawl4ai_enabled') == 1 %}checked{% end %}>
                     </div>
                 </div>
+
+                <!-- v0.6.1: MCP 工具权限选择 -->
+                <div class="layui-form-item">
+                    <label class="layui-form-label">MCP 工具权限</label>
+                    <div class="layui-input-block">
+                        {% if mcp_tools %}
+                        <div style="max-height:240px;overflow-y:auto;border:1px solid var(--border-subtle);border-radius:8px;padding:12px;">
+                            {% set emp_tool_ids = [] %}
+                            {% if employee %}
+                                {% try %}
+                                    {% set emp_tool_ids = __import__('json').loads(employee.get('mcp_tool_ids','[]')) %}
+                                {% except %}{% end %}
+                            {% end %}
+                            {% for cat in mcp_categories %}
+                            <div style="margin-bottom:8px;">
+                                <div style="font-weight:600;font-size:13px;color:{{ cat.get('color','#6B7280') }};padding:4px 0;">
+                                    {{ cat.get('name', cat.get('value','')) }} ({{ cat.get('count',0) }})
+                                </div>
+                                {% for tool in mcp_tools %}
+                                {% if tool['category'] == cat['value'] %}
+                                <div style="display:inline-block;margin:2px 8px 2px 0;">
+                                    <input type="checkbox" name="mcp_tool_ids" value="{{ tool['id'] }}"
+                                           id="mcp-tool-cb-{{ tool['id'] }}" lay-skin="primary"
+                                           title="{{ tool['display_name'] }}"
+                                           {% if tool['id'] in emp_tool_ids %}checked{% end %}>
+                                </div>
+                                {% end %}
+                                {% end %}
+                            </div>
+                            {% end %}
+                        </div>
+                        <div class="layui-form-mid layui-word-aux" style="float:none;margin-left:0;">
+                            💡 勾选员工可使用的 MCP 工具。未勾选任何工具时，员工将无权调用任何 MCP 工具（最小权限原则）。
+                        </div>
+                        {% else %}
+                        <div style="padding:12px;color:var(--text-muted);border:1px dashed var(--border-subtle);border-radius:8px;">
+                            ⚠️ MCP 工具库为空，请先在「<a href="/admin/mcp" target="_blank">MCP 工具管理</a>」中配置工具。
+                        </div>
+                        {% end %}
+                    </div>
+                </div>
             </div>
 
             <!-- === API 型字段 === -->

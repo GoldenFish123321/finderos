@@ -1185,8 +1185,8 @@ class UserEmployeeInvokeHandler(BaseHandler):
         max_tokens = model.get("max_tokens", 4096)
         emp_name = emp.get("name", "数字员工")
 
-        # ── 使用 MCP 智能匹配执行工具 ──
-        match = _mcp_client.match_tool_by_query(message)
+        # ── v0.6.1: 使用 MCP 智能匹配执行工具（按员工权限过滤）──
+        match = _mcp_client.match_tool_by_query(message, emp_id=emp.get("id"))
         tool_ctx = {}
         if match:
             tool_name, arguments = match
@@ -1365,7 +1365,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
         crawl4ai_on = emp.get("crawl4ai_enabled", 0) == 1
 
         if tool_ctx is None:
-            match = _mcp_client.match_tool_by_query(message)
+            match = _mcp_client.match_tool_by_query(message, emp_id=emp.get("id"))
             if match:
                 tool_name, arguments = match
                 tool = _mcp_server.get_tool(tool_name)
