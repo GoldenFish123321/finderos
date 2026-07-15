@@ -84,6 +84,17 @@ class UserFormHandler(AdminBaseHandler):
             if not existing:
                 self.write('<script>alert("用户不存在");window.history.back();</script>')
                 return
+            # 禁止管理员修改自己的角色（防止自降权限）
+            if existing["username"] == self.current_user:
+                if role_id_str and int(role_id_str) != existing["role_id"]:
+                    self.write('<script>alert("不能修改自己的角色权限");window.history.back();</script>')
+                    return
+            # 禁止将 admin 超级管理员降为普通用户
+            if existing["username"] == "admin" and role_id_str:
+                admin_role = RoleRepository.get_by_name("系统管理员")
+                if admin_role and int(role_id_str) != admin_role["id"]:
+                    self.write('<script>alert("超级管理员 admin 的角色不可更改");window.history.back();</script>')
+                    return
             # 如果未提供用户名/角色，保留原有值（避免静默清空）
             update_username = username if username else existing["username"]
             update_role_id = role_id if role_id_str else existing["role_id"]
