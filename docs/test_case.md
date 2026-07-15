@@ -97,7 +97,7 @@
 | TC-MCP-03 | 工具结果格式化 | 工具返回 JSON | 转为自然语言 Markdown 回复 |
 | TC-MCP-04 | 深度采集工具 | 通过对话要求采集指定 URL | LLM 判断后调用 deep_collect_url 工具，返回正文摘要 |
 | TC-MCP-05 | 多轮工具调用 | 复杂问题需多工具配合 | LLM 最多 3 轮 tool_calls 完成闭环 |
-| TC-MCP-06 | 工具列表指令 | 输入 `/tools` | 展示 8 个 MCP 工具的名称和描述 |
+| TC-MCP-06 | 工具列表指令 | 输入 `/tools` | 展示 9 个 MCP 工具的名称和描述 |
 
 ## 10. TTS 语音合成播报（v0.4.1）
 
