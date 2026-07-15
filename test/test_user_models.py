@@ -13,7 +13,8 @@ import tempfile
 # 确保可以导入 app 模块
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.models.db import init_db, get_db
+from app.models.db import init_db, get_db, seed_default_data
+import app.models.db as db_module
 from app.models.user import UserRepository
 from app.config.settings import settings
 
@@ -28,15 +29,19 @@ class TestUserRepository(unittest.TestCase):
         db_path = os.path.join(cls._tmpdir.name, "test.db")
         # 临时覆盖数据库路径
         cls._orig_db_path = settings.DB_PATH
+        cls._orig_module_db_path = db_module.DB_PATH
         settings.DB_PATH = db_path
+        db_module.DB_PATH = db_path
         # 确保数据库目录存在
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         init_db()
+        seed_default_data()
 
     @classmethod
     def tearDownClass(cls):
         """清理临时数据库。"""
         settings.DB_PATH = cls._orig_db_path
+        db_module.DB_PATH = cls._orig_module_db_path
         cls._tmpdir.cleanup()
 
     def setUp(self):
@@ -176,8 +181,9 @@ class TestUserRepository(unittest.TestCase):
             UserRepository.get_user_by_username("bd1")["id"],
             UserRepository.get_user_by_username("bd2")["id"],
         ]
-        count = UserRepository.batch_delete(ids)
+        count, skipped = UserRepository.batch_delete(ids)
         self.assertEqual(count, 2)
+        self.assertEqual(skipped, 0)
         self.assertIsNone(UserRepository.get_user_by_username("bd1"))
         self.assertIsNone(UserRepository.get_user_by_username("bd2"))
         self.assertIsNotNone(UserRepository.get_user_by_username("bd3"))
@@ -188,8 +194,9 @@ class TestUserRepository(unittest.TestCase):
         if admin:
             UserRepository.create_user("batchuser", "pass")
             user = UserRepository.get_user_by_username("batchuser")
-            count = UserRepository.batch_delete([admin["id"], user["id"]])
+            count, skipped = UserRepository.batch_delete([admin["id"], user["id"]])
             self.assertEqual(count, 1)
+            self.assertEqual(skipped, 1)
 
     def test_batch_toggle(self):
         """测试批量禁用。"""
@@ -199,8 +206,9 @@ class TestUserRepository(unittest.TestCase):
             UserRepository.get_user_by_username("bt1")["id"],
             UserRepository.get_user_by_username("bt2")["id"],
         ]
-        count = UserRepository.batch_toggle(ids, enable=False)
+        count, skipped = UserRepository.batch_toggle(ids, enable=False)
         self.assertEqual(count, 2)
+        self.assertEqual(skipped, 0)
         self.assertFalse(UserRepository.verify_user("bt1", "pass"))
 
     # ---- 启用/禁用 ----

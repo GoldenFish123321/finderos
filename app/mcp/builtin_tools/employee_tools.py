@@ -6,7 +6,10 @@ employee_tools.py — 数字员工类 MCP 工具处理函数
 - invoke_digital_employee: 调用指定员工 (v0.10 新增)
 """
 
+import logging
 from typing import Any, Dict
+
+logger = logging.getLogger(__name__)
 
 
 def _list_digital_employees() -> Dict[str, Any]:
@@ -59,8 +62,7 @@ async def _invoke_digital_employee(employee_name: str, message: str) -> Dict[str
 
     if emp_type == "api":
         # API 型：直接 HTTP 调用
-        import urllib.request
-        from app.utils.security import validate_url_safe
+        from app.utils.safe_http import SafeHttpError, safe_http_request
         api_url = emp.get("api_url", "")
         api_method = emp.get("api_method", "GET")
         api_headers_str = emp.get("api_headers", "{}")
@@ -74,27 +76,27 @@ async def _invoke_digital_employee(employee_name: str, message: str) -> Dict[str
         import urllib.parse
         final_url = api_url.replace("{message}", urllib.parse.quote(message))
 
-        # SSRF 防护：验证目标 URL 安全性
-        if not validate_url_safe(final_url):
-            return {
-                "success": False,
-                "error": "目标 URL 不安全，已阻止请求",
-            }
-
         try:
-            req = urllib.request.Request(final_url, headers=api_headers, method=api_method)
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                body = resp.read().decode("utf-8", errors="replace")
-                return {
-                    "success": True,
-                    "employee": emp["name"],
-                    "type": "api",
-                    "data": body[:5000],
-                }
+            response = safe_http_request(
+                final_url, method=api_method, headers=api_headers,
+                timeout=30, max_bytes=1024 * 1024,
+            )
+            if 300 <= response.status < 400:
+                return {"success": False, "error": "API 员工不允许重定向"}
+            body = response.body.decode("utf-8", errors="replace")
+            return {
+                "success": True,
+                "employee": emp["name"],
+                "type": "api",
+                "data": body[:5000],
+            }
+        except SafeHttpError:
+            return {"success": False, "error": "目标 URL 或响应不符合安全策略"}
         except Exception as e:
+            logger.warning("MCP 员工 API 调用失败: %s", e)
             return {
                 "success": False,
-                "error": f"API 调用失败: {str(e)}",
+                "error": "API 调用失败",
             }
     else:
         # LLM 型：返回提示信息，由上层处理

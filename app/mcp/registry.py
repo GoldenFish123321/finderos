@@ -133,9 +133,9 @@ def _build_tool_from_db_row(row: Dict[str, Any]) -> Optional[MCPTool]:
             input_schema = {}
 
         async def api_handler(**kwargs) -> Any:
-            import urllib.request
             import urllib.parse
             import asyncio
+            from app.utils.safe_http import SafeHttpError, safe_http_request
             # 构建 URL（替换路径参数）
             final_url = api_url
             for key, value in kwargs.items():
@@ -149,21 +149,26 @@ def _build_tool_from_db_row(row: Dict[str, Any]) -> Optional[MCPTool]:
 
             def _sync_call():
                 try:
-                    req = urllib.request.Request(final_url, headers=api_headers, method=api_method)
+                    data = None
                     if api_method.upper() == "POST" and query_params:
                         data = json.dumps(query_params).encode("utf-8")
-                        req.add_header("Content-Type", "application/json")
-                        with urllib.request.urlopen(req, data=data, timeout=30) as resp:
-                            body = resp.read().decode("utf-8", errors="replace")
-                    else:
-                        with urllib.request.urlopen(req, timeout=30) as resp:
-                            body = resp.read().decode("utf-8", errors="replace")
+                        api_headers["Content-Type"] = "application/json"
+                    response = safe_http_request(
+                        final_url, method=api_method, headers=api_headers,
+                        body=data, timeout=30, max_bytes=1024 * 1024,
+                    )
+                    if 300 <= response.status < 400:
+                        return {"error": "MCP API 工具不允许重定向"}
+                    body = response.body.decode("utf-8", errors="replace")
                     try:
                         return json.loads(body)
                     except json.JSONDecodeError:
                         return {"raw": body[:5000]}
+                except SafeHttpError:
+                    return {"error": "MCP API 目标地址或响应不符合安全策略"}
                 except Exception as e:
-                    return {"error": str(e)}
+                    logger.warning("MCP API 工具调用失败: %s", e)
+                    return {"error": "MCP API 工具调用失败"}
 
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(None, _sync_call)

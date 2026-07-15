@@ -6,6 +6,7 @@ auth.py — 认证相关控制器
 """
 
 import time
+import threading
 import tornado.web
 
 from app.config.settings import settings
@@ -32,6 +33,7 @@ class LoginRateLimiter:
     def __init__(self, scope: str = "default"):
         self._scope = scope
         self._failures: dict = {}  # {(ip, username): (count, first_ts)}
+        self._lock = threading.RLock()
 
     def _cleanup_expired(self, now: float):
         """清理所有过期的失败记录，防止内存泄漏。"""
@@ -42,35 +44,35 @@ class LoginRateLimiter:
 
     def check(self, ip: str, username: str) -> tuple[bool, str]:
         """检查是否允许登录。返回 (允许, 错误消息)。"""
-        now = time.time()
-        self._cleanup_expired(now)
-        key = (ip, username)
-        count, first_ts = self._failures.get(key, (0, now))
-
-        if now - first_ts > settings.LOGIN_LOCKOUT_SECONDS:
-            self._failures.pop(key, None)
+        with self._lock:
+            now = time.time()
+            self._cleanup_expired(now)
+            key = (ip, username)
+            count, first_ts = self._failures.get(key, (0, now))
+            if now - first_ts > settings.LOGIN_LOCKOUT_SECONDS:
+                self._failures.pop(key, None)
+                return True, ""
+            if count >= settings.LOGIN_MAX_FAILURES:
+                remaining = int(settings.LOGIN_LOCKOUT_SECONDS - (now - first_ts))
+                return False, f"登录失败次数过多，请 {max(remaining, 1)} 秒后再试"
             return True, ""
-
-        if count >= settings.LOGIN_MAX_FAILURES:
-            remaining = int(settings.LOGIN_LOCKOUT_SECONDS - (now - first_ts))
-            return False, f"登录失败次数过多，请 {max(remaining, 1)} 秒后再试"
-
-        return True, ""
 
     def record_failure(self, ip: str, username: str):
         """记录一次登录失败。"""
-        now = time.time()
-        self._cleanup_expired(now)
-        key = (ip, username)
-        count, first_ts = self._failures.get(key, (0, now))
-        if now - first_ts > settings.LOGIN_LOCKOUT_SECONDS:
-            self._failures[key] = (1, now)
-        else:
-            self._failures[key] = (count + 1, first_ts)
+        with self._lock:
+            now = time.time()
+            self._cleanup_expired(now)
+            key = (ip, username)
+            count, first_ts = self._failures.get(key, (0, now))
+            if now - first_ts > settings.LOGIN_LOCKOUT_SECONDS:
+                self._failures[key] = (1, now)
+            else:
+                self._failures[key] = (count + 1, first_ts)
 
     def clear(self, ip: str, username: str):
         """登录成功后清除失败记录。"""
-        self._failures.pop((ip, username), None)
+        with self._lock:
+            self._failures.pop((ip, username), None)
 
 
 # 全局登录限速器实例
@@ -145,7 +147,8 @@ class LoginHandler(BaseHandler):
         # 根据是否有后台功能权限决定跳转（避免硬编码角色名）
         funcs = UserRepository.get_user_functions(username)
         if funcs:
-            self.redirect("/admin")
+            routes = UserRepository.get_user_function_routes(username)
+            self.redirect("/admin" if "/admin" in routes else (routes[0] if routes else "/index"))
         else:
             self.redirect("/index")
 

@@ -201,24 +201,26 @@ async def _get_random_music() -> Dict[str, Any]:
     import json as _json
 
     def _sync_fetch():
+        from app.utils.safe_http import safe_http_request
         url = "https://api.injahow.cn/meting/?server=netease&type=playlist&id=3778678"
         headers = {"User-Agent": "FinderOS/1.0", "Accept": "application/json"}
         try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                body = resp.read().decode("utf-8", errors="replace")
-                songs = _json.loads(body)
-                if isinstance(songs, list) and len(songs) > 0:
-                    song = _random.choice(songs)
-                    return {
-                        "success": True,
-                        "name": song.get("name", ""),
-                        "artist": song.get("artist", ""),
-                        "cover": song.get("pic", ""),
-                        "url": song.get("url", ""),
-                        "source": "网易云音乐热歌榜",
-                    }
-                return {"success": False, "error": "歌曲列表为空"}
+            response = safe_http_request(
+                url, headers=headers, timeout=15, max_bytes=1024 * 1024
+            )
+            body = response.body.decode("utf-8", errors="replace")
+            songs = _json.loads(body)
+            if isinstance(songs, list) and len(songs) > 0:
+                song = _random.choice(songs)
+                return {
+                    "success": True,
+                    "name": song.get("name", ""),
+                    "artist": song.get("artist", ""),
+                    "cover": song.get("pic", ""),
+                    "url": song.get("url", ""),
+                    "source": "网易云音乐热歌榜",
+                }
+            return {"success": False, "error": "歌曲列表为空"}
         except Exception as e:
             logger.warning(f"get_random_music 调用失败: {e}")
             # 回退：返回本地 Mock 歌曲

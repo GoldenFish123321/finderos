@@ -154,6 +154,11 @@ class FunctionRepository:
     def delete(func_id: int) -> bool:
         """Delete a function and all its descendants (recursive, handles arbitrary depth)."""
         with get_db() as conn:
+            exists = conn.execute(
+                "SELECT 1 FROM functions WHERE id = ?", (func_id,)
+            ).fetchone()
+            if not exists:
+                return False
             # 递归收集所有子孙节点 ID（自底向上删除，避免 FK 约束冲突）
             to_delete = [func_id]
             i = 0

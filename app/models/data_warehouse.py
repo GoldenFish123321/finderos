@@ -237,6 +237,18 @@ class DataWarehouseRepository:
             return []
         kw = keyword.strip()
         with get_db() as conn:
+            # Exact substring matching is deterministic for Chinese text and avoids
+            # tokenizer-dependent partial results.
+            like_pattern = f"%{kw}%"
+            rows = conn.execute(
+                "SELECT * FROM data_warehouse "
+                "WHERE title LIKE ? OR summary LIKE ? OR source_name LIKE ? "
+                "ORDER BY id DESC LIMIT ?",
+                (like_pattern, like_pattern, like_pattern, limit),
+            ).fetchall()
+            if rows:
+                return [dict(r) for r in rows]
+
             # ── 第一轮：FTS5 OR 前缀匹配（提升召回）──
             terms = kw.split()
             if len(terms) > 1:
@@ -256,34 +268,6 @@ class DataWarehouseRepository:
                     return [dict(r) for r in rows]
             except Exception:
                 pass
-
-            # ── 第二轮：LIKE 模糊匹配回退 ──
-            like_pattern = f"%{kw}%"
-            rows = conn.execute(
-                "SELECT * FROM data_warehouse "
-                "WHERE title LIKE ? OR summary LIKE ? OR source_name LIKE ? "
-                "ORDER BY id DESC LIMIT ?",
-                (like_pattern, like_pattern, like_pattern, limit),
-            ).fetchall()
-            if rows:
-                return [dict(r) for r in rows]
-
-            # ── 第三轮：单字前缀匹配兜底（中文分词不佳时的最后手段）──
-            if len(kw) > 1:
-                char_terms = " OR ".join(f'"{c}"*' for c in kw if c.strip())
-                if char_terms:
-                    try:
-                        rows = conn.execute(
-                            "SELECT dw.* FROM data_warehouse_fts fts "
-                            "JOIN data_warehouse dw ON fts.rowid = dw.id "
-                            "WHERE data_warehouse_fts MATCH ? "
-                            "ORDER BY rank LIMIT ?",
-                            (char_terms, limit),
-                        ).fetchall()
-                        if rows:
-                            return [dict(r) for r in rows]
-                    except Exception:
-                        pass
 
             return []
 

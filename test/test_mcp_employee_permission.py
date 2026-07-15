@@ -29,14 +29,16 @@ class TestMCPEmployeePermission(unittest.TestCase):
         os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
         # 初始化数据库
-        from app.models.db import get_db
-        with get_db() as conn:
-            pass  # 触发数据库初始化
+        from app.models.db import init_db, seed_default_data
+        init_db()
+        seed_default_data()
 
         # 重置 MCPServer 单例并加载全部工具
         from app.mcp.server import MCPServer
         MCPServer._instance = None
         cls.server = MCPServer.get_instance()
+        from app.mcp.registry import MCPToolRegistry
+        MCPToolRegistry._instance = None
 
         from app.mcp.tools import register_all_tools
         register_all_tools(cls.server)

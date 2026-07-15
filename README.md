@@ -372,17 +372,18 @@ python main.py
 > 1. 创建 `database/` 目录和 `finderos.db` 数据库文件
 > 2. 执行 `CREATE TABLE IF NOT EXISTS` 建表（16 张表 + 1 张 FTS5 虚拟表）
 > 3. 创建数据库索引（10+ 个索引）
-> 4. 插入种子数据（默认角色、管理员账户、功能菜单）
+> 4. 插入种子数据（默认角色、管理员账户、功能菜单）。管理员密码来自 `ADMIN_DEFAULT_PASSWORD`；未设置时会在控制台输出一次性随机密码。
 
 #### 5. 访问系统
 
-打开浏览器，访问 **http://localhost:10010/**，使用默认账户登录：
+打开浏览器访问 **http://localhost:10010/**。建议启动前设置管理员初始密码：
 
-| 用户名 | 密码 | 角色 | 跳转页面 |
-|--------|------|------|----------|
-| `admin` | `admin888` | 系统管理员 | `/admin` 管理后台 |
+```powershell
+$env:ADMIN_DEFAULT_PASSWORD = "your-strong-password"
+python main.py
+```
 
-> ⚠️ **首次登录后请立即修改默认密码！**
+未设置该环境变量时，请使用首次启动日志中的一次性随机密码登录 `admin`。
 
 #### 6. 停止服务
 
@@ -1324,9 +1325,11 @@ erDiagram
 |--------|---------|---------|
 | **密码存储** | PBKDF2-SHA256（60 万轮迭代 + 16 字节随机盐，hex 存储） | OWASP 2023 |
 | **CSRF** | Tornado `xsrf_cookies=True` 全局开启 + 模板 `{% module xsrf_form_html() %}` | OWASP A01:2021 |
-| **XSS** | Tornado 模板默认 HTML 转义 + 采集内容清洗（`unescape` + 标签剥离） | OWASP A03:2021 |
+| **XSS** | Tornado 模板自动转义；AI Markdown 经 DOMPurify 净化；用户消息使用 `textContent` | OWASP A03:2021 |
 | **SQL 注入** | 全参数化查询（`?` 占位符），0 处字符串拼接 SQL | OWASP A03:2021 |
-| **SSRF** | URL 协议白名单 + 内网 IP 段拦截 + DNS 解析校验 + CRLF 检测；接口管理/ API 型员工调用使用安全 HTTP 客户端固定已校验 IP 且不自动跟随重定向 | OWASP A10:2021 |
+| **SSRF** | 校验全部 A/AAAA 地址；采集、模型、接口、API 员工和 MCP 外呼统一固定已校验 IP、禁止重定向并限制响应大小 | OWASP A10:2021 |
+| **RBAC** | 管理接口按目标路由校验对应功能权限，Dashboard 权限不再隐式授权全部后台模块 | OWASP A01:2021 |
+| **间接 Prompt Injection** | 工具和仓库内容按不可信数据分隔、角色标记中和并限制长度，降低外部数据被误当指令的风险 | OWASP LLM01 |
 | **接口密钥与 Header** | `api_secret` 加密存储；接口联动 API 不回显密钥，`Authorization` / `Cookie` / `X-API-Key` 等敏感 Header 脱敏展示 | OWASP |
 | **Header 注入** | CR/LF 字符检测（`has_crlf()`），拒绝含 `\r` `\n` 的输入 | OWASP A03:2021 |
 | **安全响应头** | CSP / X-Frame-Options / X-Content-Type-Options / X-XSS-Protection / Referrer-Policy / Permissions-Policy | OWASP |
@@ -1522,11 +1525,11 @@ python make_admin.py --reset --username admin --password newpassword
 
 ## 默认账户
 
-| 用户名 | 密码 | 角色 | 后台权限 | 说明 |
-|--------|------|------|---------|------|
-| `admin` | `admin888` | 系统管理员 | ✅ 全部功能 | 不可删除/禁用自身 |
+| 用户名 | 初始密码来源 | 角色 | 后台权限 | 说明 |
+|--------|-------------|------|---------|------|
+| `admin` | `ADMIN_DEFAULT_PASSWORD` 或首次启动生成的一次性随机密码 | 系统管理员 | ✅ 全部功能 | 不可删除/禁用自身 |
 
-> ⚠️ **首次登录后请立即修改默认密码！** 可使用管理后台的用户编辑功能或 `make_admin.py --reset` 命令。
+生产环境必须显式设置至少 12 字符的 `ADMIN_DEFAULT_PASSWORD`，并在首次登录后修改。
 
 ---
 

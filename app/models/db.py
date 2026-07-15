@@ -447,12 +447,20 @@ def seed_default_data():
         ).fetchone()
         if existing_admin["cnt"] == 0:
             salt = secrets.token_bytes(16)
-            dk = hashlib.pbkdf2_hmac("sha256", "admin888".encode(), salt, settings.PBKDF2_ITERATIONS)
+            initial_password = settings.ADMIN_DEFAULT_PASSWORD or secrets.token_urlsafe(18)
+            if len(initial_password) < 12:
+                raise RuntimeError("ADMIN_DEFAULT_PASSWORD 必须至少 12 个字符")
+            dk = hashlib.pbkdf2_hmac(
+                "sha256", initial_password.encode(), salt, settings.PBKDF2_ITERATIONS
+            )
             conn.execute(
                 "INSERT INTO users (username, password_hash, salt, role_id, is_enabled) VALUES (?, ?, ?, ?, ?)",
                 ("admin", dk.hex(), salt.hex(), 1, 1),
             )
-            print("[种子] 默认管理员 admin 已创建 (密码: admin888)")
+            if settings.ADMIN_DEFAULT_PASSWORD:
+                print("[种子] 默认管理员 admin 已创建（密码来自 ADMIN_DEFAULT_PASSWORD）")
+            else:
+                print(f"[种子] 默认管理员 admin 已创建，一次性随机密码: {initial_password}")
 
         existing_funcs = conn.execute("SELECT COUNT(*) as cnt FROM functions").fetchone()
         if existing_funcs["cnt"] == 0:

@@ -145,8 +145,9 @@ def test_related_functionality():
     UserRepository.create_user("_bug8_b2_", "test123456")
     u1 = UserRepository.get_user_by_username("_bug8_b1_")
     u2 = UserRepository.get_user_by_username("_bug8_b2_")
-    count = UserRepository.batch_delete([u1["id"], u2["id"]])
+    count, skipped = UserRepository.batch_delete([u1["id"], u2["id"]])
     assert count == 2
+    assert skipped == 0
     print("  ✅ 批量删除正常")
 
     print("  ✅ 相关功能验证通过")

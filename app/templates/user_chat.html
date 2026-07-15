@@ -652,6 +652,17 @@ let currentConversationId = null;
 let isStreaming = false;
 let employees = [];
 
+function renderMarkdownSafe(value) {
+    var source = String(value || '');
+    var rendered = typeof marked !== 'undefined' ? marked.parse(source) : escapeHtml(source);
+    if (typeof DOMPurify === 'undefined') return escapeHtml(source);
+    return DOMPurify.sanitize(rendered, {
+        USE_PROFILES: {html: true},
+        FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select'],
+        FORBID_ATTR: ['style']
+    });
+}
+
 // 加载数字员工列表
 fetch('/api/chat/employees?_xsrf=' + XSRF)
     .then(r => r.json())
@@ -1012,12 +1023,12 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
                         const data = JSON.parse(dataStr);
                         if (data.content) {
                             totalContent += data.content;
-                            aiContent.innerHTML = marked.parse(totalContent);
+                            aiContent.innerHTML = renderMarkdownSafe(totalContent);
                             detectAndRenderChart(aiContent, totalContent);
                             scrollToBottom();
                         }
                         if (data.error) {
-                            aiContent.innerHTML = marked.parse('❌ **错误**: ' + data.error);
+                            aiContent.innerHTML = renderMarkdownSafe('❌ **错误**: ' + data.error);
                         }
                     } catch(e) {}
                 }
@@ -1078,7 +1089,7 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
                 document.getElementById('btn-send').disabled = false;
                 document.getElementById('chat-input').disabled = false;
                 if (!aiContent.textContent || aiContent.textContent.trim() === '') {
-                    aiContent.innerHTML = marked.parse('❌ **网络错误**: 连接中断，请重试');
+                    aiContent.innerHTML = renderMarkdownSafe('❌ **网络错误**: 连接中断，请重试');
                 }
                 refreshTaskList();
             });
@@ -1086,7 +1097,7 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
         read();
     })
     .catch(err => {
-        aiContent.innerHTML = marked.parse('❌ **网络错误**: ' + err.message);
+        aiContent.innerHTML = renderMarkdownSafe('❌ **网络错误**: ' + err.message);
         isStreaming = false;
         document.getElementById('btn-send').disabled = false;
         document.getElementById('chat-input').disabled = false;
@@ -1114,8 +1125,12 @@ function appendMessage(role, content, tokens, elapsed, isPlaceholder) {
 
     const contentDiv = document.createElement('div');
     contentDiv.className = 'bubble-content';
-    contentDiv.innerHTML = content ? marked.parse(content) : (isPlaceholder ?
-        '<div class="typing-indicator"><span></span><span></span><span></span></div>' : '');
+    if (content) {
+        if (role === 'user') contentDiv.textContent = content;
+        else contentDiv.innerHTML = renderMarkdownSafe(content);
+    } else if (isPlaceholder) {
+        contentDiv.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+    }
 
     bubble.appendChild(contentDiv);
 
@@ -1242,7 +1257,7 @@ function detectAndRenderChart(aiContent, totalContent) {
         }
     }
 
-    aiContent.innerHTML = marked.parse(html);
+    aiContent.innerHTML = renderMarkdownSafe(html);
 
     // 延迟渲染图表（等 DOM 就绪）
     chartIds.forEach(function(item) {
@@ -1304,12 +1319,21 @@ function toggleAtMenu() {
         return;
     }
 
-    dropdown.innerHTML = employees.map(e =>
-        `<div class="at-item" onclick="selectEmployee('${e.name}')">
-            <div class="at-name">🤖 ${e.name}</div>
-            <div class="at-desc">${e.description || (e.employee_type === 'api' ? 'API型' : 'LLM型')}</div>
-        </div>`
-    ).join('');
+    dropdown.replaceChildren();
+    employees.forEach(function(e) {
+        var item = document.createElement('div');
+        item.className = 'at-item';
+        item.addEventListener('click', function(){ selectEmployee(String(e.name || '')); });
+        var name = document.createElement('div');
+        name.className = 'at-name';
+        name.textContent = '🤖 ' + String(e.name || '');
+        var desc = document.createElement('div');
+        desc.className = 'at-desc';
+        desc.textContent = String(e.description || (e.employee_type === 'api' ? 'API型' : 'LLM型'));
+        item.appendChild(name);
+        item.appendChild(desc);
+        dropdown.appendChild(item);
+    });
     dropdown.classList.add('show');
 }
 

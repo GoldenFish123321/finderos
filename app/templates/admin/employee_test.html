@@ -98,7 +98,10 @@ function addMessage(role, content){
     var div = document.createElement('div');
     div.className = 'test-message ' + role;
     var avatar = role === 'user' ? '👤' : '🤖';
-    div.innerHTML = '<div class="bubble">' + content + '</div>';
+    var bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = content;
+    div.appendChild(bubble);
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
 }
@@ -185,7 +188,7 @@ async function sendMessage(){
             var json = await resp.json();
             removeTyping();
             if (json.code === 0){
-                addMessage('assistant', '<pre style="white-space:pre-wrap;font-size:12px;">' + JSON.stringify(json.data, null, 2) + '</pre>');
+                addMessage('assistant', JSON.stringify(json.data, null, 2));
             } else {
                 addMessage('assistant', '❌ ' + (json.msg || '调用失败'));
             }

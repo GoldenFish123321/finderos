@@ -15,6 +15,9 @@ crawl4ai>=0.4
 # TTS：Edge TTS 语音合成（Microsoft Edge 免费 TTS 服务）
 edge-tts>=6.1
 
+# 测试
+pytest>=8.0
+
 # 可选：如需异步 HTTP 客户端（提升 AI 对话并发性能）
 # aiohttp>=3.9
 

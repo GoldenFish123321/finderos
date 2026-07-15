@@ -21,6 +21,7 @@ from http.cookiejar import CookieJar
 from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+from app.utils.safe_http import SafeHttpError, safe_http_request
 
 
 # 全局 CookieJar — 百度验证码需要先访问首页获取 BAIDUID 等 cookie
@@ -74,15 +75,27 @@ def _decompress(data: bytes, encoding: str) -> bytes:
     enc = (encoding or "").lower()
     if "gzip" in enc:
         try:
-            return gzip.decompress(data)
+            obj = zlib.decompressobj(16 + zlib.MAX_WBITS)
+            result = obj.decompress(data, 30 * 1024 * 1024 + 1)
+            if len(result) > 30 * 1024 * 1024 or obj.unconsumed_tail:
+                raise ValueError("解压后响应超过大小限制")
+            return result
         except Exception:
             pass
     if "deflate" in enc:
         try:
-            return zlib.decompress(data)
+            obj = zlib.decompressobj()
+            result = obj.decompress(data, 30 * 1024 * 1024 + 1)
+            if len(result) > 30 * 1024 * 1024 or obj.unconsumed_tail:
+                raise ValueError("解压后响应超过大小限制")
+            return result
         except Exception:
             try:
-                return zlib.decompress(data, -15)
+                obj = zlib.decompressobj(-15)
+                result = obj.decompress(data, 30 * 1024 * 1024 + 1)
+                if len(result) > 30 * 1024 * 1024 or obj.unconsumed_tail:
+                    raise ValueError("解压后响应超过大小限制")
+                return result
             except Exception:
                 pass
     if "br" in enc:
@@ -362,31 +375,31 @@ def fetch_and_parse(
         _ensure_baidu_cookies()
 
     try:
-        # 局部引用避免全局变量在检查和使用之间被修改
         cookie_jar = _global_cookie_jar
         if cookie_jar is not None and "baidu.com" in url:
-            # 百度需 Cookie，但仍禁止重定向（SSRF 防护）
-            opener = urllib.request.build_opener(
-                _NoRedirectHandler(),
-                urllib.request.HTTPCookieProcessor(cookie_jar),
-                urllib.request.HTTPSHandler(context=_global_ssl_ctx),
-            )
-            req = urllib.request.Request(url, headers=headers)
-            resp = opener.open(req, timeout=timeout)
-        else:
-            req = urllib.request.Request(url, headers=headers)
-            resp = _no_redirect_opener.open(req, timeout=timeout)
-
-        try:
-            raw = resp.read()
-            encoding = resp.headers.get("Content-Encoding", "")
-            status = resp.status
-        finally:
-            resp.close()
+            cookie_value = "; ".join(f"{c.name}={c.value}" for c in cookie_jar)
+            if cookie_value:
+                headers["Cookie"] = cookie_value
+        response = safe_http_request(
+            url, headers=headers, timeout=timeout, max_bytes=10 * 1024 * 1024
+        )
+        if 300 <= response.status < 400:
+            return response.status, 0, "采集目标不允许重定向", []
+        raw = response.body
+        encoding = response.headers.get("Content-Encoding", "")
+        status = response.status
+    except SafeHttpError as e:
+        logger.warning("安全 HTTP 采集失败: %s", e)
+        return 0, 0, "采集失败：目标地址或响应不符合安全策略", []
     except Exception as e:
-        return 0, 0, f"Error: {e}", []
+        logger.warning("HTTP 采集失败: %s", e)
+        return 0, 0, "采集失败，请稍后重试", []
 
+    if "br" in encoding.lower():
+        return 0, len(raw), "采集失败：服务端返回不受支持的 Brotli 压缩", []
     data = _decompress(raw, encoding)
+    if len(data) > 30 * 1024 * 1024:
+        return 0, len(raw), "采集失败：解压后响应超过大小限制", []
     try:
         text = data.decode("utf-8", errors="replace")
     except Exception:

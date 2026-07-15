@@ -31,6 +31,7 @@ except ImportError:
     _HAS_CRAWL4AI = False
 
 logger = logging.getLogger(__name__)
+from app.utils.safe_http import SafeHttpError, safe_http_request
 
 # 复用 collector 的 SSL 上下文和请求头
 _ssl_ctx = ssl.create_default_context()
@@ -110,15 +111,27 @@ def _decompress(data: bytes, encoding: str) -> bytes:
     enc = (encoding or "").lower()
     if "gzip" in enc:
         try:
-            return gzip.decompress(data)
+            obj = zlib.decompressobj(16 + zlib.MAX_WBITS)
+            result = obj.decompress(data, 30 * 1024 * 1024 + 1)
+            if len(result) > 30 * 1024 * 1024 or obj.unconsumed_tail:
+                raise ValueError("解压后响应超过大小限制")
+            return result
         except Exception:
             pass
     if "deflate" in enc:
         try:
-            return zlib.decompress(data)
+            obj = zlib.decompressobj()
+            result = obj.decompress(data, 30 * 1024 * 1024 + 1)
+            if len(result) > 30 * 1024 * 1024 or obj.unconsumed_tail:
+                raise ValueError("解压后响应超过大小限制")
+            return result
         except Exception:
             try:
-                return zlib.decompress(data, -15)
+                obj = zlib.decompressobj(-15)
+                result = obj.decompress(data, 30 * 1024 * 1024 + 1)
+                if len(result) > 30 * 1024 * 1024 or obj.unconsumed_tail:
+                    raise ValueError("解压后响应超过大小限制")
+                return result
             except Exception:
                 pass
     if "br" in enc:
@@ -247,41 +260,46 @@ def deep_fetch(url: str, timeout: int = 30) -> Tuple[int, str, str, str]:
         return 0, "", "", f"安全校验失败: {reason}"
 
     try:
-        req = urllib.request.Request(url, headers=_BASE_HEADERS)
-        with _no_redirect_opener.open(req, timeout=timeout) as resp:
-            status = resp.getcode()
-            encoding = resp.headers.get("Content-Encoding", "")
-            content_type = resp.headers.get("Content-Type", "")
-            raw = resp.read()
+        response = safe_http_request(
+            url, headers=_BASE_HEADERS, timeout=timeout, max_bytes=10 * 1024 * 1024
+        )
+        status = response.status
+        if 300 <= status < 400:
+            return status, "", "", "采集目标不允许重定向"
+        encoding = response.headers.get("Content-Encoding", "")
+        raw = response.body
 
-            # 解压
-            data = _decompress(raw, encoding)
+        if "br" in encoding.lower():
+            return 0, "", "", "服务端返回不受支持的 Brotli 压缩"
+        # 解压
+        data = _decompress(raw, encoding)
+        if len(data) > 30 * 1024 * 1024:
+            return 0, "", "", "解压后响应超过大小限制"
 
-            # 检测字符编码
-            html = ""
-            for charset_try in ["utf-8", "gbk", "gb2312", "gb18030", "latin-1"]:
-                try:
-                    html = data.decode(charset_try)
-                    break
-                except (UnicodeDecodeError, LookupError):
-                    continue
-            if not html:
-                html = data.decode("utf-8", errors="replace")
+        # 检测字符编码
+        html = ""
+        for charset_try in ["utf-8", "gbk", "gb2312", "gb18030", "latin-1"]:
+            try:
+                html = data.decode(charset_try)
+                break
+            except (UnicodeDecodeError, LookupError):
+                continue
+        if not html:
+            html = data.decode("utf-8", errors="replace")
 
-            if not html or len(html) < 500:
-                return status, "", "", "页面内容过短，可能为重定向或验证页面"
+        if not html or len(html) < 500:
+            return status, "", "", "页面内容过短，可能为验证页面"
 
-            # 提取标题
-            title = _extract_title(html)
+        title = _extract_title(html)
+        content = _extract_text_content(html, url)
 
-            # 提取正文
-            content = _extract_text_content(html, url)
+        if not content and not title:
+            return status, "", "", "未能提取到有效正文内容"
+        return status, title, content, ""
 
-            if not content and not title:
-                return status, "", "", "未能提取到有效正文内容"
-
-            return status, title, content, ""
-
+    except SafeHttpError as e:
+        logger.warning("Deep fetch blocked: %s", e)
+        return 0, "", "", "目标地址或响应不符合安全策略"
     except urllib.error.HTTPError as e:
         logger.warning(f"Deep fetch HTTP error for {url}: {e.code} {e.reason}")
         return e.code, "", "", f"HTTP {e.code}: 请求失败"

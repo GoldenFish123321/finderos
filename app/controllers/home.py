@@ -24,7 +24,8 @@ class IndexHandler(BaseHandler):
         # 有管理权限的用户直接跳转管理后台（根据功能权限判断，避免硬编码角色名）
         funcs = UserRepository.get_user_functions(self.current_user)
         if funcs:
-            self.redirect("/admin")
+            routes = UserRepository.get_user_function_routes(self.current_user)
+            self.redirect("/admin" if "/admin" in routes else (routes[0] if routes else "/chat"))
             return
 
         # 普通用户直接跳转到智能问数对话页面

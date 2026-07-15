@@ -81,3 +81,47 @@ class AdminBaseHandler(BaseHandler):
             """)
             self.finish()
             return
+
+        if not self._is_route_authorized(funcs):
+            write_audit_log(
+                action="ACCESS_DENIED_PERMISSION",
+                username=self.current_user,
+                target=self.request.path,
+                detail="角色未获授目标管理功能",
+                client_ip=self.request.remote_ip or "",
+            )
+            raise tornado.web.HTTPError(403, "无权访问此管理功能")
+
+    def _is_route_authorized(self, function_ids: list[int]) -> bool:
+        """Authorize an action/API route against its owning menu function."""
+        path = self.request.path.rstrip("/") or "/"
+        aliases = {
+            "/admin/api/model": "/admin/model",
+            "/admin/api/employee": "/admin/employee",
+            "/admin/api/interface": "/admin/interface",
+            "/admin/mcp/reload": "/admin/mcp/tool",
+        }
+        for api_prefix, owner in aliases.items():
+            if path == api_prefix or path.startswith(api_prefix + "/"):
+                path = owner + path[len(api_prefix):]
+                break
+
+        # Every authenticated backend user may change only their own password.
+        if path == "/admin/user/change-password":
+            return bool(function_ids)
+
+        from app.models.db import get_db
+        placeholders = ",".join("?" for _ in function_ids)
+        with get_db() as conn:
+            rows = conn.execute(
+                f"SELECT route_path FROM functions WHERE id IN ({placeholders}) "
+                "AND is_enabled = 1 AND route_path != ''",
+                function_ids,
+            ).fetchall()
+        routes = {row["route_path"].rstrip("/") or "/" for row in rows}
+        if path == "/admin":
+            return "/admin" in routes
+        return any(
+            route != "/admin" and (path == route or path.startswith(route + "/"))
+            for route in routes
+        )

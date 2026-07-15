@@ -30,6 +30,7 @@ settings.DB_PATH = TEST_DB_PATH
 
 # 覆盖 app.models.db 中的 DB_PATH
 import app.models.db as db_module
+_ORIGINAL_DB_PATH = db_module.DB_PATH
 db_module.DB_PATH = TEST_DB_PATH
 
 
@@ -67,6 +68,7 @@ class TestSkillRepository(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        db_module.DB_PATH = TEST_DB_PATH
         _setup_test_db()
         _seed_test_data()
 
@@ -74,6 +76,7 @@ class TestSkillRepository(unittest.TestCase):
     def tearDownClass(cls):
         if os.path.exists(TEST_DB_PATH):
             os.remove(TEST_DB_PATH)
+        db_module.DB_PATH = _ORIGINAL_DB_PATH
 
     # ── 查询测试 ──
 
@@ -184,6 +187,7 @@ class TestLoadSkillMCPTool(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        db_module.DB_PATH = TEST_DB_PATH
         _setup_test_db()
         _seed_test_data()
 
@@ -191,6 +195,7 @@ class TestLoadSkillMCPTool(unittest.TestCase):
     def tearDownClass(cls):
         if os.path.exists(TEST_DB_PATH):
             os.remove(TEST_DB_PATH)
+        db_module.DB_PATH = _ORIGINAL_DB_PATH
 
     def test_load_skill_returns_prompt_template(self):
         """加载技能，返回 prompt 模板内容。"""
