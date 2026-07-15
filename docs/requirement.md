@@ -99,10 +99,11 @@
 
 - MCP Server（工具注册、MCP/OpenAI 格式互转）
 - MCP Client（工具执行、语义匹配智能回退）
-- 8 个标准化 MCP 工具：
+- 9 个标准化 MCP 工具：
   - `search_warehouse` / `get_recent_warehouse_data` / `get_warehouse_stats`
   - `deep_collect_url` / `collect_web_data`
-  - `list_digital_employees` / `list_conversations` / `get_conversation_messages`
+  - `list_digital_employees` / `get_random_music`
+  - `list_conversations` / `get_conversation_messages`
 
 ### 15. LLM Function Calling
 
