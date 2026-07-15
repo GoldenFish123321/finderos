@@ -31,6 +31,20 @@ def has_crlf(value: str) -> bool:
     return bool(_CRLF_PATTERN.search(value))
 
 
+def sanitize_log_value(value: str) -> str:
+    """移除字符串中的 CR/LF 字符，防止日志注入攻击。
+
+    日志注入（Log Injection / CRLF Injection）攻击者可在用户输入中
+    嵌入换行符来伪造日志条目，破坏审计日志的完整性。
+
+    参考：OWASP A09:2021 Security Logging and Monitoring Failures
+    CWE-117: Improper Output Neutralization for Logs
+    """
+    if not value:
+        return value
+    return _CRLF_PATTERN.sub("", value)
+
+
 # ── Prompt Injection 检测 ─────────────────────────────────────
 
 # 危险指令模式（匹配已知的 Prompt Injection / Jailbreak 攻击模式）
@@ -245,6 +259,9 @@ def write_audit_log(
     """
     写入操作审计日志。
 
+    所有字符串参数均经过 sanitize_log_value() 处理，移除 CR/LF
+    字符以防御日志注入攻击（CWE-117 / OWASP A09:2021）。
+
     Args:
         action: 操作类型 (LOGIN / LOGOUT / CREATE / UPDATE / DELETE / COLLECT / CHAT 等)
         username: 操作人
@@ -254,6 +271,13 @@ def write_audit_log(
     """
     if not settings.AUDIT_ENABLED:
         return
+
+    # 防御日志注入：移除所有 CR/LF 字符
+    action = sanitize_log_value(action)
+    username = sanitize_log_value(username)
+    target = sanitize_log_value(target)
+    detail = sanitize_log_value(detail)
+    client_ip = sanitize_log_value(client_ip)
 
     try:
         with get_db() as conn:
