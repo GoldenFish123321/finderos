@@ -1,6 +1,6 @@
-# 瞭望与问数系统 (DataFinderAgentOS) — 需求文档 v1.0.0-beta
+# 瞭望与问数系统 (DataFinderAgentOS) — 需求文档 v0.4.0
 
-> 覆盖 v0.1 ~ v1.0.0-beta 全部功能需求
+> 覆盖 v0.1 ~ v0.4.0 全部功能需求
 
 ---
 
@@ -74,15 +74,7 @@
 - ECharts 图表自动注入（`[CHART:...]` / `[TABLE:...]` 标记）
 - 快捷指令（`/clear` `/summary` `/trans` `/tools`）
 
-### 11. 管理侧会话管理 (`/admin/conversation`)
-
-- 管理员跨用户查看所有前台会话
-- 列表展示：用户、会话标题、消息数、Token 合计、创建/更新时间
-- 支持按用户筛选、按标题/用户关键词搜索
-- 支持查看会话消息详情
-- 支持管理员删除任意会话及其消息，并写入审计日志
-
-### 12. 数字化员工 (`/admin/employee`)
+### 11. 数字化员工 (`/admin/employee`)
 
 - **LLM 型**：模型绑定 + system_prompt + skills + MCP 工具权限（含 Crawl4ai 深度采集）
 - **API 型**：HTTP 调用 + 参数模板 + 响应渲染模板
@@ -101,7 +93,7 @@
 ### 12. 深度采集引擎
 
 - 正文提取（article/main/body 标签识别）
-- Crawl4ai 通过 MCP 工具权限控制（v0.8）
+- Crawl4ai 通过 MCP 工具权限控制（v0.6.1）
 
 ### 13. 定时采集调度器
 

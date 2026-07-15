@@ -7,7 +7,6 @@
 - **语言**: Python 3.11+ (venv 中的解释器版本，推荐 3.13+)
 - **Web 框架**: Tornado (`tornado.web` / `tornado.ioloop` / `tornado.httpserver`)
 - **数据库**: SQLite3 (`sqlite3` 内置模块，零外部依赖)，DB 文件 `database/finderos.db`
-  - **row_factory**: 使用自定义 `_dict_factory` 返回 `dict`（而非 `sqlite3.Row`），以确保 `.get()` 方法可用
 - **模板**: Tornado 原生模板 (`{% extends %}` / `{% block %}` / `{% module xsrf_form_html() %}`)
 - **前端**: Layui 2.x + 原生 HTML + CSS + JS (未引入构建工具与前端框架)
 - **虚拟环境**: `.venv/`；一切依赖安装与运行必须激活 venv
@@ -98,7 +97,7 @@
 - **默认角色**: 系统管理员(可访问后台) / 普通用户(仅前台)
 - **菜单生成**: 角色 → role_functions → functions → 按 parent_id 构建树形菜单
 
-## 7. 扩展模块 (v0.6)
+## 7. 扩展模块 (v0.4.0)
 
 ### watch_sources 表（瞭源管理）
 | 字段 | 类型 | 说明 |
@@ -110,7 +109,7 @@
 | request_headers | TEXT DEFAULT '{}' | HTTP请求头（JSON格式） |
 | is_enabled | INTEGER DEFAULT 1 | 启用状态 |
 | sort_order | INTEGER DEFAULT 0 | 排序 |
-| schedule_interval | INTEGER DEFAULT 0 | 定时采集间隔（分钟，0=不启用，v0.6 迁移新增） |
+| schedule_interval | INTEGER DEFAULT 0 | 定时采集间隔（分钟，0=不启用，v0.4.0 迁移新增） |
 | created_at | TIMESTAMP | 创建时间 |
 
 ### watch_results 表（采集结果记录）
@@ -220,8 +219,8 @@
 | model_id | INTEGER DEFAULT NULL FK | 绑定模型（LLM 型），`FOREIGN KEY REFERENCES ai_models(id) ON DELETE SET NULL` |
 | system_prompt | TEXT DEFAULT '' | 系统提示词（LLM 型） |
 | skills | TEXT DEFAULT '[]' | 技能列表 JSON（LLM 型） |
-| mcp_tool_ids | TEXT DEFAULT '[]' | MCP 工具权限列表 JSON，[v0.8] 深度采集通过此字段控制 |
-| crawl4ai_enabled | INTEGER DEFAULT 0 | [v0.8 废弃] 改用 mcp_tool_ids 控制 |
+| mcp_tool_ids | TEXT DEFAULT '[]' | MCP 工具权限列表 JSON，[v0.6.1] 深度采集通过此字段控制 |
+| crawl4ai_enabled | INTEGER DEFAULT 0 | [v0.6.1 废弃] 改用 mcp_tool_ids 控制 |
 | api_url | TEXT DEFAULT '' | API 地址（API 型） |
 | api_method | TEXT DEFAULT 'GET' | HTTP 方法（API 型） |
 | api_headers | TEXT DEFAULT '{}' | 请求头 JSON（API 型） |

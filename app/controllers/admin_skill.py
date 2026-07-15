@@ -3,7 +3,7 @@ admin_skill.py — 技能管理控制器
 
 管理员管理技能库（新增/编辑/删除/启用禁用/分页）。
 技能统一为 Prompt 模板，在模板中直接描述 MCP 工具用法。
-v0.10: 支持绑定 MCP 工具（mcp_tool_id）。
+v0.4.2: 支持绑定 MCP 工具（mcp_tool_id）。
 """
 import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
@@ -59,7 +59,7 @@ class SkillFormHandler(AdminBaseHandler):
             title="编辑技能" if skill else "新增技能",
             username=self.current_user,
             skill=skill,
-            # v0.10: 加载启用的 MCP 工具列表供绑定选择
+            # v0.4.2: 加载启用的 MCP 工具列表供绑定选择
             mcp_tools=MCPToolRepository.get_enabled(),
         )
 
@@ -69,7 +69,7 @@ class SkillFormHandler(AdminBaseHandler):
         name = self.get_body_argument("name", "").strip()
         description = self.get_body_argument("description", "").strip()
         prompt_template = self.get_body_argument("prompt_template", "").strip()
-        # v0.10: 读取 mcp_tool_id（允许为空表示纯 prompt 型 Skill）
+        # v0.4.2: 读取 mcp_tool_id（允许为空表示纯 prompt 型 Skill）
         mcp_tool_id_str = self.get_body_argument("mcp_tool_id", "").strip()
         mcp_tool_id = int(mcp_tool_id_str) if mcp_tool_id_str else None
 

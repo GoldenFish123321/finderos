@@ -175,15 +175,13 @@ class UserBatchDeleteHandler(AdminBaseHandler):
             current_user = UserRepository.get_user_by_username(self.current_user)
             if current_user:
                 ids = [uid for uid in ids if uid != current_user["id"]]
-            count, skipped_admin = UserRepository.batch_delete(ids)
+            count = UserRepository.batch_delete(ids)
             msg = f"成功删除 {count} 个用户"
-            if skipped_admin > 0:
-                msg += f"（跳过 {skipped_admin} 个受保护的管理员账号）"
             write_audit_log(
                 action="USER_BATCH_DELETE",
                 username=self.current_user,
                 target=f"users:{','.join(str(x) for x in ids[:10])}",
-                detail=f"deleted={count}, skipped_admin={skipped_admin}",
+                detail=f"deleted={count}",
                 client_ip=self.request.remote_ip or "",
             )
             self.set_header("Content-Type", "application/json")
@@ -212,16 +210,14 @@ class UserBatchToggleHandler(AdminBaseHandler):
                 if current_user:
                     ids = [uid for uid in ids if uid != current_user["id"]]
             enable = enable_str == "1"
-            count, skipped_admin = UserRepository.batch_toggle(ids, enable)
+            count = UserRepository.batch_toggle(ids, enable)
             action = "启用" if enable else "禁用"
             msg = f"成功{action} {count} 个用户"
-            if skipped_admin > 0:
-                msg += f"（跳过 {skipped_admin} 个受保护的管理员账号）"
             write_audit_log(
                 action="USER_BATCH_TOGGLE",
                 username=self.current_user,
                 target=f"users:{','.join(str(x) for x in ids[:10])}",
-                detail=f"action={action}, count={count}, skipped_admin={skipped_admin}",
+                detail=f"action={action}, count={count}",
                 client_ip=self.request.remote_ip or "",
             )
             self.set_header("Content-Type", "application/json")

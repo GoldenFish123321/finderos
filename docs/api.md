@@ -1,4 +1,4 @@
-# API 接口文档 v1.0.0-beta
+# API 接口文档 v0.4.0
 
 > 基础 URL: `http://localhost:10010`
 > 认证方式: Tornado Secure Cookie（登录后自动携带）
@@ -175,7 +175,7 @@ data: {"code":1,"msg":"请输入关键词"}
 
 ### 4.2 模型对话 (SSE) — ⚠️ 已废弃
 
-> **v0.4 起已废弃**：后台模型对话功能已统一迁移至前台 `/chat/stream`（MCP 架构）。
+> **v0.4.0 起已废弃**：后台模型对话功能已统一迁移至前台 `/chat/stream`（MCP 架构）。
 > 请使用 [七、用户前台-智能问数](#七用户前台-智能问数v030) 中的 `/chat/stream` 端点。
 
 ### 4.3 模型 API
@@ -187,7 +187,7 @@ data: {"code":1,"msg":"请输入关键词"}
 ### 4.4 Token 消耗说明
 
 - Token 消耗通过 `/chat/stream` 对话自动累加到 `ai_models.total_tokens`
-- `migrate_db.py` 提供 `ai_models.total_tokens` 列的 DDL 迁移（v0.2），不涉及跨表数据搬运
+- `migrate_db.py` 提供 `ai_models.total_tokens` 列的 DDL 迁移（v0.2.5），不涉及跨表数据搬运
 
 ---
 
@@ -223,7 +223,7 @@ data: {"code":1,"msg":"请输入关键词"}
 
 ---
 
-## 六、数字化员工（v0.3）
+## 六、数字化员工（v0.3.0）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -240,7 +240,7 @@ data: {"code":1,"msg":"请输入关键词"}
 
 ---
 
-## 七、用户前台-智能问数（v0.3）
+## 七、用户前台-智能问数（v0.3.0）
 
 ### 7.1 对话页面与流式 API
 
@@ -281,14 +281,7 @@ data: {"code":1,"msg":"请输入关键词"}
 | POST | `/api/chat/conversation/delete` | 删除对话（body 参数 `id`） |
 | GET | `/api/chat/conversation/messages` | 获取对话消息（?id=） |
 
-### 7.3b 管理侧会话管理 API
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/admin/conversation` | 管理员查看所有用户会话，支持 `username`、`keyword`、`page`、`id` 查询 |
-| POST | `/admin/conversation/delete` | 管理员删除任意会话及其消息（body 参数 `id`，需 `_xsrf`） |
-
-### 7.4 TTS 语音合成 API（v0.9）
+### 7.4 TTS 语音合成 API（v0.4.1）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -361,65 +354,3 @@ data: {"code":1,"msg":"请输入关键词"}
 ### 8.3 数字员工联动
 
 API 型数字员工新增/编辑页可通过 `api_interface_id` 选择接口模板，自动填充 URL / Method / Headers / Params / Response Template。接口密钥不通过列表 API 回显；`Authorization`、`Cookie`、`X-API-Key` 等敏感 Header 以 `******` 脱敏展示，提交未修改的脱敏值时服务端保留原始 Header。
-
----
-
-## 九、MCP 工具管理（v0.10）
-
-### 9.1 管理侧
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/admin/mcp/tool` | MCP 工具列表（分页） |
-| GET/POST | `/admin/mcp/tool/add` | 新增 MCP 工具 |
-| GET/POST | `/admin/mcp/tool/edit` | 编辑 MCP 工具（`?id=`） |
-| POST | `/admin/mcp/tool/delete` | 删除 MCP 工具 |
-| POST | `/admin/mcp/tool/toggle` | 启用/禁用 MCP 工具 |
-| POST | `/admin/mcp/tool/test` | 在线测试 MCP 工具 |
-| GET | `/admin/mcp/tool/test-logs` | 获取工具测试日志（`?id=`） |
-| POST | `/admin/mcp/reload` | 热重载所有 MCP 工具 |
-
-### 9.2 MCP 工具分类
-
-| 分类 | 说明 | 工具数量 |
-|------|------|---------|
-| warehouse | 数据仓库搜索/统计/全文检索 | 4 |
-| collect | 瞭望采集/深度采集/瞭望源列表 | 3 |
-| employee | 数字员工列表/调用 | 2 |
-| model | AI 模型列表/默认模型 | 2 |
-| chat | 对话历史/消息查询 | 2 |
-| entertainment | 随机音乐推荐 | 1 |
-| crawl4ai | Crawl4ai 智能/批量采集 | 2 |
-| system | 技能加载/系统统计 | 2 |
-
-### 9.3 数字员工 MCP 工具权限
-
-- 数字员工新增/编辑页支持多选 MCP 工具（按分类组织）
-- 未配置工具时遵循**最小权限原则**：员工无权调用任何 MCP 工具
-- `crawl4ai_enabled` 字段已废弃，改为通过 MCP 工具 `collect_with_crawl4ai` 控制
-
----
-
-## 十、技能管理（v0.10 更新）
-
-### 10.1 管理侧
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/admin/skill` | 技能列表（分页） |
-| GET/POST | `/admin/skill/add` | 新增技能（支持绑定 MCP 工具） |
-| GET/POST | `/admin/skill/edit` | 编辑技能（`?id=`） |
-| POST | `/admin/skill/delete` | 删除技能 |
-| POST | `/admin/skill/toggle` | 启用/禁用技能 |
-
-### 10.2 技能类型
-
-- **纯 Prompt 型**：不绑定 MCP 工具，仅提供文本指令模板
-- **MCP 工具绑定型**（v0.10 新增）：通过 `mcp_tool_id` 关联 MCP 工具
-
-### 10.3 三色徽章体系
-
-员工列表页中技能标签按类型区分颜色：
-- 🔧 **蓝色徽章** (`.mcp-tag`)：MCP 工具
-- ⭐ **绿色徽章** (`.skill-tag`)：新格式 Skill
-- 📋 **橙黄徽章** (`.legacy-tag`)：旧格式 TAG（兼容过渡）

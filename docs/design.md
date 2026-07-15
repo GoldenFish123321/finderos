@@ -1,5 +1,4 @@
-> 文档版本: v1.0.0-beta
-> 最后更新: 2026-07-15
+# 瞭望与问数系统 (DataFinderAgentOS) — 设计文档 v0.4.2
 
 ## 1. 项目概述
 
@@ -9,11 +8,10 @@
 - 🔭 **瞭望采集**：可配置的 Web 数据采集引擎（百度/搜狗新闻等）
 - 🗄️ **数据仓库**：采集结果的统一存储与检索（FTS5 全文检索）
 - 🤖 **模型引擎**：OpenAI 范式多 Provider AI 模型的接入管理与流式对话
-- 🧠 **MCP 协议**：数据库驱动的 18 个工具注册中心，支持热重载和在线测试
-- 💬 **智能问数**：用户前台 SSE 流式对话，支持 MCP 工具调用
-- 🧑‍💼 **数字员工**：LLM 型 / API 型，支持 MCP 工具权限精细控制（最小权限原则）
-- 🎯 **技能管理**：纯 Prompt 模板库，LLM 按需加载，支持绑定 MCP 工具
-- 🏷️ **三色徽章系统**：MCP 工具（蓝）、Skill（绿）、旧 TAG（橙黄）视觉区分
+- 🧠 **MCP 协议**：数据库驱动的 18+ 工具注册中心，支持热重载和在线测试
+- 💬 **智能问数**：用户前台 SSE 流式对话
+- 🤖 **数字员工**：LLM 型 / API 型，支持 MCP 工具权限精细控制
+- 🎯 **技能管理**：纯 Prompt 模板库，LLM 按需加载执行
 
 ## 2. 技术架构
 
@@ -129,16 +127,6 @@ audit_logs (独立审计)
 - **@数字员工**：输入 `@` 触发下拉菜单，自动匹配并调用
 - **ECharts 图表**：`[CHART:...]` / `[TABLE:...]` 标记自动渲染
 
-### 3.4b 管理侧会话管理
-
-```
-管理员访问 /admin/conversation
-  → ConversationRepository.get_all_admin() 跨用户分页查询
-  → 可按 username / keyword 筛选
-  → 点击详情读取 conversation_messages
-  → 管理员删除会话时级联删除消息并写入 ADMIN_CONVERSATION_DELETE 审计日志
-```
-
 ### 3.5 数字化员工
 
 - **LLM 型**：绑定 AI 模型 + system_prompt + skills + MCP 工具权限（含 Crawl4ai 深度采集）
@@ -167,7 +155,7 @@ audit_logs (独立审计)
 - 支持按瞭望源独立配置 schedule_interval
 - 专用线程池执行采集任务，不阻塞 IOLoop
 
-### 3.7 TTS 语音合成播报（v0.9）
+### 3.7 TTS 语音合成播报（v0.4.1）
 
 **设计目标**：为每条 AI 回复消息提供一键语音朗读功能，使用 Microsoft Edge TTS 免费服务。
 

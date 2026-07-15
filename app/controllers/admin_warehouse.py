@@ -2,15 +2,14 @@
 admin_warehouse.py — 数据仓库控制器
 
 管理和展示瞭望采集的历史结果数据。
-v0.2: 支持独立的 data_warehouse 表查询（借鉴郭家琪）。
-v0.2: 新增深度采集功能（DeepCollectHandler）。
+v0.2.13: 支持独立的 data_warehouse 表查询（借鉴郭家琪）。
+v0.2.5: 新增深度采集功能（DeepCollectHandler）。
 """
 import atexit
 import json
 import concurrent.futures
 import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
-from app.models.db import get_db
 from app.models.watch_result import WatchResultRepository
 from app.models.data_warehouse import DataWarehouseRepository
 
@@ -20,7 +19,7 @@ atexit.register(_deep_collect_executor.shutdown, wait=True)
 
 
 class WarehouseHandler(AdminBaseHandler):
-    """数据仓库列表页（v0.2: 使用独立 data_warehouse 表）"""
+    """数据仓库列表页（v0.2.13: 使用独立 data_warehouse 表）"""
 
     @tornado.web.authenticated
     def get(self):
@@ -56,72 +55,8 @@ class WarehouseHandler(AdminBaseHandler):
         )
 
 
-class WatchLogHandler(AdminBaseHandler):
-    """采集日志页：从 audit_logs 读取采集相关记录。"""
-
-    @tornado.web.authenticated
-    def get(self):
-        try:
-            page = int(self.get_query_argument("page", 1))
-        except (ValueError, TypeError):
-            page = 1
-        page = max(1, page)
-        keyword = self.get_query_argument("keyword", "").strip()
-        page_size = 20
-
-        where = ["UPPER(action) LIKE ?"]
-        params = ["%COLLECT%"]
-        if keyword:
-            like = f"%{keyword}%"
-            where.append("(action LIKE ? OR username LIKE ? OR target LIKE ? OR detail LIKE ? OR client_ip LIKE ?)")
-            params.extend([like, like, like, like, like])
-        where_sql = "WHERE " + " AND ".join(where)
-
-        with get_db() as conn:
-            total = conn.execute(
-                f"SELECT COUNT(*) as cnt FROM audit_logs {where_sql}",
-                params,
-            ).fetchone()["cnt"]
-            logs = conn.execute(
-                f"""
-                SELECT id, action, username, target, detail, client_ip, created_at
-                FROM audit_logs
-                {where_sql}
-                ORDER BY id DESC
-                LIMIT ? OFFSET ?
-                """,
-                (*params, page_size, (page - 1) * page_size),
-            ).fetchall()
-
-            stats = {
-                "total": total,
-                "watch_collect": conn.execute(
-                    "SELECT COUNT(*) as cnt FROM audit_logs WHERE action = ?",
-                    ("WATCH_COLLECT",),
-                ).fetchone()["cnt"],
-                "deep_collect": conn.execute(
-                    "SELECT COUNT(*) as cnt FROM audit_logs WHERE UPPER(action) LIKE ? AND action != ?",
-                    ("%COLLECT%", "WATCH_COLLECT"),
-                ).fetchone()["cnt"],
-            }
-
-        total_pages = max(1, (total + page_size - 1) // page_size)
-        self.render(
-            "admin/watch_log.html",
-            title="采集日志 — 瞭望与问数系统",
-            username=self.current_user,
-            logs=logs,
-            page=page,
-            total=total,
-            total_pages=total_pages,
-            keyword=keyword,
-            stats=stats,
-            xsrf_token=self.xsrf_token.decode() if isinstance(self.xsrf_token, bytes) else self.xsrf_token,
-        )
-
-
 class WarehouseDetailHandler(AdminBaseHandler):
-    """数据仓库详情页（v0.2: 使用独立 data_warehouse 表，v0.2: 展示深度采集内容）"""
+    """数据仓库详情页（v0.2.13: 使用独立 data_warehouse 表，v0.2.5: 展示深度采集内容）"""
 
     @tornado.web.authenticated
     def get(self):
@@ -136,6 +71,7 @@ class WarehouseDetailHandler(AdminBaseHandler):
             return
 
         # 解析深度采集内容供模板使用
+        # sqlite3.Row 不支持 .get()，使用方括号 + try/except
         deep_content = ""
         try:
             raw_data = result["raw_data"] or ""
@@ -157,7 +93,7 @@ class WarehouseDetailHandler(AdminBaseHandler):
 
 
 class WarehouseDeleteHandler(AdminBaseHandler):
-    """删除采集结果（v0.2: 从 data_warehouse 表删除）"""
+    """删除采集结果（v0.2.13: 从 data_warehouse 表删除）"""
 
     @tornado.web.authenticated
     def post(self):
@@ -167,7 +103,7 @@ class WarehouseDeleteHandler(AdminBaseHandler):
 
 
 class WarehouseBatchDeleteHandler(AdminBaseHandler):
-    """批量删除采集结果（v0.2: 从 data_warehouse 表批量删除）"""
+    """批量删除采集结果（v0.2.13: 从 data_warehouse 表批量删除）"""
 
     @tornado.web.authenticated
     def post(self):
@@ -184,7 +120,7 @@ class WarehouseBatchDeleteHandler(AdminBaseHandler):
 
 
 class WarehouseDeepCollectHandler(AdminBaseHandler):
-    """深度采集处理器（v0.2 新增）
+    """深度采集处理器（v0.2.5 新增）
 
     对数据仓库中的链接执行深度内容抓取：
     - GET: 深度采集结果查看（悬浮窗模式数据）
@@ -204,7 +140,7 @@ class WarehouseDeepCollectHandler(AdminBaseHandler):
             self.write({"code": 1, "msg": "记录不存在"})
             return
 
-        # 解析深度采集内容
+        # 解析深度采集内容（sqlite3.Row 不支持 .get()，使用方括号）
         deep_content = ""
         try:
             raw_data = record["raw_data"] or ""

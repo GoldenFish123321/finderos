@@ -13,19 +13,13 @@ import concurrent.futures
 import json
 import logging
 import urllib.parse
-import tornado.iostream
 import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
 from app.models.watch_source import WatchSourceRepository
 from app.models.watch_result import WatchResultRepository
 from app.models.data_warehouse import DataWarehouseRepository
-from app.utils.security import has_crlf, write_audit_log
 
 logger = logging.getLogger(__name__)
-
-# 采集线程池（模块级复用，避免阻塞 Tornado IOLoop）
-_watch_collect_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="watch-collect")
-atexit.register(_watch_collect_executor.shutdown, wait=True)
 
 # 深度采集线程池（模块级复用，避免每个请求创建销毁）
 _watch_deep_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="watch-deep")
@@ -35,154 +29,6 @@ from app.services.collector import fetch_and_parse
 
 # 向后兼容别名
 parse_baidu_news_html = None  # deprecated, use app.services.collector instead
-
-
-_SKIPPED_COLLECT_HEADERS = {
-    "accept-encoding", "host",
-    "sec-fetch-dest", "sec-fetch-mode",
-    "sec-fetch-site", "sec-fetch-user",
-    "connection", "cache-control",
-}
-
-
-def _split_source_ids(raw_value: str) -> list[str]:
-    """解析逗号分隔/数组序列化后的 source_ids。"""
-    return [s.strip() for s in (raw_value or "").split(",") if s.strip()]
-
-
-def _normalize_source_ids(source_ids: list[str] | None) -> list[str]:
-    """无显式选择时默认采集所有启用瞭望源。"""
-    if source_ids:
-        return source_ids
-    sources = WatchSourceRepository.get_enabled()
-    return [str(s["id"]) for s in sources]
-
-
-def _get_collect_request(source: dict, keyword: str) -> tuple[str, dict, str]:
-    """构建单个瞭望源的请求 URL、请求头与解析器名称。"""
-    sid = source["id"]
-    url_template = source["url_template"]
-    encoded_kw = urllib.parse.quote(keyword, encoding="utf-8")
-    request_url = url_template.replace("{keyword}", encoded_kw).replace("{page}", "0")
-
-    raw_headers = WatchSourceRepository.get_headers(sid)
-    headers = {}
-    for k, v in raw_headers.items():
-        if k.lower() in _SKIPPED_COLLECT_HEADERS:
-            continue
-        if has_crlf(k) or has_crlf(v):
-            logger.warning(f"CRLF injection detected in header '{k}' for source {sid}, skipping")
-            continue
-        headers[k] = v
-
-    parser = "sogou_news" if "sogou" in request_url.lower() else "baidu_news"
-    return request_url, headers, parser
-
-
-def _collect_source(keyword: str, source_id: int) -> dict:
-    """采集单个瞭望源并持久化结果，供普通 POST 和 SSE 共用。"""
-    source = WatchSourceRepository.get_by_id(source_id)
-    if not source or source["is_enabled"] == 0:
-        return {
-            "source_id": source_id,
-            "source_name": "",
-            "request_url": "",
-            "status": 0,
-            "size": 0,
-            "news": [],
-            "result": {"source_name": "", "status": 0, "error": "瞭望源不存在或已禁用"},
-            "ok": False,
-        }
-
-    request_url, headers, parser = _get_collect_request(source, keyword)
-    try:
-        status, size, text, parsed_news = fetch_and_parse(
-            request_url, headers=headers, parser=parser,
-        )
-    except Exception as e:
-        logger.error(f"瞭望采集失败: source={source_id}, url={request_url}, error={e}", exc_info=True)
-        return {
-            "source_id": source_id,
-            "source_name": source["name"],
-            "request_url": request_url,
-            "status": 0,
-            "size": 0,
-            "news": [],
-            "result": {
-                "source_name": source["name"],
-                "status": 0,
-                "error": str(e),
-            },
-            "ok": False,
-        }
-
-    news_items = []
-    if parsed_news:
-        for news in parsed_news:
-            news_link = news.get("link", "")
-            result_id, is_new = WatchResultRepository.create_if_not_exists(
-                source_id=source_id,
-                keyword=keyword,
-                request_url=news_link or request_url,
-                response_status=status,
-                response_size=len(json.dumps(news, ensure_ascii=False).encode("utf-8")),
-                result_data=json.dumps(news, ensure_ascii=False),
-            )
-            if is_new:
-                news_items.append({
-                    "id": result_id,
-                    "title": news.get("title", ""),
-                    "link": news_link,
-                    "summary": news.get("summary", ""),
-                    "source_name": news.get("source_name", source["name"]),
-                })
-        collect_result = {
-            "source_name": source["name"],
-            "status": status,
-            "news_count": len(parsed_news),
-        }
-    else:
-        result_id, _ = WatchResultRepository.create_if_not_exists(
-            source_id=source_id,
-            keyword=keyword,
-            request_url=request_url,
-            response_status=status,
-            response_size=size,
-            result_data=text[:10000] if len(text) > 10000 else text,
-        )
-        collect_result = {
-            "source_name": source["name"],
-            "status": status,
-            "size": size,
-            "id": result_id,
-        }
-
-    return {
-        "source_id": source_id,
-        "source_name": source["name"],
-        "request_url": request_url,
-        "status": status,
-        "size": size,
-        "news": news_items,
-        "result": collect_result,
-        "ok": 200 <= int(status or 0) < 400,
-    }
-
-
-def _write_collect_audit(username: str, keyword: str, source_count: int,
-                         news_count: int, success_count: int, failed_count: int,
-                         client_ip: str) -> None:
-    """记录采集审计日志，供采集日志页查询。"""
-    write_audit_log(
-        action="WATCH_COLLECT",
-        username=username,
-        target="watch",
-        detail=(
-            f"keyword={keyword}, sources={source_count}, total_news={news_count}, "
-            f"success={success_count}, failed={failed_count}"
-        ),
-        client_ip=client_ip or "",
-    )
 
 
 class WatchHandler(AdminBaseHandler):
@@ -241,29 +87,93 @@ class WatchHandler(AdminBaseHandler):
             self.write({"code": 1, "msg": "请输入关键词"})
             return
 
-        source_ids = _normalize_source_ids(source_ids)
+        if not source_ids:
+            sources = WatchSourceRepository.get_enabled()
+            source_ids = [str(s["id"]) for s in sources]
+
         all_news = []
         collect_results = []
-        success_count = 0
-        failed_count = 0
 
         for sid in source_ids:
             try:
                 sid = int(sid)
             except (ValueError, TypeError):
                 continue
-            item = _collect_source(keyword, sid)
-            all_news.extend(item["news"])
-            collect_results.append(item["result"])
-            if item["ok"]:
-                success_count += 1
-            else:
-                failed_count += 1
+            source = WatchSourceRepository.get_by_id(sid)
+            if not source or source["is_enabled"] == 0:
+                continue
 
-        _write_collect_audit(
-            self.current_user, keyword, len(source_ids), len(all_news),
-            success_count, failed_count, self.request.remote_ip or "",
-        )
+            # 构建请求 URL（教学视频方式: 用 {keyword}/{page} 模板参数）
+            url_template = source["url_template"]
+            encoded_kw = urllib.parse.quote(keyword, encoding="utf-8")
+            request_url = url_template.replace("{keyword}", encoded_kw).replace("{page}", "0")
+
+            # 获取请求头并过滤不需要的字段，同时校验 CRLF 注入
+            raw_headers = WatchSourceRepository.get_headers(sid)
+            from app.utils.security import has_crlf
+            headers = {}
+            for k, v in raw_headers.items():
+                if k.lower() in (
+                    "accept-encoding", "host",
+                    "sec-fetch-dest", "sec-fetch-mode",
+                    "sec-fetch-site", "sec-fetch-user",
+                    "connection", "cache-control",
+                ):
+                    continue
+                if has_crlf(k) or has_crlf(v):
+                    logger.warning(f"CRLF injection detected in header '{k}' for source {sid}, skipping")
+                    continue
+                headers[k] = v
+
+            # 调用采集服务（教学视频架构: services/collector）
+            # 根据 URL 自动选择解析器
+            if "sogou" in request_url.lower():
+                parser = "sogou_news"
+            else:
+                parser = "baidu_news"
+            status, size, text, parsed_news = fetch_and_parse(
+                request_url, headers=headers, parser=parser,
+            )
+
+            if parsed_news:
+                for news in parsed_news:
+                    news_link = news.get("link", "")
+                    result_id, is_new = WatchResultRepository.create_if_not_exists(
+                        source_id=sid,
+                        keyword=keyword,
+                        request_url=news_link or request_url,
+                        response_status=status,
+                        response_size=len(json.dumps(news, ensure_ascii=False).encode("utf-8")),
+                        result_data=json.dumps(news, ensure_ascii=False),
+                    )
+                    if is_new:
+                        all_news.append({
+                            "id": result_id,
+                            "title": news.get("title", ""),
+                            "link": news_link,
+                            "summary": news.get("summary", ""),
+                            "source_name": news.get("source_name", source["name"]),
+                        })
+                collect_results.append({
+                    "source_name": source["name"],
+                    "status": status,
+                    "news_count": len(parsed_news),
+                })
+            else:
+                result_id, is_new = WatchResultRepository.create_if_not_exists(
+                    source_id=sid,
+                    keyword=keyword,
+                    request_url=request_url,
+                    response_status=status,
+                    response_size=size,
+                    result_data=text[:10000] if len(text) > 10000 else text,
+                )
+                collect_results.append({
+                    "source_name": source["name"],
+                    "status": status,
+                    "size": size,
+                    "id": result_id,
+                })
 
         self.write({
             "code": 0,
@@ -274,130 +184,8 @@ class WatchHandler(AdminBaseHandler):
         })
 
 
-class WatchStreamHandler(AdminBaseHandler):
-    """采集进度 SSE 推送接口。"""
-
-    def _write_sse(self, event: str, data: dict) -> None:
-        self.write(f"event: {event}\n")
-        self.write(f"data: {json.dumps(data, ensure_ascii=False)}\n\n")
-
-    @tornado.web.authenticated
-    async def get(self):
-        # SSE 使用 GET，但该接口会触发采集并写库；需手动执行 XSRF 校验。
-        self.check_xsrf_cookie()
-        keyword = self.get_query_argument("keyword", "").strip()
-        source_ids = _split_source_ids(self.get_query_argument("source_ids", ""))
-
-        self.set_header("Content-Type", "text/event-stream; charset=utf-8")
-        self.set_header("Cache-Control", "no-cache")
-        self.set_header("Connection", "keep-alive")
-        self.set_header("X-Accel-Buffering", "no")
-
-        async def emit(event: str, data: dict):
-            self._write_sse(event, data)
-            await self.flush()
-
-        try:
-            if not keyword:
-                await emit("collect_error", {"code": 1, "msg": "请输入关键词"})
-                self.finish()
-                return
-
-            source_ids = _normalize_source_ids(source_ids)
-            numeric_source_ids = []
-            for sid in source_ids:
-                try:
-                    numeric_source_ids.append(int(sid))
-                except (ValueError, TypeError):
-                    continue
-
-            total_sources = len(numeric_source_ids)
-            if total_sources == 0:
-                await emit("collect_error", {"code": 1, "msg": "暂无可用瞭望源"})
-                self.finish()
-                return
-
-            await emit("collect_progress", {
-                "percent": 0,
-                "current_url": "",
-                "success": 0,
-                "failed": 0,
-                "message": "开始采集",
-            })
-
-            all_news = []
-            collect_results = []
-            success_count = 0
-            failed_count = 0
-            loop = asyncio.get_event_loop()
-
-            for index, sid in enumerate(numeric_source_ids, start=1):
-                source = WatchSourceRepository.get_by_id(sid)
-                if source and source["is_enabled"] == 1:
-                    request_url, _, _ = _get_collect_request(source, keyword)
-                    source_name = source["name"]
-                else:
-                    request_url = ""
-                    source_name = ""
-
-                await emit("collect_progress", {
-                    "percent": int((index - 1) / total_sources * 100),
-                    "current_url": request_url,
-                    "source_name": source_name,
-                    "success": success_count,
-                    "failed": failed_count,
-                    "message": f"正在采集 {source_name or sid}",
-                })
-
-                item = await loop.run_in_executor(
-                    _watch_collect_executor, _collect_source, keyword, sid
-                )
-                all_news.extend(item["news"])
-                collect_results.append(item["result"])
-                if item["ok"]:
-                    success_count += 1
-                else:
-                    failed_count += 1
-
-                await emit("collect_progress", {
-                    "percent": int(index / total_sources * 100),
-                    "current_url": item["request_url"],
-                    "source_name": item["source_name"],
-                    "success": success_count,
-                    "failed": failed_count,
-                    "message": f"已完成 {index}/{total_sources}",
-                })
-
-            _write_collect_audit(
-                self.current_user, keyword, total_sources, len(all_news),
-                success_count, failed_count, self.request.remote_ip or "",
-            )
-
-            await emit("collect_done", {
-                "code": 0,
-                "msg": f"采集完成，共获取 {len(all_news)} 条新闻",
-                "news": all_news,
-                "results": collect_results,
-                "total": len(all_news),
-                "success": success_count,
-                "failed": failed_count,
-            })
-        except tornado.iostream.StreamClosedError:
-            logger.info("采集 SSE 连接已关闭")
-            return
-        except Exception as e:
-            logger.error(f"采集 SSE 异常: {e}", exc_info=True)
-            try:
-                await emit("collect_error", {"code": 1, "msg": f"采集异常: {e}"})
-            except tornado.iostream.StreamClosedError:
-                return
-        finally:
-            if not self._finished:
-                self.finish()
-
-
 class WatchSaveHandler(AdminBaseHandler):
-    """保存选中的采集结果到数据仓库（含 URL 去重，v0.2 同时写入独立 data_warehouse 表）"""
+    """保存选中的采集结果到数据仓库（含 URL 去重，v0.2.13 同时写入独立 data_warehouse 表）"""
 
     @tornado.web.authenticated
     def post(self):
@@ -442,7 +230,7 @@ class WatchSaveHandler(AdminBaseHandler):
 
         ids = [int(rid) for rid in result_ids if rid]
 
-        # v0.2: 先写入独立 data_warehouse 表，成功后再标记 SAVED（避免解析失败导致错误标记）
+        # v0.2.13: 先写入独立 data_warehouse 表，成功后再标记 SAVED（避免解析失败导致错误标记）
         dw_count = 0
         saved_ids = []
         for rid in ids:
@@ -492,7 +280,7 @@ class WatchSaveHandler(AdminBaseHandler):
 
 
 class WatchDeepCollectHandler(AdminBaseHandler):
-    """瞭望采集页一站式深度采集（v0.2 新增）
+    """瞭望采集页一站式深度采集（v0.2.5 新增）
 
     选中采集结果 → 保存到数据仓库 → 立即深度采集正文内容。
     用户无需先跳转到数据仓库页面再操作。

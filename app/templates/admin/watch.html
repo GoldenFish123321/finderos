@@ -37,25 +37,6 @@
   border-top-color: var(--accent-blue);
   border-radius: 50%; animation: spin 0.8s linear infinite;
 }
-.progress-track {
-  width: 100%; height: 8px; margin: 10px 0 6px;
-  border-radius: 999px; overflow: hidden;
-  background: rgba(148, 163, 184, 0.18);
-  border: 1px solid var(--border-subtle);
-}
-.progress-bar {
-  height: 100%; width: 0%;
-  background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
-  border-radius: 999px; transition: width 0.25s ease;
-}
-.progress-meta {
-  display: flex; justify-content: space-between; gap: 8px;
-  font-size: 11px; color: var(--text-muted);
-}
-.progress-url {
-  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 11px; color: var(--text-muted); text-align: left;
-}
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* 统计区 */
@@ -187,18 +168,8 @@
                     <span>⚡</span> 立即采集
                 </button>
                 <div class="collect-progress" id="collect-progress">
-                    <div>
-                        <span class="spinner"></span>
-                        <span id="progress-message" style="color:var(--text-muted);font-size:13px;">准备采集...</span>
-                    </div>
-                    <div class="progress-track">
-                        <div class="progress-bar" id="progress-bar"></div>
-                    </div>
-                    <div class="progress-meta">
-                        <span id="progress-percent">0%</span>
-                        <span id="progress-counts">成功 0 / 失败 0</span>
-                    </div>
-                    <div class="progress-url" id="progress-url" title=""></div>
+                    <span class="spinner"></span>
+                    <span style="color:var(--text-muted);font-size:13px;">采集中，请稍后...</span>
                 </div>
                 <div id="collect-result" style="font-size:13px;color:var(--accent-green);"></div>
             </div>
@@ -397,65 +368,7 @@ layui.use(['laypage', 'jquery', 'form'], function(){
     });
     {% end %}
 
-    function setCollectBusy(isBusy) {
-        document.getElementById('collect-progress').style.display = isBusy ? 'block' : 'none';
-        document.getElementById('btn-collect').disabled = isBusy;
-    }
-
-    function updateCollectProgress(data) {
-        data = data || {};
-        var percent = Math.max(0, Math.min(100, parseInt(data.percent || 0, 10)));
-        document.getElementById('progress-bar').style.width = percent + '%';
-        document.getElementById('progress-percent').textContent = percent + '%';
-        document.getElementById('progress-counts').textContent =
-            '成功 ' + (data.success || 0) + ' / 失败 ' + (data.failed || 0);
-        document.getElementById('progress-message').textContent = data.message || '采集中...';
-        var url = data.current_url || '';
-        document.getElementById('progress-url').textContent = url;
-        document.getElementById('progress-url').title = url;
-    }
-
-    function applyCollectResult(res) {
-        if (res.code === 0) {
-            document.getElementById('collect-result').textContent = res.msg;
-            if (res.news && res.news.length > 0) {
-                renderNewsCards(res.news);
-                document.getElementById('news-total').textContent = res.total;
-                document.getElementById('news-toolbar').style.display = 'flex';
-                var emptyEl = document.getElementById('news-empty');
-                if (emptyEl) emptyEl.style.display = 'none';
-                // 隐藏分页（采集结果直接展示，无需分页导航）
-                var pagEl = document.getElementById('watch-pagination');
-                if (pagEl) pagEl.style.display = 'none';
-            }
-        } else {
-            layer.msg(res.msg || '采集失败', {icon: 2});
-        }
-    }
-
-    function collectWithPostFallback(keyword, sourceIds) {
-        $.post('/admin/watch', {
-            keyword: keyword,
-            source_ids: sourceIds.join(','),
-            _xsrf: xsrf
-        }, function(res){
-            setCollectBusy(false);
-            applyCollectResult(res);
-        }, 'json').fail(function(){
-            setCollectBusy(false);
-            layer.msg('采集请求失败', {icon: 2});
-        });
-    }
-
-    function parseSsePayload(evt) {
-        try {
-            return JSON.parse((evt && evt.data) || '{}');
-        } catch (e) {
-            return null;
-        }
-    }
-
-    // 采集按钮：优先使用 SSE 实时进度，EventSource 不可用时回退旧 POST
+    // 采集按钮
     document.getElementById('btn-collect').addEventListener('click', function(){
         var keyword = document.getElementById('collect-keyword').value.trim();
         if (!keyword) { layer.msg('请输入关键词', {icon: 2}); return; }
@@ -465,56 +378,37 @@ layui.use(['laypage', 'jquery', 'form'], function(){
             sourceIds.push(cb.value);
         });
 
-        setCollectBusy(true);
+        document.getElementById('collect-progress').style.display = 'block';
+        this.disabled = true;
         document.getElementById('collect-result').textContent = '';
-        updateCollectProgress({percent: 0, success: 0, failed: 0, message: '准备采集...'});
 
-        if (!window.EventSource) {
-            collectWithPostFallback(keyword, sourceIds);
-            return;
-        }
-
-        var streamUrl = '/admin/watch/stream?keyword=' + encodeURIComponent(keyword)
-            + '&source_ids=' + encodeURIComponent(sourceIds.join(','))
-            + '&_xsrf=' + encodeURIComponent(xsrf);
-        var es = new EventSource(streamUrl);
-
-        es.addEventListener('collect_progress', function(evt) {
-            var data = parseSsePayload(evt);
-            if (data) updateCollectProgress(data);
-        });
-
-        es.addEventListener('collect_done', function(evt) {
-            var res = parseSsePayload(evt);
-            if (!res) {
-                es.close();
-                setCollectBusy(false);
-                layer.msg('采集结果解析失败', {icon: 2});
-                return;
+        $.post('/admin/watch', {
+            keyword: keyword,
+            source_ids: sourceIds.join(','),
+            _xsrf: xsrf
+        }, function(res){
+            document.getElementById('collect-progress').style.display = 'none';
+            document.getElementById('btn-collect').disabled = false;
+            if (res.code === 0) {
+                document.getElementById('collect-result').textContent = res.msg;
+                if (res.news && res.news.length > 0) {
+                    renderNewsCards(res.news);
+                    document.getElementById('news-total').textContent = res.total;
+                    document.getElementById('news-toolbar').style.display = 'flex';
+                    var emptyEl = document.getElementById('news-empty');
+                    if (emptyEl) emptyEl.style.display = 'none';
+                    // 隐藏分页（采集结果直接展示，无需分页导航）
+                    var pagEl = document.getElementById('watch-pagination');
+                    if (pagEl) pagEl.style.display = 'none';
+                }
+            } else {
+                layer.msg(res.msg, {icon: 2});
             }
-            updateCollectProgress({
-                percent: 100,
-                success: res.success || 0,
-                failed: res.failed || 0,
-                message: '采集完成'
-            });
-            es.close();
-            setCollectBusy(false);
-            applyCollectResult(res);
+        }, 'json').fail(function(){
+            document.getElementById('collect-progress').style.display = 'none';
+            document.getElementById('btn-collect').disabled = false;
+            layer.msg('采集请求失败', {icon: 2});
         });
-
-        es.addEventListener('collect_error', function(evt) {
-            var res = parseSsePayload(evt) || {};
-            es.close();
-            setCollectBusy(false);
-            layer.msg(res.msg || '采集失败', {icon: 2});
-        });
-
-        es.onerror = function() {
-            es.close();
-            setCollectBusy(false);
-            layer.msg('采集进度连接中断，请重试', {icon: 2});
-        };
     });
 
     // 保存到数据仓库

@@ -3,7 +3,7 @@ employee_tools.py — 数字员工类 MCP 工具处理函数
 
 工具:
 - list_digital_employees: 员工列表
-- invoke_digital_employee: 调用指定员工 (v0.10 新增)
+- invoke_digital_employee: 调用指定员工 (v0.4.2 新增)
 """
 
 from typing import Any, Dict
@@ -28,7 +28,7 @@ def _list_digital_employees() -> Dict[str, Any]:
 
 
 async def _invoke_digital_employee(employee_name: str, message: str) -> Dict[str, Any]:
-    """调用指定数字员工执行任务（v0.10 新增）。
+    """调用指定数字员工执行任务（v0.4.2 新增）。
 
     支持按名称精确匹配或 ID 查找员工。
     """

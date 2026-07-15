@@ -158,6 +158,19 @@ class UserRepository:
             return cursor.rowcount > 0
 
     @staticmethod
+    def delete_user_by_username(username: str) -> bool:
+        """Delete a user by username. Cannot delete admin."""
+        with get_db() as conn:
+            user = conn.execute(
+                "SELECT id, username FROM users WHERE username = ?", (username,)
+            ).fetchone()
+            if not user or user["username"] == "admin":
+                return False
+            cursor = conn.execute("DELETE FROM users WHERE username = ?", (username,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    @staticmethod
     def toggle_enabled(user_id: int) -> int:
         """Toggle user enabled/disabled. Returns new status (0/1), -1 if not found, -2 if admin."""
         with get_db() as conn:
@@ -202,10 +215,9 @@ class UserRepository:
         return True, "密码修改成功"
 
     @staticmethod
-    def batch_delete(ids: list[int]) -> tuple[int, int]:
-        """批量删除用户（排除 admin）。返回 (成功删除数, 跳过的admin数)。"""
+    def batch_delete(ids: list[int]) -> int:
+        """批量删除用户（排除 admin）。返回成功删除数。"""
         count = 0
-        skipped_admin = 0
         with get_db() as conn:
             for uid in ids:
                 user = conn.execute(
@@ -214,16 +226,13 @@ class UserRepository:
                 if user and user["username"] != "admin":
                     conn.execute("DELETE FROM users WHERE id = ?", (uid,))
                     count += 1
-                elif user and user["username"] == "admin":
-                    skipped_admin += 1
             conn.commit()
-        return count, skipped_admin
+        return count
 
     @staticmethod
-    def batch_toggle(ids: list[int], enable: bool) -> tuple[int, int]:
-        """批量启用/禁用用户（排除 admin）。返回 (成功操作数, 跳过的admin数)。"""
+    def batch_toggle(ids: list[int], enable: bool) -> int:
+        """批量启用/禁用用户（排除 admin）。返回成功操作数。"""
         count = 0
-        skipped_admin = 0
         new_status = 1 if enable else 0
         with get_db() as conn:
             for uid in ids:
@@ -236,7 +245,5 @@ class UserRepository:
                         (new_status, uid),
                     )
                     count += 1
-                elif user and user["username"] == "admin":
-                    skipped_admin += 1
             conn.commit()
-        return count, skipped_admin
+        return count

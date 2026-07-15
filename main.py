@@ -16,7 +16,7 @@ from app.utils.security import _ensure_secret_key
 
 # ── 模块级日志（必须在任何使用 logger 的函数之前定义）──
 logger = logging.getLogger(__name__)
-from app.controllers.auth import LoginHandler, LogoutHandler, RegisterHandler
+from app.controllers.auth import LoginHandler, LogoutHandler, RegisterHandler, UserAccountHandler
 from app.controllers.home import IndexHandler
 from app.controllers.admin_home import AdminIndexHandler
 from app.controllers.admin_user import (
@@ -31,7 +31,7 @@ from app.controllers.admin_function import (
 )
 from app.controllers.admin_menu import MenuHandler, MenuSortHandler
 from app.controllers.admin_watch import (
-    WatchHandler, WatchStreamHandler, WatchSaveHandler, WatchDeepCollectHandler,
+    WatchHandler, WatchSaveHandler, WatchDeepCollectHandler,
 )
 from app.controllers.admin_watch_source import (
     WatchSourceListHandler, WatchSourceFormHandler,
@@ -39,7 +39,7 @@ from app.controllers.admin_watch_source import (
 )
 from app.controllers.admin_warehouse import (
     WarehouseHandler, WarehouseDetailHandler, WarehouseDeleteHandler,
-    WarehouseBatchDeleteHandler, WarehouseDeepCollectHandler, WatchLogHandler,
+    WarehouseBatchDeleteHandler, WarehouseDeepCollectHandler,
 )
 from app.controllers.admin_model import (
     ModelListHandler, ModelFormHandler, ModelDeleteHandler,
@@ -54,9 +54,6 @@ from app.controllers.admin_employee import (
     EmployeeToggleHandler, EmployeeInvokeHandler, EmployeeApiListHandler,
     EmployeeTestPageHandler,
 )
-from app.controllers.admin_conversation import (
-    AdminConversationListHandler, AdminConversationDeleteHandler,
-)
 from app.controllers.admin_skill import (
     SkillListHandler, SkillFormHandler, SkillDeleteHandler, SkillToggleHandler,
 )
@@ -70,7 +67,6 @@ from app.controllers.user_chat import (
     UserConversationListHandler, UserConversationCreateHandler,
     UserConversationDeleteHandler, UserConversationMessagesHandler,
     UserChatStreamHandler, UserEmployeeInvokeHandler,
-    UserChatTTSHandler,
 )
 from app.models.db import init_db, seed_default_data
 from app.services.scheduler import CollectionScheduler
@@ -96,6 +92,7 @@ def make_app() -> tornado.web.Application:
             (r"/", LoginHandler),
             (r"/logout", LogoutHandler),
             (r"/register", RegisterHandler),
+            (r"/account", UserAccountHandler),
             (r"/index", IndexHandler),
 
             # 管理后台 — Dashboard
@@ -131,12 +128,10 @@ def make_app() -> tornado.web.Application:
             # ========== Day6-2 新增模块 ==========
             # 瞭望采集
             (r"/admin/watch", WatchHandler),
-            (r"/admin/watch/stream", WatchStreamHandler),
             (r"/admin/watch/save", WatchSaveHandler),
             (r"/admin/watch/deep-collect", WatchDeepCollectHandler),
 
             # 瞭源管理
-            (r"/admin/watch/log", WatchLogHandler),
             (r"/admin/watch/source", WatchSourceListHandler),
             (r"/admin/watch/source/add", WatchSourceFormHandler),
             (r"/admin/watch/source/edit", WatchSourceFormHandler),
@@ -159,9 +154,6 @@ def make_app() -> tornado.web.Application:
             (r"/admin/model/toggle", ModelToggleHandler),
             (r"/admin/model/default", ModelDefaultHandler),
             (r"/admin/api/model/list", ModelApiListHandler),
-            # 会话管理：管理员查看/筛选/删除所有用户会话
-            (r"/admin/conversation", AdminConversationListHandler),
-            (r"/admin/conversation/delete", AdminConversationDeleteHandler),
             # 接口管理：API 接口模板 CRUD / 测试 / 数字员工联动
             (r"/admin/interface", InterfaceListHandler),
             (r"/admin/interface/add", InterfaceFormHandler),
@@ -170,7 +162,7 @@ def make_app() -> tornado.web.Application:
             (r"/admin/interface/toggle", InterfaceToggleHandler),
             (r"/admin/interface/test", InterfaceTestHandler),
             (r"/admin/api/interface/list", InterfaceApiListHandler),
-            # ========== v0.4 新增模块 ==========
+            # ========== v0.3.0 新增模块 ==========
             # 数字化员工
             (r"/admin/employee", EmployeeListHandler),
             (r"/admin/employee/add", EmployeeFormHandler),
@@ -190,7 +182,7 @@ def make_app() -> tornado.web.Application:
             (r"/admin/skill/delete", SkillDeleteHandler),
             (r"/admin/skill/toggle", SkillToggleHandler),
 
-            # ========== v0.10 MCP 工具管理 ==========
+            # ========== v0.4.2 MCP 工具管理 ==========
             (r"/admin/mcp/tool", MCPToolListHandler),
             (r"/admin/mcp/tool/add", MCPToolFormHandler),
             (r"/admin/mcp/tool/edit", MCPToolFormHandler),
@@ -200,7 +192,7 @@ def make_app() -> tornado.web.Application:
             (r"/admin/mcp/tool/test-logs", MCPToolTestLogsHandler),
             (r"/admin/mcp/reload", MCPToolReloadHandler),
 
-            # ========== v0.4 用户前台-智能问数 ==========
+            # ========== v0.3.0 用户前台-智能问数 ==========
             # 前台对话主页
             (r"/chat", UserChatPageHandler),
             # 前台 SSE 流式 AI 对话
@@ -216,8 +208,6 @@ def make_app() -> tornado.web.Application:
             (r"/api/chat/conversation/create", UserConversationCreateHandler),
             (r"/api/chat/conversation/delete", UserConversationDeleteHandler),
             (r"/api/chat/conversation/messages", UserConversationMessagesHandler),
-            # TTS 语音合成（Edge TTS）
-            (r"/api/chat/tts", UserChatTTSHandler),
         ],
         template_path="app/templates",
         static_path="app/static",
@@ -239,14 +229,10 @@ if __name__ == "__main__":
     # 插入种子数据（默认角色、管理员、功能）
     seed_default_data()
 
-    # v0.10: 显式注册 MCP 工具（确保数据库驱动工具在启动时加载）
-    from app.mcp.tools import register_all_tools
-    register_all_tools()
-
     # 创建应用
     app = make_app()
 
-    # 启动定时采集调度器 (v0.6)
+    # 启动定时采集调度器 (v0.4.0)
     scheduler = CollectionScheduler(app, check_interval_ms=60000)
     scheduler.start()
 

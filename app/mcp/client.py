@@ -7,19 +7,12 @@ app/mcp/client.py — MCP Client（进程内直连）
 3. 带退避的智能意图匹配（无 API Key 时的回退方案）
 """
 
-import contextvars
 import json
 import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.mcp.server import MCPServer
-
-# 使用 contextvars 替代 threading.current_thread() 猴补丁传递 MCP 上下文
-# 参见: https://docs.python.org/3/library/contextvars.html
-_mcp_context_var: contextvars.ContextVar[Dict[str, Any]] = contextvars.ContextVar(
-    "_mcp_context", default={}
-)
 
 logger = logging.getLogger(__name__)
 
@@ -51,22 +44,6 @@ class MCPClient:
     def list_tools(self) -> List[Dict[str, Any]]:
         """获取 MCP 格式的工具列表。"""
         return self._server.list_tools()
-
-    def get_openai_tools_for_employee(self, emp_id: int = None) -> List[Dict[str, Any]]:
-        """获取按员工权限过滤后的 OpenAI 格式工具列表 (v0.10 新增)。
-
-        Args:
-            emp_id: 数字员工 ID。None 或 0 表示返回所有工具。
-        """
-        if not emp_id:
-            return self.get_openai_tools()
-
-        from app.models.mcp_tool import MCPToolRepository
-        tools = MCPToolRepository.get_by_employee(emp_id)
-        if not tools:
-            return []  # 未配置工具时返回空列表，最小权限原则
-        tool_names = [t["name"] for t in tools]
-        return self._server.get_openai_tools(tool_names)
 
     # ── 工具执行 ─────────────────────────────────────────
 
@@ -138,8 +115,9 @@ class MCPClient:
 
     def _inject_context(self, arguments: Dict[str, Any], tool_name: str) -> Dict[str, Any]:
         """为特定工具注入上下文参数。"""
-        # 通过 contextvars 获取当前请求上下文（协程安全）
-        ctx = _mcp_context_var.get()
+        # 通过线程局部存储获取当前请求上下文
+        import threading
+        ctx = getattr(threading.current_thread(), "_mcp_context", {})
         if ctx:
             username = ctx.get("username", "")
             if tool_name in ("list_conversations", "get_conversation_messages"):
@@ -149,33 +127,17 @@ class MCPClient:
 
     # ── 智能意图匹配（无 API Key 时的回退方案）────────────
 
-    def match_tool_by_query(self, user_message: str, emp_id: int = None) -> Optional[Tuple[str, Dict[str, Any]]]:
+    def match_tool_by_query(self, user_message: str) -> Optional[Tuple[str, Dict[str, Any]]]:
         """基于工具描述和用户查询的智能匹配。
 
         不使用硬编码关键词，而是利用工具自身的 name + description
         进行语义级匹配。这比旧的关键词方案更灵活、更可扩展。
 
-        Args:
-            user_message: 用户输入的消息文本。
-            emp_id: 数字员工 ID。提供时仅匹配该员工有权使用的 MCP 工具（最小权限原则）。
-
         Returns:
             (tool_name, arguments) 或 None（无匹配时走通用对话）
         """
         msg_lower = user_message.lower().strip()
-        all_tools = self._server.list_tools()
-
-        # ── v0.8: 按员工权限过滤工具 ──
-        allowed_names = None
-        if emp_id:
-            from app.models.mcp_tool import MCPToolRepository
-            emp_tools = MCPToolRepository.get_by_employee(emp_id)
-            if not emp_tools:
-                return None  # 最小权限：未配置工具则无权使用任何工具
-            allowed_names = {t["name"] for t in emp_tools}
-            tools = [t for t in all_tools if t["name"] in allowed_names]
-        else:
-            tools = all_tools
+        tools = self._server.list_tools()
 
         # 第一步：精确 URL 模式匹配
         url_match = re.search(r'https?://[^\s]{5,}', user_message)
@@ -185,10 +147,7 @@ class MCPClient:
             deep_kw = ["深度采集", "抓取", "提取", "采集这个", "帮我看看这个链接",
                        "fetch", "crawl", "scrape"]
             if any(kw in msg_lower for kw in deep_kw):
-                tool_name = "deep_collect_url"
-                if emp_id and tool_name not in allowed_names:
-                    return None  # 员工无权使用此工具
-                return (tool_name, {"url": url})
+                return ("deep_collect_url", {"url": url})
 
         # 第二步：基于工具名称和描述的评分匹配
         best_score = 0
@@ -297,12 +256,14 @@ class MCPClient:
 
 # 设置当前请求上下文（在 handler 中调用）
 def set_mcp_context(**kwargs):
-    """设置 MCP 工具调用的上下文信息（基于 contextvars，协程安全）。"""
-    ctx = _mcp_context_var.get().copy()
+    """设置 MCP 工具调用的上下文信息（线程局部存储）。"""
+    import threading
+    ctx = getattr(threading.current_thread(), "_mcp_context", {})
     ctx.update(kwargs)
-    _mcp_context_var.set(ctx)
+    threading.current_thread()._mcp_context = ctx
 
 
 def clear_mcp_context():
     """清除 MCP 上下文。"""
-    _mcp_context_var.set({})
+    import threading
+    threading.current_thread()._mcp_context = {}

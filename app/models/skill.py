@@ -117,7 +117,7 @@ class SkillRepository:
         """创建技能。返回新 ID 或 -1。
         
         Args:
-            mcp_tool_id: 关联的 MCP 工具 ID（v0.10 新增，允许为空表示纯 prompt 型）
+            mcp_tool_id: 关联的 MCP 工具 ID（v0.4.2 新增，允许为空表示纯 prompt 型）
         """
         try:
             with get_db() as conn:
@@ -137,7 +137,7 @@ class SkillRepository:
         """更新技能。返回是否成功。
         
         Args:
-            mcp_tool_id: 关联的 MCP 工具 ID（v0.10 新增，允许为空）
+            mcp_tool_id: 关联的 MCP 工具 ID（v0.4.2 新增，允许为空）
         """
         try:
             with get_db() as conn:

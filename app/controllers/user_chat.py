@@ -19,14 +19,10 @@ import tornado.web
 
 from app.controllers.base import BaseHandler
 from app.models.ai_model import AiModelRepository
-from app.models.api_interface import normalize_api_method, normalize_headers
 from app.models.conversation import ConversationRepository
 from app.models.digital_employee import DigitalEmployeeRepository
 from app.models.data_warehouse import DataWarehouseRepository
-from app.models.skill import SkillRepository
-from app.models.mcp_tool import MCPToolRepository
-from app.utils.security import has_crlf, write_audit_log
-from app.utils.safe_http import SafeHttpError, safe_http_request
+from app.utils.security import write_audit_log
 
 # ── MCP 模块（新增） ──
 from app.mcp.server import MCPServer
@@ -163,45 +159,6 @@ def _build_employee_card(emp: dict, api_data: dict, user_message: str = "") -> d
                 "date": api_data.get("date") or api_data.get("time") or api_data.get("updateTime") or "",
                 "detail": str(api_data.get("detail", api_data.get("description", ""))) if api_data.get("detail") or api_data.get("description") else "",
             }
-        return card
-
-    # 音乐类员工：识别音乐数据（支持 Meting API 列表格式和 dict 格式）
-    if ("音乐" in emp_name or "music" in emp_name.lower() or
-            "song" in str(api_data).lower() or "music" in str(api_data).lower() or
-            (isinstance(api_data, dict) and ("artistsname" in api_data or "coverurl" in api_data)) or
-            (isinstance(api_data, list) and len(api_data) > 0 and isinstance(api_data[0], dict) and "name" in api_data[0])):
-        import random as _random
-        card = {"type": "music", "title": f"{emp_name} · 随机音乐", "data": {}}
-
-        # Meting 播放列表格式：[{name, artist, url, pic, lrc}, ...] — 随机选取一首
-        if isinstance(api_data, list) and len(api_data) > 0:
-            song = _random.choice(api_data)
-            if isinstance(song, dict):
-                card["data"] = {
-                    "name": song.get("name", song.get("title", "未知歌曲")),
-                    "artist": song.get("artist", song.get("artistsname", song.get("singer", "未知歌手"))),
-                    "cover": song.get("pic", song.get("coverurl", song.get("cover", ""))),
-                    "url": song.get("url", song.get("play_url", song.get("music_url", ""))),
-                }
-                return card
-
-        # Dict 格式（api.uomg.com 等）
-        if isinstance(api_data, dict):
-            if "data" in api_data and isinstance(api_data["data"], dict):
-                inner = api_data["data"]
-                card["data"] = {
-                    "name": inner.get("name", inner.get("title", "未知歌曲")),
-                    "artist": inner.get("artistsname", inner.get("artist", inner.get("singer", "未知歌手"))),
-                    "cover": inner.get("coverurl", inner.get("cover", inner.get("pic", ""))),
-                    "url": inner.get("url", inner.get("play_url", inner.get("music_url", ""))),
-                }
-            else:
-                card["data"] = {
-                    "name": api_data.get("name", api_data.get("title", "未知歌曲")),
-                    "artist": api_data.get("artistsname", api_data.get("artist", api_data.get("singer", "未知歌手"))),
-                    "cover": api_data.get("coverurl", api_data.get("cover", api_data.get("pic", ""))),
-                    "url": api_data.get("url", api_data.get("play_url", api_data.get("music_url", ""))),
-                }
         return card
 
     # 新闻类员工
@@ -382,43 +339,11 @@ class UserEmployeeListHandler(BaseHandler):
     @tornado.web.authenticated
     def get(self):
         employees = DigitalEmployeeRepository.get_enabled()
-        items = []
-        for e in employees:
-            item = {
-                "id": e["id"], "name": e["name"],
-                "employee_type": e.get("employee_type", "llm"),
-                "description": e.get("description", ""),
-            }
-            # v0.10: 解析技能标签（兼容旧格式字符串和新格式 ID）
-            try:
-                raw_skills = json.loads(e.get("skills", "[]"))
-            except (json.JSONDecodeError, TypeError):
-                raw_skills = []
-            if raw_skills and isinstance(raw_skills[0], int):
-                resolved = SkillRepository.resolve_by_ids(raw_skills)
-                item["skills_list"] = [s["name"] for s in resolved]
-                item["skills_legacy"] = False
-            elif raw_skills and isinstance(raw_skills[0], str):
-                resolved = SkillRepository.resolve_by_names(raw_skills)
-                if resolved:
-                    item["skills_list"] = [s["name"] for s in resolved]
-                else:
-                    item["skills_list"] = raw_skills
-                item["skills_legacy"] = True
-            else:
-                item["skills_list"] = []
-                item["skills_legacy"] = False
-            # v0.10: 解析 MCP 工具
-            try:
-                raw_tool_ids = json.loads(e.get("mcp_tool_ids", "[]"))
-            except (json.JSONDecodeError, TypeError):
-                raw_tool_ids = []
-            if raw_tool_ids:
-                mcp_tool_rows = MCPToolRepository.get_by_ids(raw_tool_ids)
-                item["mcp_tools_list"] = [t["display_name"] for t in mcp_tool_rows]
-            else:
-                item["mcp_tools_list"] = []
-            items.append(item)
+        items = [{
+            "id": e["id"], "name": e["name"],
+            "employee_type": e.get("employee_type", "llm"),
+            "description": e.get("description", ""),
+        } for e in employees]
         self.write({"code": 0, "items": items})
 
 
@@ -726,27 +651,6 @@ class UserChatStreamHandler(BaseHandler):
                         f"🔧 正在执行: {tool_name}...",
                         event="tool_status"
                     )
-                    # 音乐工具：发送卡片事件
-                    if tool_name == "get_random_music":
-                        try:
-                            result_data = json.loads(tr.get("content", "{}"))
-                            if isinstance(result_data, dict) and result_data.get("success"):
-                                music_card = {
-                                    "type": "music",
-                                    "title": "随机音乐",
-                                    "data": {
-                                        "name": result_data.get("name", "未知歌曲"),
-                                        "artist": result_data.get("artist", "未知歌手"),
-                                        "cover": result_data.get("cover", ""),
-                                        "url": result_data.get("url", ""),
-                                    }
-                                }
-                                self.write(
-                                    f"event: card\ndata: {json.dumps(music_card, ensure_ascii=False)}\n\n"
-                                )
-                                await self.flush()
-                        except Exception:
-                            pass
                 continue
 
             elif tool_calls:
@@ -758,32 +662,6 @@ class UserChatStreamHandler(BaseHandler):
                 tool_results = await _mcp_client.execute_tool_calls(tool_calls)
                 for tr in tool_results:
                     messages.append(tr)
-                    # 音乐工具：发送卡片事件
-                    try:
-                        tool_name_2 = ""
-                        for tc in tool_calls:
-                            if tc.get("id") == tr.get("tool_call_id"):
-                                tool_name_2 = tc.get("function", {}).get("name", "")
-                                break
-                        if tool_name_2 == "get_random_music":
-                            result_data = json.loads(tr.get("content", "{}"))
-                            if isinstance(result_data, dict) and result_data.get("success"):
-                                music_card = {
-                                    "type": "music",
-                                    "title": "随机音乐",
-                                    "data": {
-                                        "name": result_data.get("name", "未知歌曲"),
-                                        "artist": result_data.get("artist", "未知歌手"),
-                                        "cover": result_data.get("cover", ""),
-                                        "url": result_data.get("url", ""),
-                                    }
-                                }
-                                self.write(
-                                    f"event: card\ndata: {json.dumps(music_card, ensure_ascii=False)}\n\n"
-                                )
-                                await self.flush()
-                    except Exception:
-                        pass
                 continue
 
             else:
@@ -875,22 +753,6 @@ class UserChatStreamHandler(BaseHandler):
             if tool:
                 try:
                     result = await tool.call(arguments)
-                    # 音乐工具：发送卡片事件
-                    if tool_name == "get_random_music" and isinstance(result, dict) and result.get("success"):
-                        music_card = {
-                            "type": "music",
-                            "title": "随机音乐",
-                            "data": {
-                                "name": result.get("name", "未知歌曲"),
-                                "artist": result.get("artist", "未知歌手"),
-                                "cover": result.get("cover", ""),
-                                "url": result.get("url", ""),
-                            }
-                        }
-                        self.write(
-                            f"event: card\ndata: {json.dumps(music_card, ensure_ascii=False)}\n\n"
-                        )
-                        await self.flush()
                     reply = self._format_tool_result_as_reply(
                         tool_name, arguments, result, user_message, model
                     )
@@ -915,18 +777,6 @@ class UserChatStreamHandler(BaseHandler):
     ) -> str:
         """将工具执行结果格式化为自然语言回复。"""
         model_name = model.get("name", "AI助手") if isinstance(model, dict) else "AI助手"
-
-        if tool_name == "get_random_music" and isinstance(result, dict) and result.get("success"):
-            source = result.get("source", "网易云音乐热歌榜")
-            note = result.get("note", "")
-            lines = [
-                f"🎵 **{result.get('name', '未知歌曲')}** — *{result.get('artist', '未知歌手')}*\n",
-                f"> 💿 来自{source}",
-            ]
-            if note:
-                lines.append(f"> ⚠️ {note}")
-            lines.append("\n💡 下方有音乐卡片，可点击封面查看、点击试听链接播放。")
-            return "\n".join(lines)
 
         if tool_name == "search_warehouse":
             items = result.get("items", []) if isinstance(result, dict) else []
@@ -1217,10 +1067,9 @@ class UserEmployeeInvokeHandler(BaseHandler):
         system_prompt = emp.get("system_prompt", "") or model.get("system_prompt", "")
         temperature = model.get("temperature", 0.7)
         max_tokens = model.get("max_tokens", 4096)
-        emp_name = emp.get("name", "数字员工")
 
-        # ── v0.8: 使用 MCP 智能匹配执行工具（按员工权限过滤）──
-        match = _mcp_client.match_tool_by_query(message, emp_id=emp.get("id"))
+        # ── 使用 MCP 智能匹配执行工具 ──
+        match = _mcp_client.match_tool_by_query(message)
         tool_ctx = {}
         if match:
             tool_name, arguments = match
@@ -1232,100 +1081,37 @@ class UserEmployeeInvokeHandler(BaseHandler):
                 except Exception as e:
                     logger.error(f"员工工具执行失败: {e}")
 
-        # ── MCP 工具：音乐类结果 → 发送卡片事件 ──
-        music_card = None
-        if tool_ctx and tool_ctx.get("tool_name") == "get_random_music":
-            result_data = tool_ctx.get("result", {})
-            if isinstance(result_data, dict) and result_data.get("success"):
-                music_card = {
-                    "type": "music",
-                    "title": f"{emp_name} · 随机音乐",
-                    "data": {
-                        "name": result_data.get("name", "未知歌曲"),
-                        "artist": result_data.get("artist", "未知歌手"),
-                        "cover": result_data.get("cover", ""),
-                        "url": result_data.get("url", ""),
-                    }
-                }
-
         # ── 构建消息 ──
         self.set_header("Content-Type", "text/event-stream")
         self.set_header("Cache-Control", "no-cache")
         self.set_header("Connection", "keep-alive")
         self.set_header("X-Accel-Buffering", "no")
 
+        emp_name = emp.get("name", "数字员工")
         self.write(
             f"event: employee\ndata: {json.dumps({'name': emp_name, 'type': emp.get('employee_type', 'llm')}, ensure_ascii=False)}\n\n"
         )
         await self.flush()
 
-        if music_card:
-            self.write(
-                f"event: card\ndata: {json.dumps(music_card, ensure_ascii=False)}\n\n"
-            )
-            await self.flush()
-
         total_tokens = 0
         api_success = False
-
-        # ── v0.7: 解析员工技能，构建技能摘要（供 LLM 按需加载）──
-        from app.models.skill import SkillRepository
-        skills_ctx = ""
-        try:
-            raw_skills = json.loads(emp.get("skills", "[]"))
-        except (json.JSONDecodeError, TypeError):
-            raw_skills = []
-        if raw_skills:
-            # 兼容新旧格式：ID 数组 vs 名称数组
-            if isinstance(raw_skills[0], int):
-                skill_summaries = SkillRepository.get_skill_summaries(skill_ids=raw_skills)
-            else:
-                skill_summaries = SkillRepository.get_skill_summaries(skill_names=raw_skills)
-            if skill_summaries:
-                lines = [
-                    "\n[可用技能]",
-                    f"你作为「{emp_name}」配备了以下技能。当任务需要对应能力时，",
-                    "请调用 load_skill 工具加载技能以获取详细执行指令：",
-                    "",
-                ]
-                for s in skill_summaries:
-                    desc = s.get("description", "") or "（无描述）"
-                    lines.append(f"- {s['name']}: {desc}")
-                skills_ctx = "\n".join(lines)
-                logger.info(
-                    f"员工 {emp_name} 加载了 {len(skill_summaries)} 个技能: "
-                    f"{[s['name'] for s in skill_summaries]}"
-                )
 
         warehouse_ctx = ""
         if tool_ctx:
             result_data = tool_ctx.get("result", {})
             if isinstance(result_data, dict):
-                # 音乐工具：构建人类可读的上下文
-                if tool_ctx.get("tool_name") == "get_random_music" and result_data.get("success"):
-                    source = result_data.get("source", "网易云音乐")
-                    warehouse_ctx = (
-                        f"\n\n[工具查询结果]\n"
-                        f"已从{source}随机选取一首歌曲：\n"
-                        f"- 歌曲名: {result_data.get('name', '')}\n"
-                        f"- 歌手: {result_data.get('artist', '')}\n"
-                        f"- 试听链接: {result_data.get('url', '')}\n"
-                        f"请用轻松愉快的语气向用户介绍这首歌，告知歌曲名和歌手，"
-                        f"并说明下方有音乐卡片可以点击试听。"
-                    )
-                else:
-                    items = result_data.get("items", [])
-                    if items:
-                        warehouse_ctx = "\n\n[工具查询结果]\n"
-                        for i, item in enumerate(items[:5], 1):
-                            warehouse_ctx += (
-                                f"{i}. {item.get('title','')[:100]}\n"
-                                f"   摘要: {(item.get('summary','') or '')[:200]}\n"
-                            )
-                        warehouse_ctx += f"共 {len(items)} 条结果。请基于以上真实数据回答。"
+                items = result_data.get("items", [])
+                if items:
+                    warehouse_ctx = "\n\n[工具查询结果]\n"
+                    for i, item in enumerate(items[:5], 1):
+                        warehouse_ctx += (
+                            f"{i}. {item.get('title','')[:100]}\n"
+                            f"   摘要: {(item.get('summary','') or '')[:200]}\n"
+                        )
+                    warehouse_ctx += f"共 {len(items)} 条结果。请基于以上真实数据回答。"
 
         messages = []
-        full_system = _build_system_prompt(system_prompt) + skills_ctx + warehouse_ctx
+        full_system = _build_system_prompt(system_prompt) + warehouse_ctx
         messages.append({"role": "system", "content": full_system})
         messages.append({"role": "user", "content": message})
 
@@ -1396,10 +1182,10 @@ class UserEmployeeInvokeHandler(BaseHandler):
             skills_list = json.loads(emp.get("skills", "[]"))
         except (json.JSONDecodeError, TypeError):
             pass
-        # v0.8: crawl4ai_enabled 已废弃，深度采集通过 MCP 工具权限控制
+        crawl4ai_on = emp.get("crawl4ai_enabled", 0) == 1
 
         if tool_ctx is None:
-            match = _mcp_client.match_tool_by_query(message, emp_id=emp.get("id"))
+            match = _mcp_client.match_tool_by_query(message)
             if match:
                 tool_name, arguments = match
                 tool = _mcp_server.get_tool(tool_name)
@@ -1422,35 +1208,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
             lines.append(f"🔧 已调用 MCP 工具: **{tool_name}**\n")
 
             if isinstance(result, dict):
-                # 音乐工具特殊处理
-                if tool_name == "get_random_music" and result.get("success"):
-                    # 发送音乐卡片 SSE 事件
-                    music_card = {
-                        "type": "music",
-                        "title": f"{name} · 随机音乐",
-                        "data": {
-                            "name": result.get("name", "未知歌曲"),
-                            "artist": result.get("artist", "未知歌手"),
-                            "cover": result.get("cover", ""),
-                            "url": result.get("url", ""),
-                        }
-                    }
-                    self.write(
-                        f"event: card\ndata: {json.dumps(music_card, ensure_ascii=False)}\n\n"
-                    )
-                    await self.flush()
-
-                    lines.append(
-                        f"\n🎵 **{result.get('name', '未知歌曲')}** — "
-                        f"*{result.get('artist', '未知歌手')}*\n"
-                    )
-                    source = result.get("source", "网易云音乐热歌榜")
-                    note = result.get("note", "")
-                    lines.append(f"> 💿 来自{source}")
-                    if note:
-                        lines.append(f"> ⚠️ {note}")
-                    lines.append("\n💡 下方有音乐卡片，可点击试听。\n")
-                elif "items" in result:
+                if "items" in result:
                     items = result["items"]
                     lines.append(f"\n📊 查询结果（共 {len(items)} 条）：\n")
                     for i, item in enumerate(items[:5], 1):
@@ -1482,20 +1240,15 @@ class UserEmployeeInvokeHandler(BaseHandler):
                         lines.append(f"\n⚠️ 操作失败: {result.get('error', '未知错误')}\n")
         else:
             lines.append(f"\n您问：「{message}」\n")
-            # v0.7: skills 存储的是 ID 数组，需解析为技能名称用于展示
-            if skills_list and isinstance(skills_list[0], int):
-                try:
-                    resolved = SkillRepository.resolve_by_ids(skills_list)
-                    skill_names = [s["name"] for s in resolved]
-                except Exception:
-                    skill_names = [str(s) for s in skills_list]
-            else:
-                skill_names = [str(s) for s in skills_list] if skills_list else []
-            skills_text = "、".join(skill_names) if skill_names else "通用助手"
+            skills_text = "、".join(skills_list) if skills_list else "通用助手"
             lines.append(f"🔧 我的技能: {skills_text}")
+            if crawl4ai_on:
+                lines.append("🕷️ Crawl4ai 网页采集: 已启用")
             lines.append("\n💡 试试这些指令:")
             lines.append("  • 「查看数据仓库」— 列出最新采集数据")
             lines.append("  • 「搜索 AI」— 在数据仓库中搜索关键词")
+            if crawl4ai_on:
+                lines.append("  • 「深度采集 https://...」— 抓取网页正文")
             lines.append("\n⚠️ 当前为本地智能模式（MCP 工具已集成）。")
 
         full_reply = "\n".join(lines)
@@ -1513,7 +1266,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
         _start = _time.time()
 
         api_url = emp.get("api_url", "")
-        api_method = normalize_api_method(emp.get("api_method", "GET"))
+        api_method = emp.get("api_method", "GET")
         api_headers_raw = emp.get("api_headers", "{}")
         api_params = emp.get("api_params_template", "")
         api_secret = emp.get("api_secret", "")
@@ -1529,8 +1282,8 @@ class UserEmployeeInvokeHandler(BaseHandler):
         # ── FIX-1: URL 模板编码（显式 UTF-8，防御 ASCII 编码错误）──
         try:
             encoded_msg = urllib.parse.quote(message, safe="", encoding="utf-8")
-            api_url = api_url.replace("{message}", encoded_msg).replace("{message_raw}", encoded_msg)
-            api_params = api_params.replace("{message}", encoded_msg).replace("{message_raw}", message)
+            api_url = api_url.replace("{message}", encoded_msg)
+            api_params = api_params.replace("{message}", encoded_msg)
         except Exception as e:
             logger.warning(f"URL 模板替换失败: {e}，使用原始 URL")
 
@@ -1540,32 +1293,28 @@ class UserEmployeeInvokeHandler(BaseHandler):
         except Exception:
             pass
 
-        normalized_headers = normalize_headers(api_headers_raw or "{}")
-        if normalized_headers is None:
-            self.set_header("Content-Type", "text/event-stream")
-            self.set_header("Cache-Control", "no-cache")
-            await _sse_write(self, "API Headers 配置非法")
-            await _sse_done(self)
-            return
-        headers = json.loads(normalized_headers)
+        try:
+            headers = json.loads(api_headers_raw) if api_headers_raw else {}
+        except (json.JSONDecodeError, TypeError):
+            headers = {}
 
         if api_secret:
-            if has_crlf(api_secret):
-                self.set_header("Content-Type", "text/event-stream")
-                self.set_header("Cache-Control", "no-cache")
-                await _sse_write(self, "API 密钥配置非法")
-                await _sse_done(self)
-                return
-            if not any(str(k).lower() == "authorization" for k in headers):
-                headers["Authorization"] = f"Bearer {api_secret}"
+            headers["Authorization"] = f"Bearer {api_secret}"
 
-        from app.utils.security import validate_url_safe
-        safe, reason, _ = validate_url_safe(api_url)
+        from app.utils.security import validate_url_safe, pin_url_to_ip
+        safe, reason, resolved_ip = validate_url_safe(api_url)
         if not safe:
-            logger.warning(f"API 员工 [{emp.get('name', '数字员工')}] SSRF 校验失败: {reason}，回退到 Mock 模式")
-            await self._mock_api_employee_fallback(emp, message, _start, reason)
+            self.set_header("Content-Type", "text/event-stream")
+            self.set_header("Cache-Control", "no-cache")
+            await _sse_write(self, f"API URL 不安全: {reason}")
+            await _sse_done(self)
             return
 
+        # DNS 重绑定防护：用已验证的 IP 替换 hostname，防止 TOCTOU 攻击 (Issue #11)
+        pinned_url, host_headers = pin_url_to_ip(api_url, resolved_ip)
+        # Host 头优先级低于用户自定义 headers（用户可覆盖）
+        for k, v in host_headers.items():
+            headers.setdefault(k, v)
 
         self.set_header("Content-Type", "text/event-stream")
         self.set_header("Cache-Control", "no-cache")
@@ -1580,33 +1329,18 @@ class UserEmployeeInvokeHandler(BaseHandler):
         await self.flush()
 
         def _sync_api_call():
+            import urllib.request
             try:
-                request_url = api_url
-                data = None
-                if api_method == "POST":
+                if api_method.upper() == "POST":
                     data = api_params.encode("utf-8") if api_params else None
-                elif api_method == "GET":
-                    if api_params:
-                        request_url += ("&" if "?" in api_url else "?") + api_params
+                    req = urllib.request.Request(pinned_url, data=data, headers=headers, method="POST")
                 else:
-                    data = api_params.encode("utf-8") if api_params else None
-                request_url = urllib.parse.quote(
-                    request_url, safe=":/?#[]@!$&'()*+,;=%-", encoding="utf-8"
-                )
-                resp = safe_http_request(
-                    request_url,
-                    method=api_method,
-                    headers=headers,
-                    body=data,
-                    timeout=30,
-                    max_bytes=256 * 1024,
-                )
-                body = resp.body.decode("utf-8", errors="replace")
-                if resp.status >= 400:
-                    return body, resp.status, f"HTTP {resp.status}: {body[:500]}"
-                return body, resp.status, None
-            except SafeHttpError as e:
-                return "", 0, str(e)
+                    full_url = pinned_url
+                    if api_params:
+                        full_url += ("&" if "?" in pinned_url else "?") + api_params
+                    req = urllib.request.Request(full_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    return resp.read().decode("utf-8", errors="replace"), resp.status, None
             except Exception as e:
                 return "", 0, str(e)
 
@@ -1614,8 +1348,9 @@ class UserEmployeeInvokeHandler(BaseHandler):
         body, status, err = await loop.run_in_executor(_user_chat_executor, _sync_api_call)
 
         if err:
-            logger.warning(f"API 员工 [{emp_name}] 调用失败: {err}，回退到 Mock 模式")
-            await self._mock_api_employee_fallback(emp, message, _start, err)
+            await _sse_write(self, f"API 调用失败: {err}")
+            await _sse_done(self)
+            await _sse_stats(self, 0, False, round(_time.time() - _start, 2))
             return
 
         # ── 响应模板渲染 ──
@@ -1630,28 +1365,10 @@ class UserEmployeeInvokeHandler(BaseHandler):
                     data_obj = json.loads(body)
                 except (json.JSONDecodeError, TypeError):
                     data_obj = {"raw": body}
-
-                # 列表格式响应（如 Meting 播放列表）：随机选取一条
-                song_obj = None
-                if isinstance(data_obj, list) and len(data_obj) > 0:
-                    import random as _random2
-                    song_obj = _random2.choice(data_obj)
-                    if isinstance(song_obj, dict):
-                        data_obj = song_obj  # 用选中的歌曲条目替代原列表
-
-                # 扁平化：支持嵌套 data 字段（如 uomg rand.music API 返回 {code, data:{name, artistsname, ...}}）
-                flat_data = {}
-                if isinstance(data_obj, dict):
-                    for key, value in data_obj.items():
-                        if isinstance(value, str):
-                            flat_data[key] = value
-                        elif isinstance(value, dict):
-                            for sub_key, sub_val in value.items():
-                                if isinstance(sub_val, str):
-                                    flat_data[sub_key] = sub_val
-                for key, value in flat_data.items():
-                    # HTML-escape 第三方 API 返回值，防止 XSS 注入
-                    rendered = rendered.replace("{{" + key + "}}", html.escape(value))
+                for key, value in data_obj.items():
+                    if isinstance(value, str):
+                        # HTML-escape 第三方 API 返回值，防止 XSS 注入
+                        rendered = rendered.replace("{{" + key + "}}", html.escape(value))
                 rendered = _re.sub(r'\{\{.*?\}\}', '', rendered)
                 rendered_body = rendered
             except Exception:
@@ -1687,256 +1404,3 @@ class UserEmployeeInvokeHandler(BaseHandler):
             detail=f"api_call, status={status}, elapsed={elapsed}s, tokens={tokens}",
             client_ip=self.request.remote_ip or "",
         )
-
-    async def _mock_api_employee_fallback(
-        self, emp: dict, message: str, start_time: float,
-        fail_reason: str = ""
-    ):
-        """API 型员工 Mock 回退：当外部 API 不可达时，生成模拟音乐/数据卡片。
-
-        用于处理 DNS 解析失败、网络不通、API 超时等场景，
-        确保用户始终能看到卡片渲染效果。
-        """
-        import random as _random
-        import time as _time
-        emp_name = emp.get("name", "数字员工")
-
-        # ── 发送员工元信息 ──
-        self.set_header("Content-Type", "text/event-stream")
-        self.set_header("Cache-Control", "no-cache")
-        self.set_header("Connection", "keep-alive")
-        self.set_header("X-Accel-Buffering", "no")
-        self.write(
-            f"event: employee\ndata: {json.dumps({'name': emp_name, 'type': 'api'}, ensure_ascii=False)}\n\n"
-        )
-        await self.flush()
-
-        # ── 音乐类员工：生成模拟音乐卡片 ──
-        if "音乐" in emp_name or "music" in emp_name.lower():
-            mock_songs = [
-                {"name": "晴天", "artist": "周杰伦",
-                 "cover": "https://picsum.photos/seed/music1/160/160",
-                 "url": "https://music.163.com/"},
-                {"name": "夜曲", "artist": "周杰伦",
-                 "cover": "https://picsum.photos/seed/music2/160/160",
-                 "url": "https://music.163.com/"},
-                {"name": "稻香", "artist": "周杰伦",
-                 "cover": "https://picsum.photos/seed/music3/160/160",
-                 "url": "https://music.163.com/"},
-                {"name": "七里香", "artist": "周杰伦",
-                 "cover": "https://picsum.photos/seed/music4/160/160",
-                 "url": "https://music.163.com/"},
-                {"name": "青花瓷", "artist": "周杰伦",
-                 "cover": "https://picsum.photos/seed/music5/160/160",
-                 "url": "https://music.163.com/"},
-                {"name": "简单爱", "artist": "周杰伦",
-                 "cover": "https://picsum.photos/seed/music6/160/160",
-                 "url": "https://music.163.com/"},
-                {"name": "十年", "artist": "陈奕迅",
-                 "cover": "https://picsum.photos/seed/music7/160/160",
-                 "url": "https://music.163.com/"},
-                {"name": "好久不见", "artist": "陈奕迅",
-                 "cover": "https://picsum.photos/seed/music8/160/160",
-                 "url": "https://music.163.com/"},
-            ]
-            song = _random.choice(mock_songs)
-            card_data = {
-                "type": "music",
-                "title": f"{emp_name} · 随机音乐",
-                "data": song,
-            }
-            self.write(
-                f"event: card\ndata: {json.dumps(card_data, ensure_ascii=False)}\n\n"
-            )
-            await self.flush()
-
-            # ── 流式文本 ──
-            text_parts = [
-                f"🎵 **{emp_name}** 为您推荐一首歌曲：\n\n",
-                f"**{song['name']}** — {song['artist']}\n\n",
-            ]
-            if fail_reason:
-                text_parts.append(
-                    f"> ⚠️ 在线音乐 API 暂时不可用（{fail_reason}），"
-                    f"已为您从本地曲库随机推荐。\n"
-                )
-            else:
-                text_parts.append(
-                    "> 💡 在线音乐 API 暂时不可用，已为您从本地曲库随机推荐。\n"
-                )
-            full_text = "".join(text_parts)
-        else:
-            # ── 通用 API 员工 Mock ──
-            card_data = {
-                "type": "default",
-                "title": emp_name,
-                "content": f"🤖 {emp_name} 暂时无法连接外部 API。\n\n"
-                           f"原因: {fail_reason or '网络不可达'}\n\n"
-                           f"请检查网络连接后重试。",
-            }
-            self.write(
-                f"event: card\ndata: {json.dumps(card_data, ensure_ascii=False)}\n\n"
-            )
-            await self.flush()
-            full_text = card_data["content"]
-
-        for ch in full_text:
-            await _sse_write(self, ch)
-            await asyncio.sleep(0.01)
-        await _sse_done(self)
-
-        elapsed = round(_time.time() - start_time, 2)
-        tokens = _estimate_tokens(full_text)
-        await _sse_stats(self, tokens, False, elapsed)
-
-        write_audit_log(
-            action="USER_EMPLOYEE_INVOKE",
-            username=self.current_user,
-            target=f"employee:{emp['id']}",
-            detail=f"mock_fallback, reason={fail_reason}, elapsed={elapsed}s, tokens={tokens}",
-            client_ip=self.request.remote_ip or "",
-        )
-
-
-# ============================================================
-# TTS: Edge TTS 语音合成播报（Issue #27）
-# ============================================================
-
-# TTS 缓存目录
-import hashlib
-import os as _os
-import tempfile as _tempfile
-
-_TTS_CACHE_DIR = _os.path.join(_tempfile.gettempdir(), "finderos_tts")
-
-# 可用的 Edge TTS 中文语音列表
-_TTS_VOICES = {
-    "zh-CN-XiaoxiaoNeural": "晓晓（女，活泼）",
-    "zh-CN-YunxiNeural": "云希（男，青年）",
-    "zh-CN-YunjianNeural": "云健（男，中年）",
-    "zh-CN-XiaoyiNeural": "晓伊（女，温柔）",
-    "zh-CN-YunyangNeural": "云扬（男，新闻）",
-    "zh-CN-XiaochenNeural": "晓晨（女，自然）",
-}
-
-
-class UserChatTTSHandler(BaseHandler):
-    """TTS 语音合成 API — 使用 Microsoft Edge TTS 将文本转为 MP3 音频。
-
-    POST /api/chat/tts
-    参数:
-        text:  要合成的文本（1-4000 字符）
-        voice: 可选，语音名称（默认 zh-CN-XiaoxiaoNeural）
-
-    返回: audio/mpeg 二进制音频流
-    """
-
-    @tornado.web.authenticated
-    async def post(self):
-        text = self.get_body_argument("text", "").strip()
-
-        # ── 参数校验 ──
-        if not text:
-            self.set_status(400)
-            self.write({"code": 1, "msg": "文本不能为空"})
-            return
-        if len(text) > 4000:
-            self.set_status(400)
-            self.write({"code": 1, "msg": "文本过长（最多4000字符）"})
-            return
-
-        voice = self.get_body_argument("voice", "zh-CN-XiaoxiaoNeural").strip()
-        if voice not in _TTS_VOICES:
-            logger.warning(f"TTS: 不支持的语音 {voice}，回退到默认")
-            voice = "zh-CN-XiaoxiaoNeural"
-
-        # ── 缓存键：基于文本+语音的 MD5 ──
-        cache_key = hashlib.md5((text + voice).encode("utf-8")).hexdigest()
-        _os.makedirs(_TTS_CACHE_DIR, exist_ok=True)
-        cache_file = _os.path.join(_TTS_CACHE_DIR, f"{cache_key}.mp3")
-
-        try:
-            # ── 检查缓存 ──
-            was_cached = _os.path.exists(cache_file)
-            if not was_cached:
-                # 使用锁文件防止并发写入同一缓存文件
-                lock_file = cache_file + ".lock"
-                lock_acquired = False
-                try:
-                    # Windows 上使用排他创建作为简单锁
-                    fd = _os.open(lock_file, _os.O_CREAT | _os.O_EXCL | _os.O_RDWR)
-                    _os.close(fd)
-                    lock_acquired = True
-                except FileExistsError:
-                    # 另一个请求正在生成此文件，等待并重试
-                    import time as _time_module
-                    for _ in range(30):  # 最多等待 30 秒
-                        await asyncio.sleep(1)
-                        if _os.path.exists(cache_file):
-                            was_cached = True
-                            break
-                    if not was_cached:
-                        # 超时：尝试自己生成（锁可能已过期）
-                        try:
-                            _os.remove(lock_file)
-                        except Exception:
-                            pass
-                        fd = _os.open(lock_file, _os.O_CREAT | _os.O_EXCL | _os.O_RDWR)
-                        _os.close(fd)
-                        lock_acquired = True
-
-                if lock_acquired:
-                    try:
-                        logger.info(
-                            f"TTS: 生成音频 text_len={len(text)}, voice={voice}, "
-                            f"user={self.current_user}"
-                        )
-                        import edge_tts
-                        communicate = edge_tts.Communicate(text, voice)
-                        await communicate.save(cache_file)
-                    finally:
-                        # 释放锁
-                        try:
-                            _os.remove(lock_file)
-                        except Exception:
-                            pass
-            else:
-                logger.info(
-                    f"TTS: 命中缓存 text_len={len(text)}, voice={voice}"
-                )
-
-            # ── 返回音频流 ──
-            file_size = _os.path.getsize(cache_file)
-            self.set_header("Content-Type", "audio/mpeg")
-            self.set_header("Content-Length", str(file_size))
-            self.set_header("Cache-Control", "public, max-age=86400")
-            self.set_header("X-TTS-Voice", voice)
-            self.set_header("X-TTS-Cached", "true" if was_cached else "false")
-
-            with open(cache_file, "rb") as f:
-                self.write(f.read())
-            await self.flush()
-
-            # ── 审计日志 ──
-            write_audit_log(
-                action="USER_TTS",
-                username=self.current_user,
-                target=f"tts:{voice}",
-                detail=f"text_len={len(text)}, file_size={file_size}",
-                client_ip=self.request.remote_ip or "",
-            )
-
-        except ImportError:
-            logger.error("TTS: edge-tts 库未安装")
-            self.set_status(500)
-            self.write({"code": 1, "msg": "TTS 服务不可用：edge-tts 库未安装。请运行 pip install edge-tts"})
-        except Exception as e:
-            logger.error(f"TTS: 语音合成失败 - {e}", exc_info=True)
-            # 清理可能损坏的缓存文件
-            if _os.path.exists(cache_file):
-                try:
-                    _os.remove(cache_file)
-                except Exception:
-                    pass
-            self.set_status(500)
-            self.write({"code": 1, "msg": f"语音合成失败: {str(e)}"})

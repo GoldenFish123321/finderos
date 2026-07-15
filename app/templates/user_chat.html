@@ -336,41 +336,6 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
     }
     .chat-msg.user .msg-meta { justify-content: flex-end; }
 
-    /* TTS 语音播报按钮 */
-    .btn-tts {
-        display: inline-flex;
-        align-items: center;
-        gap: 2px;
-        background: none;
-        border: 1px solid var(--border-subtle);
-        color: var(--text-muted);
-        font-size: 11px;
-        padding: 2px 8px;
-        border-radius: 12px;
-        cursor: pointer;
-        transition: all var(--transition-fast);
-        vertical-align: middle;
-    }
-    .btn-tts:hover {
-        border-color: var(--accent-blue);
-        color: var(--accent-blue);
-        background: rgba(94,163,255,0.08);
-    }
-    .btn-tts.loading {
-        opacity: 0.6;
-        cursor: wait;
-        animation: tts-pulse 1s ease-in-out infinite;
-    }
-    .btn-tts.playing {
-        border-color: var(--accent-purple);
-        color: var(--accent-purple);
-        background: rgba(167,139,250,0.12);
-    }
-    @keyframes tts-pulse {
-        0%, 100% { opacity: 0.6; }
-        50% { opacity: 1; }
-    }
-
     /* 打字指示器 */
     .typing-indicator {
         display: flex; gap: 4px; padding: 8px 0;
@@ -534,7 +499,7 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
             <div class="logo-icon">🔭</div>
             <div>
                 <div class="logo-text">瞭望与问数系统</div>
-                <div class="logo-sub">DataFinderAgentOS v{{ app_version }}</div>
+                <div class="logo-sub">DataFinderAgentOS v0.4</div>
             </div>
         </div>
 
@@ -578,7 +543,8 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
         <!-- 用户信息 -->
         <div class="sidebar-footer">
             <span class="user-name">👤 {{ username }}</span>
-            <div style="display:flex;gap:10px;">
+            <div style="display:flex;gap:10px;align-items:center;">
+                <a href="/account" style="color:var(--accent-blue);">⚙️ 账户</a>
                 <a href="/admin" style="color:var(--accent-blue);">⚙️ 后台</a>
                 <a href="/logout">退出</a>
             </div>
@@ -826,10 +792,10 @@ function sendMessage() {
     const message = input.value.trim();
     if (!message) return;
 
-    // 检测 @数字员工 调用（支持 @name 或 @name 消息内容 两种格式）
-    const empMatch = message.match(/^@(\S+)(?:\s+(.*))?$/);
+    // 检测 @数字员工 调用
+    const empMatch = message.match(/^@(\S+)\s+(.*)/);
     const employeeName = empMatch ? empMatch[1] : null;
-    const employeeMsg = empMatch ? (empMatch[2] || '') : message;
+    const employeeMsg = empMatch ? empMatch[2] : message;
 
     // 检测是否选中了数字员工
     let employeeId = null;
@@ -842,8 +808,8 @@ function sendMessage() {
     // （包含 @name 上下文），让 AI 通过 MCP 工具尝试处理
     var sendMsg = message;
     if (employeeId) {
-        // 已匹配员工：发送剥离 @name 后的纯消息（空消息也正常发送）
-        sendMsg = empMatch ? (empMatch[2] || '') : message;
+        // 已匹配员工：发送剥离 @name 后的纯消息
+        sendMsg = employeeMsg || message;
     } else if (employeeName) {
         // 未匹配员工但有 @name：保留完整消息（含上下文），让 AI 理解意图
         sendMsg = message;
@@ -1041,28 +1007,6 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
                         aiMeta.innerHTML = '⏱ ' + elapsed + 's · 🔤 ~' + tokenEstimate + ' tokens';
                     }
 
-                    // 存储原始文本用于 TTS，并添加播报按钮
-                    var bubbleEl = aiContent.closest('.bubble');
-                    if (bubbleEl && totalContent) {
-                        bubbleEl.setAttribute('data-raw-content', totalContent);
-                        // 添加 TTS 按钮（如果还没有）
-                        if (!bubbleEl.querySelector('.btn-tts')) {
-                            var metaEl = bubbleEl.querySelector('.msg-meta');
-                            if (metaEl) {
-                                var ttsBtn = document.createElement('span');
-                                ttsBtn.className = 'btn-tts';
-                                ttsBtn.innerHTML = '🔊 播报';
-                                ttsBtn.title = '点击播报此消息';
-                                ttsBtn.onclick = function(e) {
-                                    e.stopPropagation();
-                                    playTTS(ttsBtn);
-                                };
-                                metaEl.appendChild(document.createTextNode(' '));
-                                metaEl.appendChild(ttsBtn);
-                            }
-                        }
-                    }
-
                     refreshTaskList();
                     return;
                 }
@@ -1107,10 +1051,6 @@ function appendMessage(role, content, tokens, elapsed, isPlaceholder) {
 
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
-    // 存储原始文本（用于 TTS 语音播报）
-    if (content && role === 'assistant') {
-        bubble.setAttribute('data-raw-content', content);
-    }
 
     const contentDiv = document.createElement('div');
     contentDiv.className = 'bubble-content';
@@ -1128,19 +1068,6 @@ function appendMessage(role, content, tokens, elapsed, isPlaceholder) {
         } else {
             metaDiv.innerHTML = '🔤 ' + tokens + ' tokens';
         }
-    }
-    // AI 消息添加 TTS 语音播报按钮
-    if (role === 'assistant' && !isPlaceholder) {
-        const ttsBtn = document.createElement('span');
-        ttsBtn.className = 'btn-tts';
-        ttsBtn.innerHTML = '🔊 播报';
-        ttsBtn.title = '点击播报此消息';
-        ttsBtn.onclick = function(e) {
-            e.stopPropagation();
-            playTTS(ttsBtn);
-        };
-        metaDiv.appendChild(document.createTextNode(' '));
-        metaDiv.appendChild(ttsBtn);
     }
 
     bubble.appendChild(metaDiv);
@@ -1395,10 +1322,6 @@ function renderInfoCard(container, card) {
     const typingEl = container.querySelector('.typing-indicator');
     if (typingEl) typingEl.remove();
 
-    // 将卡片添加到消息气泡外层，避免被后续流式文本 innerHTML 覆盖
-    const bubble = container.closest('.chat-msg');
-    const targetEl = bubble || container;
-
     const cardDiv = document.createElement('div');
     cardDiv.className = 'info-card';
 
@@ -1423,35 +1346,6 @@ function renderInfoCard(container, card) {
         if (d.detail) {
             cardHtml += '<div style="margin-top:8px;font-size:12px;color:var(--text-muted);">' + escapeHtml(d.detail) + '</div>';
         }
-    } else if (card.type === 'music' && card.data) {
-        // 音乐卡片特殊渲染（封面 + 歌曲信息 + 试听链接）
-        const m = card.data;
-        cardHtml += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
-        if (m.cover) {
-            // 安全检查：仅允许 http/https 协议，防止 javascript: XSS
-            var safeCover = m.cover;
-            if (!/^https?:\/\//i.test(safeCover)) {
-                safeCover = '';
-            }
-            if (safeCover) {
-                cardHtml += '<img src="' + escapeHtml(safeCover) + '" alt="封面" style="width:80px;height:80px;border-radius:8px;object-fit:cover;flex-shrink:0;" onerror="this.style.display=\'none\'">';
-            }
-        }
-        cardHtml += '<div style="flex:1;min-width:150px;">';
-        cardHtml += '<div style="font-size:16px;font-weight:600;margin-bottom:4px;">🎵 ' + escapeHtml(m.name || '未知歌曲') + '</div>';
-        cardHtml += '<div style="font-size:13px;color:var(--text-muted);">👤 ' + escapeHtml(m.artist || '未知歌手') + '</div>';
-        if (m.url) {
-            // 安全检查：仅允许 http/https 协议，防止 javascript: XSS
-            var safeUrl = m.url;
-            if (!/^https?:\/\//i.test(safeUrl)) {
-                safeUrl = '#';
-            }
-            cardHtml += '<div style="margin-top:8px;">';
-            cardHtml += '<a href="' + escapeHtml(safeUrl) + '" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:4px 14px;background:linear-gradient(135deg,var(--accent-purple),var(--accent-blue));color:#fff;border-radius:16px;text-decoration:none;font-size:12px;">▶ 试听</a>';
-            cardHtml += '</div>';
-        }
-        cardHtml += '</div>';
-        cardHtml += '</div>';
     } else if (card.data && card.data.items && Array.isArray(card.data.items)) {
         // 列表型卡片
         cardHtml += '<ul style="margin:0;padding-left:18px;">';
@@ -1469,7 +1363,7 @@ function renderInfoCard(container, card) {
 
     cardHtml += '</div>';
     cardDiv.innerHTML = cardHtml;
-    targetEl.appendChild(cardDiv);
+    container.appendChild(cardDiv);
     scrollToBottom();
 }
 
@@ -1618,193 +1512,6 @@ function exportConversation(format) {
         printWindow2.document.close();
         setTimeout(function() { printWindow2.print(); }, 500);
     }
-}
-
-// ============================================================
-// TTS 语音合成播报（Edge TTS）
-// ============================================================
-var currentTTSAudio = null;   // 当前正在播放的 Audio 对象
-var currentTTSAudioUrl = null; // 当前音频的 Blob URL（用于清理）
-var currentTTSBtn = null;     // 当前激活的播报按钮
-
-/**
- * 剥离 Markdown 和图表标记，提取纯文本用于 TTS 朗读
- */
-function stripMarkdownForTTS(text) {
-    if (!text) return text;
-    var cleaned = text;
-    // 移除 [CHART:...] 和 [TABLE:...] 标记（含嵌套 JSON）
-    cleaned = cleaned.replace(/\[CHART:[\s\S]*?\]/g, '');
-    cleaned = cleaned.replace(/\[TABLE:[\s\S]*?\]/g, '');
-    // 移除 Markdown 链接格式: [text](url)
-    cleaned = cleaned.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
-    // 移除 Markdown 图片: ![alt](url)
-    cleaned = cleaned.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
-    // 移除粗体/斜体标记
-    cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, '$1');
-    cleaned = cleaned.replace(/__([^_]+)__/g, '$1');
-    cleaned = cleaned.replace(/\*([^*]+)\*/g, '$1');
-    cleaned = cleaned.replace(/_([^_]+)_/g, '$1');
-    // 移除行内代码标记
-    cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
-    // 移除代码块标记
-    cleaned = cleaned.replace(/```[\s\S]*?```/g, '');
-    // 移除标题标记
-    cleaned = cleaned.replace(/^#{1,6}\s+/gm, '');
-    // 移除水平线
-    cleaned = cleaned.replace(/^[-*_]{3,}\s*$/gm, '');
-    // 移除引用标记
-    cleaned = cleaned.replace(/^>\s*/gm, '');
-    // 移除列表标记
-    cleaned = cleaned.replace(/^[\s]*[-*+]\s+/gm, '');
-    cleaned = cleaned.replace(/^[\s]*\d+\.\s+/gm, '');
-    // 移除多余空行
-    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
-    return cleaned.trim();
-}
-
-function playTTS(btn) {
-    // Bug #1 修复: 加载中不允许重复点击
-    if (btn.classList.contains('loading')) return;
-
-    // 如果正在播放同一个按钮的音频，则停止
-    if (currentTTSBtn === btn && currentTTSAudio && !currentTTSAudio.paused) {
-        currentTTSAudio.pause();
-        currentTTSAudio.currentTime = 0;
-        btn.classList.remove('playing');
-        btn.innerHTML = '🔊 播报';
-        // Bug #2 修复: 清理 Blob URL
-        if (currentTTSAudioUrl) {
-            URL.revokeObjectURL(currentTTSAudioUrl);
-            currentTTSAudioUrl = null;
-        }
-        currentTTSAudio = null;
-        currentTTSBtn = null;
-        return;
-    }
-
-    // 停止之前的播放
-    if (currentTTSAudio) {
-        currentTTSAudio.pause();
-        currentTTSAudio.currentTime = 0;
-        if (currentTTSBtn) {
-            currentTTSBtn.classList.remove('playing');
-            currentTTSBtn.innerHTML = '🔊 播报';
-        }
-        // Bug #2 修复: 清理之前的 Blob URL
-        if (currentTTSAudioUrl) {
-            URL.revokeObjectURL(currentTTSAudioUrl);
-            currentTTSAudioUrl = null;
-        }
-    }
-
-    // 获取原始文本
-    var bubble = btn.closest('.bubble');
-    if (!bubble) return;
-    var rawText = bubble.getAttribute('data-raw-content');
-    if (!rawText) {
-        // 回退：从 bubble-content 提取纯文本
-        var contentEl = bubble.querySelector('.bubble-content');
-        rawText = contentEl ? contentEl.textContent.trim() : '';
-    }
-    if (!rawText || rawText.length < 2) {
-        if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('没有可播报的文本内容'); });
-        return;
-    }
-
-    // Bug #3 修复: 剥离 Markdown 和图表标记后朗读
-    rawText = stripMarkdownForTTS(rawText);
-    if (!rawText || rawText.length < 2) {
-        if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('文本内容为空（仅含标记）'); });
-        return;
-    }
-
-    // 限制文本长度（后端限制 4000 字符）
-    if (rawText.length > 4000) {
-        rawText = rawText.substring(0, 4000);
-    }
-
-    // 标记按钮为加载状态
-    btn.classList.add('loading');
-    btn.innerHTML = '⏳ 生成中...';
-    currentTTSBtn = btn;
-
-    // 请求 TTS API
-    var formData = new URLSearchParams();
-    formData.append('_xsrf', XSRF);
-    formData.append('text', rawText);
-
-    fetch('/api/chat/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: formData
-    })
-    .then(function(response) {
-        if (!response.ok) {
-            return response.json().then(function(d) {
-                throw new Error(d.msg || 'TTS 请求失败');
-            });
-        }
-        return response.blob();
-    })
-    .then(function(blob) {
-        btn.classList.remove('loading');
-        btn.classList.add('playing');
-        btn.innerHTML = '⏸ 停止';
-
-        // Bug #2 修复: 先清理旧 URL 再创建新的
-        if (currentTTSAudioUrl) {
-            URL.revokeObjectURL(currentTTSAudioUrl);
-        }
-        var audioUrl = URL.createObjectURL(blob);
-        currentTTSAudioUrl = audioUrl;
-
-        var audio = new Audio(audioUrl);
-        currentTTSAudio = audio;
-
-        audio.onended = function() {
-            btn.classList.remove('playing');
-            btn.innerHTML = '🔊 播报';
-            if (currentTTSAudioUrl) {
-                URL.revokeObjectURL(currentTTSAudioUrl);
-                currentTTSAudioUrl = null;
-            }
-            currentTTSAudio = null;
-            currentTTSBtn = null;
-        };
-
-        audio.onerror = function() {
-            btn.classList.remove('playing', 'loading');
-            btn.innerHTML = '🔊 播报';
-            if (currentTTSAudioUrl) {
-                URL.revokeObjectURL(currentTTSAudioUrl);
-                currentTTSAudioUrl = null;
-            }
-            currentTTSAudio = null;
-            currentTTSBtn = null;
-            if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('音频播放失败，请重试'); });
-        };
-
-        audio.play().catch(function(err) {
-            btn.classList.remove('playing', 'loading');
-            btn.innerHTML = '🔊 播报';
-            if (currentTTSAudioUrl) {
-                URL.revokeObjectURL(currentTTSAudioUrl);
-                currentTTSAudioUrl = null;
-            }
-            currentTTSAudio = null;
-            currentTTSBtn = null;
-            console.error('TTS 播放失败:', err);
-            if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('音频播放失败: ' + err.message); });
-        });
-    })
-    .catch(function(err) {
-        btn.classList.remove('loading');
-        btn.innerHTML = '🔊 播报';
-        currentTTSBtn = null;
-        console.error('TTS 请求失败:', err);
-        if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('语音合成失败: ' + err.message); });
-    });
 }
 </script>
 {% end %}

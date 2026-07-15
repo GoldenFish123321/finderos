@@ -4,7 +4,7 @@ collect_tools.py — 数据采集类 MCP 工具处理函数
 工具:
 - collect_web_data: 全网瞭望采集
 - deep_collect_url: 深度采集 URL
-- list_watch_sources: 瞭望源列表 (v0.10 新增)
+- list_watch_sources: 瞭望源列表 (v0.4.2 新增)
 """
 
 import asyncio
@@ -105,7 +105,7 @@ async def _deep_collect_url(url: str) -> Dict[str, Any]:
 
 
 def _list_watch_sources() -> Dict[str, Any]:
-    """列出所有启用的瞭望采集源（v0.10 新增）。"""
+    """列出所有启用的瞭望采集源（v0.4.2 新增）。"""
     from app.models.watch_source import WatchSourceRepository
     sources = WatchSourceRepository.get_enabled()
     return {

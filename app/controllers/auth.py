@@ -84,7 +84,13 @@ class LoginHandler(BaseHandler):
         # 已登录用户直接跳转
         if self.current_user:
             return self._redirect_by_role(self.current_user)
-        self.render("login.html", title="瞭望与问数系统 — 用户登录", error=None)
+        message = self.get_argument("msg", "")
+        self.render(
+            "login.html",
+            title="瞭望与问数系统 — 用户登录",
+            error=None,
+            message=message,
+        )
 
     def post(self):
         # 已登录用户直接跳转
@@ -100,6 +106,7 @@ class LoginHandler(BaseHandler):
                 "login.html",
                 title="瞭望与问数系统 — 用户登录",
                 error="用户名和密码不能为空",
+                message="",
             )
 
         # 频率限制检查
@@ -111,6 +118,7 @@ class LoginHandler(BaseHandler):
                 "login.html",
                 title="瞭望与问数系统 — 用户登录",
                 error=rate_limit_error,
+                message="",
             )
 
         # 验证用户
@@ -121,6 +129,7 @@ class LoginHandler(BaseHandler):
                 "login.html",
                 title="瞭望与问数系统 — 用户登录",
                 error="用户名或密码错误",
+                message="",
             )
 
         # 登录成功：清除限速记录，设置安全 Cookie（含 Secure/SameSite 属性）
@@ -163,6 +172,100 @@ class LogoutHandler(BaseHandler):
         )
         self.clear_cookie("username")
         self.redirect("/")
+
+
+class UserAccountHandler(BaseHandler):
+    """用户侧账户管理（修改密码 / 删除账号）"""
+
+    @tornado.web.authenticated
+    def get(self):
+        message = self.get_argument("msg", "")
+        error = self.get_argument("error", "")
+        user = UserRepository.get_user_by_username(self.current_user)
+        self.render(
+            "user_account.html",
+            title="账户设置 — 瞭望与问数系统",
+            username=self.current_user,
+            user=user,
+            message=message,
+            error=error,
+        )
+
+    @tornado.web.authenticated
+    def post(self):
+        action = self.get_body_argument("action", "").strip()
+        if action == "change_password":
+            old_password = self.get_body_argument("old_password", "").strip()
+            new_password = self.get_body_argument("new_password", "").strip()
+            confirm_password = self.get_body_argument("confirm_password", "").strip()
+
+            if not old_password or not new_password or not confirm_password:
+                return self.redirect("/account?error=请填写完整的密码信息")
+            if len(new_password) < 6:
+                return self.redirect("/account?error=新密码长度不能少于6个字符")
+            if new_password != confirm_password:
+                return self.redirect("/account?error=两次输入的新密码不一致")
+
+            user = UserRepository.get_user_by_username(self.current_user)
+            if not user:
+                return self.redirect("/account?error=用户不存在")
+
+            ok, msg = UserRepository.update_password(user["id"], old_password, new_password)
+            if not ok:
+                write_audit_log(
+                    action="ACCOUNT_CHANGE_PASSWORD_FAILED",
+                    username=self.current_user,
+                    target=f"user:{user['id']}",
+                    detail=msg,
+                    client_ip=self.request.remote_ip or "",
+                )
+                return self.redirect(f"/account?error={msg}")
+
+            write_audit_log(
+                action="ACCOUNT_CHANGE_PASSWORD",
+                username=self.current_user,
+                target=f"user:{user['id']}",
+                detail="用户侧修改密码成功",
+                client_ip=self.request.remote_ip or "",
+            )
+            return self.redirect("/account?msg=密码修改成功")
+
+        if action == "delete_account":
+            password = self.get_body_argument("delete_password", "").strip()
+            if not password:
+                return self.redirect("/account?error=请输入当前密码确认删除")
+
+            if not UserRepository.verify_user(self.current_user, password):
+                write_audit_log(
+                    action="ACCOUNT_DELETE_FAILED",
+                    username=self.current_user,
+                    target="self",
+                    detail="删除账号时密码验证失败",
+                    client_ip=self.request.remote_ip or "",
+                )
+                return self.redirect("/account?error=当前密码不正确")
+
+            if not UserRepository.delete_user_by_username(self.current_user):
+                write_audit_log(
+                    action="ACCOUNT_DELETE_FAILED",
+                    username=self.current_user,
+                    target="self",
+                    detail="删除账号失败",
+                    client_ip=self.request.remote_ip or "",
+                )
+                return self.redirect("/account?error=删除失败，请稍后重试")
+
+            self.clear_cookie("username")
+            write_audit_log(
+                action="ACCOUNT_DELETE",
+                username=self.current_user,
+                target="self",
+                detail="用户主动删除账号",
+                client_ip=self.request.remote_ip or "",
+            )
+            return self.redirect("/?msg=账号已删除，欢迎再次使用")
+
+        return self.redirect("/account?error=无效操作")
 
 
 class RegisterHandler(BaseHandler):

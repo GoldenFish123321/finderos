@@ -12,7 +12,7 @@ document.body.classList.add('dark-theme');
     <div class="admin-header-dark">
         <div>
             <span class="logo-text">🔭 瞭望与问数系统</span>
-            <span class="logo-sub">DataFinderAgentOS v{{ app_version }}</span>
+            <span class="logo-sub">DataFinderAgentOS v0.4</span>
         </div>
         <div class="user-area">
             <span class="username">👤 {{ username }}</span>
@@ -50,9 +50,6 @@ document.body.classList.add('dark-theme');
                 <a href="/admin/watch" class="{{ 'active' if handler.request.path == '/admin/watch' else '' }}">
                     <span class="nav-icon">🔍</span> <span>瞭望采集</span>
                 </a>
-                <a href="/admin/watch/log" class="{{ 'active' if '/admin/watch/log' in handler.request.path else '' }}">
-                    <span class="nav-icon">📜</span> <span>采集日志</span>
-                </a>
                 <a href="/admin/watch/source" class="{{ 'active' if '/admin/watch/source' in handler.request.path else '' }}">
                     <span class="nav-icon">📡</span> <span>瞭源管理</span>
                 </a>
@@ -65,23 +62,11 @@ document.body.classList.add('dark-theme');
                 <a href="/admin/model" class="{{ 'active' if handler.request.path == '/admin/model' else '' }}">
                     <span class="nav-icon">🤖</span> <span>模型引擎</span>
                 </a>
-                <a href="/admin/conversation" class="{{ 'active' if '/admin/conversation' in handler.request.path else '' }}">
-                    <span class="nav-icon">💬</span> <span>会话管理</span>
-                </a>
             </div>
             <div class="nav-group-title">数字员工</div>
             <div class="nav-group">
-                <a href="/admin/interface" class="{{ 'active' if '/admin/interface' in handler.request.path else '' }}">
-                    <span class="nav-icon">🔗</span> <span>接口管理</span>
-                </a>
                 <a href="/admin/employee" class="{{ 'active' if '/admin/employee' in handler.request.path else '' }}">
                     <span class="nav-icon">🧑‍💼</span> <span>数字员工</span>
-                </a>
-                <a href="/admin/skill" class="{{ 'active' if '/admin/skill' in handler.request.path else '' }}">
-                    <span class="nav-icon">🎯</span> <span>技能管理</span>
-                </a>
-                <a href="/admin/mcp/tool" class="{{ 'active' if '/admin/mcp/tool' in handler.request.path else '' }}">
-                    <span class="nav-icon">🔧</span> <span>MCP 工具</span>
                 </a>
             </div>
             <div class="nav-group-title">快速入口</div>

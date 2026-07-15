@@ -1,5 +1,5 @@
 """
-test_mcp_employee_permission.py — MCP 工具权限控制测试 (v0.8)
+test_mcp_employee_permission.py — MCP 工具权限控制测试 (v0.6.1)
 
 测试目标：
 1. 数字员工的 mcp_tool_ids 字段存在且可读写

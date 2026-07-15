@@ -112,14 +112,6 @@ class MCPServer:
         for tool in tools:
             self.register_tool(tool)
 
-    def unregister_tool(self, name: str) -> bool:
-        """注销指定工具。返回是否成功。"""
-        if name in self._tools:
-            del self._tools[name]
-            logger.info(f"MCP 工具已注销: {name}")
-            return True
-        return False
-
     def get_tool(self, name: str) -> Optional[MCPTool]:
         """按名称获取工具。"""
         return self._tools.get(name)

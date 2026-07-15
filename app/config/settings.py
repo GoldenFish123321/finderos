@@ -10,10 +10,6 @@ import os
 class Settings:
     """全局应用配置"""
 
-    # === 应用版本（唯一硬编码位置） ===
-    VERSION = "1.0.0-beta"
-    """应用版本号。项目中所有版本展示均由此处统一管理。"""
-
     # === 安全配置 ===
     COOKIE_SECRET = os.environ.get("COOKIE_SECRET", "")
     """Tornado 安全 Cookie 签名密钥。生产环境必须通过环境变量注入。"""
@@ -81,6 +77,9 @@ class Settings:
 
     LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", 900))
     """登录锁定时间（秒），默认 15 分钟。"""
+
+    VERSION = "0.4.0"
+    """应用版本号。"""
 
     AUDIT_ENABLED = os.environ.get("AUDIT_ENABLED", "").lower() != "false"
     """是否启用审计日志（默认启用）。"""

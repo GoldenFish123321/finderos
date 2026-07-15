@@ -15,18 +15,8 @@ from app.models.digital_employee import (
     DigitalEmployeeRepository, EMPLOYEE_TYPES,
 )
 from app.models.ai_model import AiModelRepository
-from app.models.api_interface import (
-    ApiInterfaceRepository,
-    normalize_api_method,
-    normalize_headers,
-    redact_sensitive_headers,
-    restore_redacted_headers,
-)
-from app.models.skill import SkillRepository
-from app.models.mcp_tool import MCPToolRepository
 from app.models.data_warehouse import DataWarehouseRepository
-from app.utils.security import has_crlf, write_audit_log
-from app.utils.safe_http import SafeHttpError, safe_http_request
+from app.utils.security import write_audit_log
 
 logger = logging.getLogger(__name__)
 
@@ -57,32 +47,13 @@ class EmployeeListHandler(AdminBaseHandler):
         total_pages = max(1, (total + 12 - 1) // 12)
         stats = DigitalEmployeeRepository.get_stats()
 
-        # 预解析 skills（v0.7: 存储技能 ID 数组，需从技能库解析名称；
-        # 兼容旧格式：字符串标签数组）
+        # 预解析 skills JSON（避免模板中使用 __import__ 反模式）
         import json as _json
         for emp in rows:
             try:
-                raw_skills = _json.loads(emp.get("skills", "[]"))
+                emp["skills_list"] = _json.loads(emp.get("skills", "[]"))
             except (_json.JSONDecodeError, TypeError):
-                raw_skills = []
-            resolved = SkillRepository.resolve_by_ids(raw_skills) if raw_skills and isinstance(raw_skills[0], int) else []
-            emp["skills_list"] = [s["name"] for s in resolved] if resolved else []
-            # 兼容旧格式（字符串标签）
-            if not emp["skills_list"] and raw_skills and isinstance(raw_skills[0], str):
-                resolved_names = SkillRepository.resolve_by_names(raw_skills)
-                emp["skills_list"] = [s["name"] for s in resolved_names] if resolved_names else raw_skills
-                # 标记为旧格式（模板中可区分显示）
-                emp["skills_legacy"] = True
-            # v0.10: 解析 MCP 工具名称
-            try:
-                raw_tool_ids = _json.loads(emp.get("mcp_tool_ids", "[]"))
-            except (_json.JSONDecodeError, TypeError):
-                raw_tool_ids = []
-            if raw_tool_ids:
-                mcp_tool_rows = MCPToolRepository.get_by_ids(raw_tool_ids)
-                emp["mcp_tools_list"] = [t["display_name"] for t in mcp_tool_rows]
-            else:
-                emp["mcp_tools_list"] = []
+                emp["skills_list"] = []
             # JS 安全转义员工名称（用于 confirm 对话框）
             emp["name_js"] = _json.dumps(emp.get("name", ""), ensure_ascii=False)
 
@@ -121,20 +92,6 @@ class EmployeeFormHandler(AdminBaseHandler):
         # 获取启用的模型列表（供 LLM 型选择模型）
         models, _ = AiModelRepository.get_all(page=1, page_size=50)
         enabled_models = [m for m in models if m.get("is_enabled") == 1]
-        current_interface_id = emp.get("api_interface_id") if emp else None
-        if emp and emp.get("api_headers"):
-            # 不在员工编辑页回显 Authorization / Cookie / X-API-Key 等敏感 Header；
-            # 若用户不改动脱敏值，POST 时恢复为原始 headers，避免误保存 ******。
-            emp = dict(emp)
-            emp["api_headers"] = redact_sensitive_headers(emp.get("api_headers", "{}"))
-        api_interfaces = ApiInterfaceRepository.get_for_employee_form(current_interface_id)
-
-        # 获取启用的技能库（供技能选择器使用）
-        skills_library = SkillRepository.get_enabled()
-
-        # 获取启用的 MCP 工具（供工具选择器使用，v0.10）
-        mcp_tools = MCPToolRepository.get_enabled()
-        mcp_categories = MCPToolRepository.get_categories()
 
         self.render(
             "admin/employee_form.html",
@@ -143,10 +100,6 @@ class EmployeeFormHandler(AdminBaseHandler):
             employee=emp,
             employee_types=EMPLOYEE_TYPES,
             models=enabled_models,
-            api_interfaces=api_interfaces,
-            skills_library=skills_library,
-            mcp_tools=mcp_tools,
-            mcp_categories=mcp_categories,
         )
 
     @tornado.web.authenticated
@@ -160,95 +113,32 @@ class EmployeeFormHandler(AdminBaseHandler):
         model_id_str = self.get_body_argument("model_id", "").strip()
         model_id = int(model_id_str) if model_id_str else None
         system_prompt = self.get_body_argument("system_prompt", "").strip()
-        # v0.8: crawl4ai_enabled 已废弃，crawl4ai 能力通过 mcp_tool_ids 控制
-        crawl4ai_enabled = 0
+        skills_raw = self.get_body_argument("skills", "[]").strip()
+        crawl4ai_enabled = 1 if self.get_body_argument("crawl4ai_enabled", "0") == "1" else 0
 
-        # 解析技能选择（v0.7: 从技能库多选，存储技能 ID 数组）
-        skill_ids = self.get_body_arguments("skill_ids")
+        # 解析 skills（支持 JSON 数组 或 逗号分隔 或 换行分隔）
         try:
-            skills = [int(sid) for sid in skill_ids if sid.strip()]
-        except (ValueError, TypeError):
-            skills = []
+            skills = json.loads(skills_raw)
+            if not isinstance(skills, list):
+                skills = [s.strip() for s in skills_raw.replace("\n", ",").split(",") if s.strip()]
+        except (json.JSONDecodeError, TypeError):
+            skills = [s.strip() for s in skills_raw.replace("\n", ",").split(",") if s.strip()]
         skills_json = json.dumps(skills, ensure_ascii=False)
-
-        # 解析 MCP 工具选择（v0.10: 从工具库多选，存储工具 ID 数组）
-        tool_ids = self.get_body_arguments("mcp_tool_ids")
-        try:
-            mcp_ids = [int(tid) for tid in tool_ids if tid.strip()]
-        except (ValueError, TypeError):
-            mcp_ids = []
-        mcp_tool_ids_json = json.dumps(mcp_ids, ensure_ascii=False)
 
         # API 型字段
         api_url = self.get_body_argument("api_url", "").strip()
-        api_method_raw = self.get_body_argument("api_method", "").strip()
-        api_method = normalize_api_method(api_method_raw or "GET")
-        api_headers_raw = self.get_body_argument("api_headers", "").strip()
+        api_method = self.get_body_argument("api_method", "GET").strip().upper()
+        api_headers_raw = self.get_body_argument("api_headers", "{}").strip()
         api_params_template = self.get_body_argument("api_params_template", "").strip()
         response_render_template = self.get_body_argument("response_render_template", "").strip()
         api_secret = self.get_body_argument("api_secret", "").strip()
-        api_interface_id_str = self.get_body_argument("api_interface_id", "").strip()
+
+        # 验证 API Headers JSON 格式
         try:
-            api_interface_id = int(api_interface_id_str) if api_interface_id_str else None
-        except (ValueError, TypeError):
-            self.write('<script>alert("接口模板ID格式不正确");window.history.back();</script>')
-            return
-
-        existing_emp = None
-        if emp_id:
-            try:
-                existing_emp = DigitalEmployeeRepository.get_by_id(int(emp_id))
-            except (ValueError, TypeError):
-                existing_emp = None
-
-        current_bound_interface = False
-        if employee_type == "api" and api_interface_id:
-            interface = ApiInterfaceRepository.get_by_id(api_interface_id)
-            current_bound_interface = bool(existing_emp and existing_emp.get("api_interface_id") == api_interface_id)
-            if not interface or (interface.get("is_enabled") != 1 and not current_bound_interface):
-                self.write('<script>alert("所选接口模板不存在或已禁用");window.history.back();</script>')
-                return
-            # 创建时支持无 JS/未填字段的服务端兜底；编辑时尊重显式清空/覆盖。
-            is_create = not bool(emp_id)
-            if is_create and not api_url:
-                api_url = interface.get("api_url", "")
-            if is_create and not api_method_raw:
-                api_method = interface.get("api_method", "GET")
-            if (
-                is_create and (not api_headers_raw or api_headers_raw == "{}")
-            ) and interface.get("api_headers"):
-                api_headers_raw = interface.get("api_headers", "{}")
-            elif interface.get("api_headers") and not current_bound_interface:
-                restored_headers = restore_redacted_headers(api_headers_raw or "{}", interface.get("api_headers", "{}"))
-                if restored_headers is not None:
-                    api_headers_raw = restored_headers
-            if is_create and not api_params_template:
-                api_params_template = interface.get("api_params_template", "")
-            if is_create and not response_render_template:
-                response_render_template = interface.get("response_render_template", "")
-            # 仅创建时复制接口密钥；编辑留空仍按 Repository 语义保留员工原密钥。
-            if is_create and not api_secret:
-                api_secret = interface.get("api_secret", "")
-        elif employee_type != "api":
-            api_interface_id = None
-
-        if (
-            employee_type == "api"
-            and existing_emp
-            and (not api_interface_id or current_bound_interface)
-        ):
-            restored_headers = restore_redacted_headers(api_headers_raw or "{}", existing_emp.get("api_headers", "{}"))
-            if restored_headers is not None:
-                api_headers_raw = restored_headers
-
-        api_method = normalize_api_method(api_method)
-        api_headers = normalize_headers(api_headers_raw or "{}")
-        if api_headers is None:
-            self.write('<script>alert("API Headers 必须是 JSON 对象，且不能包含换行字符");window.history.back();</script>')
-            return
-        if api_secret and has_crlf(api_secret):
-            self.write('<script>alert("API 密钥包含非法换行字符");window.history.back();</script>')
-            return
+            api_headers_parsed = json.loads(api_headers_raw) if api_headers_raw else {}
+            api_headers = json.dumps(api_headers_parsed, ensure_ascii=False)
+        except (json.JSONDecodeError, TypeError):
+            api_headers = "{}"
 
         if not name:
             self.write('<script>alert("员工名称不能为空");window.history.back();</script>')
@@ -264,9 +154,8 @@ class EmployeeFormHandler(AdminBaseHandler):
             ok = DigitalEmployeeRepository.update(
                 emp_id, name, employee_type, description,
                 model_id, system_prompt, skills_json, crawl4ai_enabled,
-                mcp_tool_ids_json,
                 api_url, api_method, api_headers, api_params_template,
-                response_render_template, api_secret, api_interface_id,
+                response_render_template, api_secret,
             )
             msg = "更新成功" if ok else "更新失败"
             write_audit_log(
@@ -280,9 +169,8 @@ class EmployeeFormHandler(AdminBaseHandler):
             new_id = DigitalEmployeeRepository.create(
                 name, employee_type, description,
                 model_id, system_prompt, skills_json, crawl4ai_enabled,
-                mcp_tool_ids_json,
                 api_url, api_method, api_headers, api_params_template,
-                response_render_template, api_secret, api_interface_id,
+                response_render_template, api_secret,
             )
             msg = "创建成功" if new_id > 0 else "创建失败"
             if new_id > 0:
@@ -538,7 +426,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             skills_list = json.loads(emp.get("skills", "[]"))
         except (json.JSONDecodeError, TypeError):
             pass
-        # v0.8: crawl4ai_enabled 已废弃，深度采集能力通过 MCP 工具权限控制
+        crawl4ai_on = emp.get("crawl4ai_enabled", 0) == 1
 
         # 1. 执行工具调用：根据意图自动查询数据仓库 / 触发采集
         if tool_results is None:
@@ -553,8 +441,8 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             lines.append(f"📊 在数据仓库中搜索「{tool_results.get('keyword', message)}」...\n")
         elif intent == "warehouse_list":
             lines.append("📋 获取数据仓库最新内容...\n")
-        elif intent == "deep_collect":
-            lines.append("🕷️ 正在深度采集网页内容...\n")
+        elif intent == "deep_collect" and crawl4ai_on:
+            lines.append("🕷️ 正在通过 Crawl4ai 深度采集网页内容...\n")
         elif intent == "warehouse_stats":
             lines.append("📈 数据仓库统计信息...\n")
 
@@ -592,20 +480,15 @@ class EmployeeInvokeHandler(AdminBaseHandler):
 
         if not tool_results.get("warehouse_data") and not tool_results.get("deep_collect_result") and not tool_results.get("warehouse_stats"):
             lines.append(f"\n您问：「{message}」\n")
-            # v0.7: skills 存储的是 ID 数组，需解析为技能名称用于展示
-            if skills_list and isinstance(skills_list[0], int):
-                try:
-                    resolved = SkillRepository.resolve_by_ids(skills_list)
-                    skill_names = [s["name"] for s in resolved]
-                except Exception:
-                    skill_names = [str(s) for s in skills_list]
-            else:
-                skill_names = [str(s) for s in skills_list] if skills_list else []
-            skills_text = "、".join(skill_names) if skill_names else "通用助手"
+            skills_text = "、".join(skills_list) if skills_list else "通用助手"
             lines.append(f"🔧 我的技能: {skills_text}")
+            if crawl4ai_on:
+                lines.append(f"🕷️ Crawl4ai 网页采集: 已启用")
             lines.append(f"\n💡 试试这些指令:")
             lines.append(f"  • 「查看数据仓库」— 列出最新采集数据")
             lines.append(f"  • 「搜索 AI」— 在数据仓库中搜索关键词")
+            if crawl4ai_on:
+                lines.append(f"  • 「深度采集 https://...」— 抓取网页正文")
             lines.append(f"\n⚠️ 当前为本地智能模式。配置 API Key 后将启用 AI 大模型对话。")
 
         full_reply = "\n".join(lines)
@@ -625,7 +508,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         """根据用户消息意图执行对应的工具调用。返回工具执行结果字典。"""
         result = {"intent": "general"}
         msg_lower = message.lower().strip()
-        # v0.8: crawl4ai_enabled 已废弃，深度采集能力通过 MCP 工具权限控制
+        crawl4ai_on = emp.get("crawl4ai_enabled", 0) == 1
 
         # 意图: 搜索数据仓库
         search_keywords = ["搜索", "查找", "查询", "找", "search", "数据仓库里有", "有没有"]
@@ -634,7 +517,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         crawl_keywords = ["深度采集", "抓取", "采集网页", "爬取", "crawl", "fetch"]
 
         # 检测意图（crawl 需同时有关键词+URL，否则继续匹配其他意图）
-        if any(kw in msg_lower for kw in crawl_keywords):
+        if any(kw in msg_lower for kw in crawl_keywords) and crawl4ai_on:
             # 提取 URL
             import re
             url_match = re.search(r'https?://[^\s]+', message)
@@ -677,7 +560,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
                     ).fetchone()["cnt"]
                 result["warehouse_stats"] = {"total": total, "deep_collected": deep}
 
-            if result["intent"] == "deep_collect":
+            if result["intent"] == "deep_collect" and crawl4ai_on:
                 url = result.get("url", "")
                 if url:
                     from app.utils.security import validate_url_safe
@@ -709,7 +592,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
     async def _invoke_api_employee(self, emp: dict, message: str):
         """API 型员工调用：HTTP 代理 → JSON 响应。"""
         api_url = emp.get("api_url", "")
-        api_method = normalize_api_method(emp.get("api_method", "GET"))
+        api_method = emp.get("api_method", "GET")
         api_headers_raw = emp.get("api_headers", "{}")
         api_params = emp.get("api_params_template", "")
         api_secret = emp.get("api_secret", "")
@@ -722,8 +605,8 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         try:
             import urllib.parse
             encoded_msg = urllib.parse.quote(message, safe="", encoding="utf-8")
-            api_url = api_url.replace("{message}", encoded_msg).replace("{message_raw}", encoded_msg)
-            api_params = api_params.replace("{message}", encoded_msg).replace("{message_raw}", message)
+            api_url = api_url.replace("{message}", encoded_msg)
+            api_params = api_params.replace("{message}", encoded_msg)
         except Exception as e:
             logger.warning(f"URL 模板替换失败: {e}，使用原始 URL")
 
@@ -734,18 +617,14 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         except Exception:
             pass
 
-        normalized_headers = normalize_headers(api_headers_raw or "{}")
-        if normalized_headers is None:
-            self.write({"code": 1, "msg": "API Headers 配置非法"})
-            return
-        headers = json.loads(normalized_headers)
+        # 解析 headers
+        try:
+            headers = json.loads(api_headers_raw) if api_headers_raw else {}
+        except (json.JSONDecodeError, TypeError):
+            headers = {}
 
         if api_secret:
-            if has_crlf(api_secret):
-                self.write({"code": 1, "msg": "API 密钥配置非法"})
-                return
-            if not any(str(k).lower() == "authorization" for k in headers):
-                headers["Authorization"] = f"Bearer {api_secret}"
+            headers["Authorization"] = f"Bearer {api_secret}"
 
         from app.utils.security import validate_url_safe
         safe, reason, _ = validate_url_safe(api_url)
@@ -753,35 +632,26 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             self.write({"code": 1, "msg": f"API URL 不安全: {reason}"})
             return
 
+        import urllib.request
+        import urllib.error
+
         def _sync_api_call():
             try:
-                request_url = api_url
-                data = None
                 if api_method == "POST":
                     data = api_params.encode('utf-8') if api_params else None
+                    req = urllib.request.Request(api_url, data=data, headers=headers, method="POST")
                 elif api_method == "GET":
+                    full_url = api_url
                     if api_params:
-                        request_url += ("&" if "?" in api_url else "?") + api_params
+                        full_url += ("&" if "?" in api_url else "?") + api_params
+                    req = urllib.request.Request(full_url, headers=headers, method="GET")
                 else:
                     # PUT, DELETE, PATCH 等方法
                     data = api_params.encode('utf-8') if api_params else None
-                request_url = urllib.parse.quote(
-                    request_url, safe=":/?#[]@!$&'()*+,;=%-", encoding="utf-8"
-                )
-                resp = safe_http_request(
-                    request_url,
-                    method=api_method,
-                    headers=headers,
-                    body=data,
-                    timeout=30,
-                    max_bytes=256 * 1024,
-                )
-                body = resp.body.decode("utf-8", errors="replace")
-                if resp.status >= 400:
-                    return resp.status, body, f"HTTP {resp.status}: {body[:500]}"
-                return resp.status, body, None
-            except SafeHttpError as e:
-                return 0, "", str(e)
+                    req = urllib.request.Request(api_url, data=data, headers=headers, method=api_method)
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    body = resp.read().decode("utf-8", errors="replace")
+                    return resp.status, body, None
             except Exception as e:
                 return 0, "", str(e)
 

@@ -18,19 +18,10 @@ DB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))
 DB_PATH = settings.DB_PATH if os.path.isabs(settings.DB_PATH) else os.path.join(DB_DIR, os.path.basename(settings.DB_PATH))
 
 
-def _dict_factory(cursor, row):
-    """Row factory that returns dicts instead of sqlite3.Row.
-
-    Dicts support .get() with default values, which sqlite3.Row does not.
-    This prevents AttributeError: 'sqlite3.Row' object has no attribute 'get'.
-    """
-    return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
-
-
 def get_connection() -> sqlite3.Connection:
     """Get a new database connection. Caller is responsible for closing."""
     conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = _dict_factory
+    conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=5000")  # 5秒超时，避免并发写入 SQLITE_BUSY
@@ -159,23 +150,23 @@ def init_db():
 
         # 兼容旧表迁移：为已存在的 ai_models 表添加 total_tokens 列
         try:
-            cols = {row["name"] for row in conn.execute("PRAGMA table_info(ai_models)").fetchall()}
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(ai_models)").fetchall()}
             if "total_tokens" not in cols:
                 conn.execute("ALTER TABLE ai_models ADD COLUMN total_tokens INTEGER DEFAULT 0")
                 logger.info("Database migration: added total_tokens column to ai_models")
         except Exception as e:
             logger.error(f"Database migration failed (ai_models.total_tokens): {e}", exc_info=True)
 
-        # 兼容旧表迁移：为已存在的 watch_sources 表添加 schedule_interval 列 (v0.6)
+        # 兼容旧表迁移：为已存在的 watch_sources 表添加 schedule_interval 列 (v0.4.0)
         try:
-            cols = {row["name"] for row in conn.execute("PRAGMA table_info(watch_sources)").fetchall()}
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(watch_sources)").fetchall()}
             if "schedule_interval" not in cols:
                 conn.execute("ALTER TABLE watch_sources ADD COLUMN schedule_interval INTEGER DEFAULT 0")
                 logger.info("Database migration: added schedule_interval column to watch_sources")
         except Exception as e:
             logger.error(f"Database migration failed (watch_sources.schedule_interval): {e}", exc_info=True)
 
-        # 独立数据仓库表（v0.2 新增，借鉴郭家琪项目的独立设计）
+        # 独立数据仓库表（v0.2.13 新增，借鉴郭家琪项目的独立设计）
         conn.execute("""
             CREATE TABLE IF NOT EXISTS data_warehouse (
                 id                  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -246,41 +237,7 @@ def init_db():
             )
         """)
 
-        # 技能库表 (v0.7 新增 — 技能管理模块)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS skills (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                name            TEXT UNIQUE NOT NULL,
-                description     TEXT DEFAULT '',
-                skill_type      TEXT NOT NULL DEFAULT 'prompt',
-                prompt_template TEXT DEFAULT '',
-                function_name   TEXT DEFAULT '',
-                function_params TEXT DEFAULT '{}',
-                is_enabled      INTEGER DEFAULT 1,
-                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # 接口管理表 (v0.9 新增)：可复用 API 接口模板，供 API 型数字员工联动选择
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS api_interfaces (
-                id                       INTEGER PRIMARY KEY AUTOINCREMENT,
-                name                     TEXT UNIQUE NOT NULL,
-                description              TEXT DEFAULT '',
-                api_url                  TEXT NOT NULL,
-                api_method               TEXT DEFAULT 'GET',
-                api_headers              TEXT DEFAULT '{}',
-                api_params_template      TEXT DEFAULT '',
-                response_render_template TEXT DEFAULT '',
-                api_secret               TEXT DEFAULT '',
-                is_enabled               INTEGER DEFAULT 1,
-                sort_order               INTEGER DEFAULT 0,
-                created_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # 数字化员工表 (v0.4 新增)
+        # 数字化员工表 (v0.3.0 新增)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS digital_employees (
                 id                      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -292,7 +249,6 @@ def init_db():
                 system_prompt           TEXT DEFAULT '',
                 skills                  TEXT DEFAULT '[]',
                 crawl4ai_enabled        INTEGER DEFAULT 0,
-                mcp_tool_ids            TEXT DEFAULT '[]',
                 -- API 型字段
                 api_url                 TEXT DEFAULT '',
                 api_method              TEXT DEFAULT 'GET',
@@ -300,26 +256,14 @@ def init_db():
                 api_params_template     TEXT DEFAULT '',
                 response_render_template TEXT DEFAULT '',
                 api_secret              TEXT DEFAULT '',
-                api_interface_id        INTEGER DEFAULT NULL,
                 -- 通用字段
                 is_enabled              INTEGER DEFAULT 1,
                 created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (model_id) REFERENCES ai_models(id) ON DELETE SET NULL,
-                FOREIGN KEY (api_interface_id) REFERENCES api_interfaces(id) ON DELETE SET NULL
+                FOREIGN KEY (model_id) REFERENCES ai_models(id) ON DELETE SET NULL
             )
         """)
 
-        # 兼容旧表迁移：为已存在的 digital_employees 表添加 api_interface_id 列
-        try:
-            cols = {row["name"] for row in conn.execute("PRAGMA table_info(digital_employees)").fetchall()}
-            if "api_interface_id" not in cols:
-                conn.execute("ALTER TABLE digital_employees ADD COLUMN api_interface_id INTEGER DEFAULT NULL")
-                logger.info("Database migration: added api_interface_id column to digital_employees")
-        except Exception as e:
-            logger.error(f"Database migration failed (digital_employees.api_interface_id): {e}", exc_info=True)
-
-        # 对话管理表 (v0.5 新增 — 多轮对话支持)
-
+        # 对话管理表 (v0.4.0 新增 — 多轮对话支持)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS conversations (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -353,69 +297,9 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_watch_sources_enabled ON watch_sources(is_enabled)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_watch_results_source ON watch_results(source_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_models_default ON ai_models(is_default)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_api_interfaces_enabled ON api_interfaces(is_enabled)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_api_interfaces_name ON api_interfaces(name)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_digital_employees_api_interface ON digital_employees(api_interface_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_username ON audit_logs(username)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at)")
-
-        # ── v0.10 MCP 工具注册表 (数据库驱动) ──
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS mcp_tools (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                name            TEXT UNIQUE NOT NULL,
-                display_name    TEXT NOT NULL,
-                description     TEXT DEFAULT '',
-                category        TEXT DEFAULT 'general',
-                tool_type       TEXT DEFAULT 'builtin',
-                handler_module  TEXT DEFAULT '',
-                api_url         TEXT DEFAULT '',
-                api_method      TEXT DEFAULT 'GET',
-                api_headers     TEXT DEFAULT '{}',
-                api_params_template TEXT DEFAULT '',
-                input_schema    TEXT DEFAULT '{}',
-                output_schema   TEXT DEFAULT '{}',
-                is_enabled      INTEGER DEFAULT 1,
-                is_system       INTEGER DEFAULT 0,
-                sort_order      INTEGER DEFAULT 0,
-                config          TEXT DEFAULT '{}',
-                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # ── v0.10 MCP 工具测试日志表 ──
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS mcp_tool_test_logs (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                tool_id         INTEGER NOT NULL,
-                test_params     TEXT DEFAULT '{}',
-                test_result     TEXT DEFAULT '',
-                is_success      INTEGER DEFAULT 0,
-                duration_ms     INTEGER DEFAULT 0,
-                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (tool_id) REFERENCES mcp_tools(id) ON DELETE CASCADE
-            )
-        """)
-
-        # ── v0.10 skills 表新增 mcp_tool_id 列 ──
-        try:
-            cols = {row["name"] for row in conn.execute("PRAGMA table_info(skills)").fetchall()}
-            if "mcp_tool_id" not in cols:
-                conn.execute("ALTER TABLE skills ADD COLUMN mcp_tool_id INTEGER DEFAULT NULL REFERENCES mcp_tools(id) ON DELETE SET NULL")
-                logger.info("Database migration: added mcp_tool_id column to skills")
-        except Exception as e:
-            logger.error(f"Database migration failed (skills.mcp_tool_id): {e}", exc_info=True)
-
-        # ── v0.10 digital_employees 表新增 mcp_tool_ids 列 ──
-        try:
-            cols = {row["name"] for row in conn.execute("PRAGMA table_info(digital_employees)").fetchall()}
-            if "mcp_tool_ids" not in cols:
-                conn.execute("ALTER TABLE digital_employees ADD COLUMN mcp_tool_ids TEXT DEFAULT '[]'")
-                logger.info("Database migration: added mcp_tool_ids column to digital_employees")
-        except Exception as e:
-            logger.error(f"Database migration failed (digital_employees.mcp_tool_ids): {e}", exc_info=True)
 
         conn.commit()
         logger.info(f"Database initialized: {DB_PATH}")
@@ -470,19 +354,11 @@ def seed_default_data():
                 (8, "瞭望采集", "layui-icon-search", "/admin/watch", None, 4, 1),
                 (9, "瞭源管理", "layui-icon-read", "/admin/watch/source", None, 5, 1),
                 (10, "数据仓库", "layui-icon-component", "/admin/warehouse", None, 6, 1),
-                (17, "采集日志", "layui-icon-list", "/admin/watch/log", None, 7, 1),
                 (11, "模型引擎", "layui-icon-util", "/admin/model", None, 7, 1),
-                (18, "会话管理", "layui-icon-dialogue", "/admin/conversation", None, 8, 1),
                 # 系统设置子项（新增，借鉴陈子墨丰富的种子数据设计）
                 (12, "AI对话", "layui-icon-dialogue", "/chat", 3, 1, 1),
-                # 数字员工 (v0.4 新增)
-                (13, "数字员工", "layui-icon-user", "/admin/employee", None, 9, 1),
-                # 技能管理 (v0.7 新增)
-                (14, "技能管理", "layui-icon-util", "/admin/skill", None, 10, 1),
-                # MCP 工具管理 (v0.10 新增)
-                (15, "MCP 工具管理", "layui-icon-component", "/admin/mcp/tool", None, 11, 1),
-                # 接口管理 (v0.9 新增)
-                (16, "接口管理", "layui-icon-link", "/admin/interface", None, 12, 1),
+                # 数字员工 (v0.3.0 新增)
+                (13, "数字员工", "layui-icon-user", "/admin/employee", None, 8, 1),
             ]
             conn.executemany(
                 "INSERT INTO functions (id, name, icon, route_path, parent_id, sort_order, is_enabled) "
@@ -490,29 +366,6 @@ def seed_default_data():
                 functions,
             )
             print("[种子] 默认功能模块已创建")
-
-        # 兼容旧数据库：补齐后续版本新增的功能节点并授权给系统管理员
-        managed_func_ids = []
-        for name, icon, route_path, sort_order in (
-            ("MCP 工具管理", "layui-icon-component", "/admin/mcp/tool", 10),
-            ("接口管理", "layui-icon-link", "/admin/interface", 11),
-            ("采集日志", "layui-icon-list", "/admin/watch/log", 7),
-            ("会话管理", "layui-icon-dialogue", "/admin/conversation", 8),
-        ):
-            func = conn.execute(
-                "SELECT id FROM functions WHERE route_path = ?", (route_path,)
-            ).fetchone()
-            if not func:
-                cur = conn.execute(
-                    "INSERT INTO functions (name, icon, route_path, parent_id, sort_order, is_enabled) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
-                    (name, icon, route_path, None, sort_order, 1),
-                )
-                func_id = cur.lastrowid
-                print(f"[种子] {name}功能模块已补齐")
-            else:
-                func_id = func["id"]
-            managed_func_ids.append(func_id)
 
         existing_rf = conn.execute("SELECT COUNT(*) as cnt FROM role_functions").fetchone()
         if existing_rf["cnt"] == 0:
@@ -522,21 +375,12 @@ def seed_default_data():
                 [(1, row["id"]) for row in func_ids],
             )
             print("[种子] 管理员角色功能关联已创建")
-        else:
-            for func_id in managed_func_ids:
-                conn.execute(
-                    "INSERT OR IGNORE INTO role_functions (role_id, function_id) VALUES (?, ?)",
-                    (1, func_id),
-                )
 
         conn.commit()
 
     _seed_default_sources()
     _seed_default_models()
-    _seed_default_skills()
-    _seed_default_interfaces()
     _seed_default_employees()
-    _seed_default_mcp_tools()
 
 
 def _seed_default_sources():
@@ -625,56 +469,10 @@ def _seed_default_models():
             print("[种子] 默认AI模型已创建（6个模型，覆盖6种分类）")
 
 
-def _seed_default_interfaces():
-    """种子：默认接口模板（供 API 型数字员工复用）。返回天气接口 ID。"""
-    import json
-    with get_db() as conn:
-        existing = conn.execute(
-            "SELECT id FROM api_interfaces WHERE name = ?", ("天气查询接口",)
-        ).fetchone()
-        if existing:
-            return existing["id"]
-
-        cur = conn.execute(
-            "INSERT INTO api_interfaces (name, description, api_url, api_method, "
-            "api_headers, api_params_template, response_render_template, sort_order, is_enabled) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                "天气查询接口",
-                "wttr.in 天气查询 JSON 接口，支持将用户输入作为城市名。",
-                "https://wttr.in/{message}?format=j1",
-                "GET",
-                json.dumps({"Accept": "application/json"}, ensure_ascii=False),
-                "",
-                json.dumps({
-                    "type": "weather_card",
-                    "title": "{{current_condition.0.weatherDesc.0.value}}",
-                    "fields": [
-                        {"label": "温度", "value": "{{current_condition.0.temp_C}}°C"},
-                        {"label": "体感温度", "value": "{{current_condition.0.FeelsLikeC}}°C"},
-                        {"label": "湿度", "value": "{{current_condition.0.humidity}}%"},
-                        {"label": "风力", "value": "{{current_condition.0.windspeedKmph}} km/h"},
-                        {"label": "风向", "value": "{{current_condition.0.winddir16Point}}"},
-                    ]
-                }, ensure_ascii=False),
-                1,
-                1,
-            ),
-        )
-        weather_interface_id = cur.lastrowid
-        if weather_interface_id:
-            print("[种子] 默认接口模板已创建（天气查询接口）")
-        return weather_interface_id
-
-
 def _seed_default_employees():
-    """种子：默认数字化员工（产业专员 + 天机助手 + 天气 + 采集专员 + 文案编写 + 新闻聚合 + 科普助手 + 随机音乐）。"""
+    """种子：默认数字化员工（产业专员 + 天机助手 + 天气 + 采集专员 + 文案编写 + 新闻聚合 + 科普助手）。"""
     import json
     with get_db() as conn:
-        weather_interface = conn.execute(
-            "SELECT id FROM api_interfaces WHERE name = ?", ("天气查询接口",)
-        ).fetchone()
-        weather_interface_id = weather_interface["id"] if weather_interface else None
         existing = conn.execute("SELECT COUNT(*) as cnt FROM digital_employees").fetchone()
         if existing["cnt"] == 0:
             # 产业专员 — LLM 型数字员工
@@ -720,8 +518,8 @@ def _seed_default_employees():
             # 天气查询 — API 型数字员工（免费天气 API）
             conn.execute(
                 "INSERT INTO digital_employees (id, name, employee_type, description, "
-                "api_url, api_method, api_headers, api_params_template, response_render_template, api_interface_id, is_enabled) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "api_url, api_method, api_headers, api_params_template, response_render_template, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     3, "天气", "api",
                     "查询指定城市的天气信息，返回温度、天气状况、风力等",
@@ -740,15 +538,14 @@ def _seed_default_employees():
                             {"label": "风向", "value": "{{current_condition.0.winddir16Point}}"},
                         ]
                     }, ensure_ascii=False),
-                    weather_interface_id,
                     1,
                 ),
             )
-            # 采集专员 — LLM 型数字员工（通过 MCP 工具权限使用 Crawl4ai 深度采集）
+            # 采集专员 — LLM 型数字员工（带 Crawl4ai 深度采集）
             conn.execute(
                 "INSERT INTO digital_employees (id, name, employee_type, description, "
-                "model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids, is_enabled) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "model_id, system_prompt, skills, crawl4ai_enabled, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     4, "采集专员", "llm",
                     "专注于数据采集与信息提取的AI助手，支持关键词搜索、深度采集、数据整理",
@@ -760,8 +557,7 @@ def _seed_default_employees():
                     "4. 生成结构化的数据报告\n"
                     "请高效、准确地完成采集任务，输出清晰的结构化结果。",
                     json.dumps(["数据搜索", "深度采集", "内容提取", "数据整理"], ensure_ascii=False),
-                    0,  # v0.8: crawl4ai_enabled 已废弃，改用 mcp_tool_ids
-                    json.dumps([15, 16], ensure_ascii=False),  # collect_with_crawl4ai + batch_deep_collect
+                    1,
                     1,
                 ),
             )
@@ -826,199 +622,4 @@ def _seed_default_employees():
                     1,
                 ),
             )
-            # 随机音乐 — LLM 型数字员工（MCP 工具驱动，调用 get_random_music）
-            conn.execute(
-                "INSERT INTO digital_employees (id, name, employee_type, description, "
-                "model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids, is_enabled) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    8, "随机音乐", "llm",
-                    "随机推荐一首来自网易云音乐热歌榜的歌曲，展示歌曲名、歌手、封面图和试听链接",
-                    None,
-                    "你是随机音乐助手，专门为用户推荐歌曲。你的核心能力：\n"
-                    "1. 调用 get_random_music 工具获取随机歌曲\n"
-                    "2. 基于工具返回的真实数据向用户展示歌曲信息\n"
-                    "3. 用轻松愉快的语气介绍歌曲\n\n"
-                    "重要规则：\n"
-                    "- 必须使用 get_random_music 工具获取歌曲数据，不要编造歌曲名\n"
-                    "- 如果工具返回了歌曲数据，直接向用户展示，不要问「要不要来一首」之类的废话\n"
-                    "- 展示格式：先介绍歌曲名和歌手，再引导用户点击试听",
-                    json.dumps(["随机音乐", "歌曲推荐", "音乐点播"], ensure_ascii=False),
-                    0,
-                    json.dumps([14], ensure_ascii=False),  # v0.8: get_random_music 工具
-                    1,
-                ),
-            )
-            print("[种子] 默认数字化员工已创建（8个：产业专员/天机助手/天气/采集专员/文案编写/新闻聚合/科普助手/随机音乐）")
-
-        elif weather_interface_id:
-            conn.execute(
-                "UPDATE digital_employees SET api_interface_id = ? "
-                "WHERE name = ? AND employee_type = 'api' "
-                "AND (api_interface_id IS NULL OR api_interface_id = '')",
-                (weather_interface_id, "天气"),
-            )
-
-def _seed_default_skills():
-    """种子：默认技能（5个，纯 Prompt 模板，模板中直接描述 MCP 工具用法）。"""
-    import json
-    with get_db() as conn:
-        existing = conn.execute("SELECT COUNT(*) as cnt FROM skills").fetchone()
-        if existing["cnt"] == 0:
-            skills_data = [
-                # 数据统计报告
-                (1, "数据统计", "生成数据仓库统计报告，含图表标记",
-                 "你正在进行数据统计分析任务。请遵循以下指令：\n"
-                 "1. 首先调用 get_warehouse_stats 工具获取数据仓库概况\n"
-                 "2. 根据统计结果生成自然语言报告，包含：总记录数、已深度采集数、来源分布\n"
-                 "3. 如果数据适合可视化，请使用 [CHART:bar|pie|line] 标记建议图表类型\n"
-                 "4. 报告格式清晰，使用 Markdown 标题和列表\n"
-                 "5. 最后给出数据利用建议（如：可对Top来源进行深度采集）"),
-                # 数据搜索（原 function 型，现改为在模板中说明用哪个 MCP 工具）
-                (2, "数据搜索", "在数据仓库中按关键词搜索采集结果",
-                 "你正在执行数据搜索任务。请遵循以下指令：\n"
-                 "1. 使用 search_warehouse 工具搜索数据仓库，参数 keyword 填写用户搜索的关键词，limit 默认 10\n"
-                 "2. 将搜索结果整理为清晰的列表格式\n"
-                 "3. 每条结果输出：标题、来源、50字摘要\n"
-                 "4. 如果结果较多，按相关性排序，优先展示最匹配的内容"),
-                # 新闻摘要
-                (3, "新闻摘要", "聚合多源新闻并生成结构化摘要",
-                 "你正在执行新闻摘要任务。请遵循以下指令：\n"
-                 "1. 调用 search_warehouse 或 get_recent_warehouse_data 获取新闻数据\n"
-                 "2. 按主题分类整理新闻（如：科技/财经/政策/社会）\n"
-                 "3. 每条新闻输出：标题、来源、50字摘要、发布时间\n"
-                 "4. 在末尾生成一份「今日要闻速览」（3-5条最重要新闻）\n"
-                 "5. 使用 Markdown 格式，标题用 ###，列表用 -"),
-                # 深度采集（原 function 型，现改为在模板中说明 URL 采集流程）
-                (4, "深度采集", "对指定 URL 进行正文深度抓取和内容提取",
-                 "你正在执行深度采集任务。请遵循以下指令：\n"
-                 "1. 使用 deep_collect_url 工具对用户提供的 URL 进行深度采集\n"
-                 "2. 如果 URL 内容复杂，可额外使用 collect_with_crawl4ai 工具获取更完整内容\n"
-                 "3. 提取文章正文、标题、关键信息\n"
-                 "4. 输出结构化内容：标题 → 正文摘要 → 关键数据 → 来源链接\n"
-                 "5. 用 Markdown 格式组织输出"),
-                # 翻译助手
-                (5, "翻译助手", "高质量中英文双向翻译，保持专业术语准确",
-                 "你正在执行翻译任务。请遵循以下指令：\n"
-                 "1. 识别用户输入的源语言和目标语言\n"
-                 "2. 执行高质量翻译，注意：\n"
-                 "   - 保持原文语义和语气\n"
-                 "   - 专业术语使用行业标准译法\n"
-                 "   - 长句合理断句，符合目标语言习惯\n"
-                 "3. 输出格式：先给出翻译结果，再附加【术语注释】（如有专业术语）\n"
-                 "4. 如涉及中文成语/典故，添加简短解释"),
-            ]
-            conn.executemany(
-                "INSERT INTO skills (id, name, description, prompt_template) "
-                "VALUES (?, ?, ?, ?)",
-                skills_data,
-            )
-            print("[种子] 默认技能已创建（5个：数据统计/数据搜索/新闻摘要/深度采集/翻译助手）")
-
-
-def _seed_default_mcp_tools():
-    """种子：MCP 工具注册表（20+ 工具）。"""
-    import json
-    with get_db() as conn:
-        existing = conn.execute("SELECT COUNT(*) as cnt FROM mcp_tools").fetchone()
-        if existing["cnt"] > 0:
-            return
-
-        tools_data = [
-            # ── 数据仓库类 (warehouse) ──
-            (1, "search_warehouse", "数据仓库搜索", "在数据仓库中搜索关键词相关内容", "warehouse", "builtin",
-             "app.mcp.builtin_tools.warehouse_tools._search_warehouse", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"keyword":{"type":"string","description":"搜索关键词"},"limit":{"type":"integer","description":"返回结果数量上限，默认10","default":10}},"required":["keyword"]}, ensure_ascii=False),
-             "{}", 1, 1, 1, "{}"),
-            (2, "get_recent_warehouse_data", "最新数据", "获取数据仓库中最新入库的数据记录", "warehouse", "builtin",
-             "app.mcp.builtin_tools.warehouse_tools._get_recent_warehouse_data", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"limit":{"type":"integer","description":"返回记录数，默认10","default":10}}}, ensure_ascii=False),
-             "{}", 1, 1, 2, "{}"),
-            (3, "get_warehouse_stats", "数据统计", "获取数据仓库的统计概况", "warehouse", "builtin",
-             "app.mcp.builtin_tools.warehouse_tools._get_warehouse_stats", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
-             "{}", 1, 1, 3, "{}"),
-            (4, "search_warehouse_fulltext", "全文检索", "使用FTS5对数据仓库进行全文检索", "warehouse", "builtin",
-             "app.mcp.builtin_tools.warehouse_tools._search_warehouse_fulltext", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"query":{"type":"string","description":"全文检索关键词"},"limit":{"type":"integer","description":"返回数量","default":10}},"required":["query"]}, ensure_ascii=False),
-             "{}", 1, 1, 4, "{}"),
-
-            # ── 数据采集类 (collect) ──
-            (5, "collect_web_data", "全网采集", "从瞭望源采集指定关键词的新闻数据", "collect", "builtin",
-             "app.mcp.builtin_tools.collect_tools._collect_web_data", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"keyword":{"type":"string","description":"采集关键词"},"source_ids":{"type":"array","items":{"type":"integer"},"description":"瞭望源ID列表"}},"required":["keyword"]}, ensure_ascii=False),
-             "{}", 1, 1, 1, "{}"),
-            (6, "deep_collect_url", "深度采集", "对指定URL进行正文深度抓取", "collect", "builtin",
-             "app.mcp.builtin_tools.collect_tools._deep_collect_url", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"url":{"type":"string","description":"目标网页URL"}},"required":["url"]}, ensure_ascii=False),
-             "{}", 1, 1, 2, "{}"),
-            (7, "list_watch_sources", "瞭望源列表", "列出所有启用的瞭望采集源", "collect", "builtin",
-             "app.mcp.builtin_tools.collect_tools._list_watch_sources", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
-             "{}", 1, 1, 3, "{}"),
-
-            # ── 数字员工类 (employee) ──
-            (8, "list_digital_employees", "员工列表", "列出系统中所有可用的数字员工", "employee", "builtin",
-             "app.mcp.builtin_tools.employee_tools._list_digital_employees", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
-             "{}", 1, 1, 1, "{}"),
-            (9, "invoke_digital_employee", "调用数字员工", "调用指定数字员工执行任务", "employee", "builtin",
-             "app.mcp.builtin_tools.employee_tools._invoke_digital_employee", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"employee_name":{"type":"string","description":"员工名称或ID"},"message":{"type":"string","description":"发送给员工的消息"}},"required":["employee_name","message"]}, ensure_ascii=False),
-             "{}", 1, 1, 2, "{}"),
-
-            # ── AI模型类 (model) ──
-            (10, "list_ai_models", "AI模型列表", "列出所有可用的AI模型", "model", "builtin",
-             "app.mcp.builtin_tools.model_tools._list_ai_models", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
-             "{}", 1, 1, 1, "{}"),
-            (11, "get_default_model", "默认模型", "获取当前默认AI模型信息", "model", "builtin",
-             "app.mcp.builtin_tools.model_tools._get_default_model", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
-             "{}", 1, 1, 2, "{}"),
-
-            # ── 对话管理类 (chat) ──
-            (12, "list_conversations", "对话历史", "列出用户的对话历史记录", "chat", "builtin",
-             "app.mcp.builtin_tools.chat_tools._list_conversations", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"username":{"type":"string","description":"用户名"},"limit":{"type":"integer","description":"返回数量上限","default":20}}}, ensure_ascii=False),
-             "{}", 1, 1, 1, "{}"),
-            (13, "get_conversation_messages", "对话消息", "获取指定对话的消息历史", "chat", "builtin",
-             "app.mcp.builtin_tools.chat_tools._get_conversation_messages", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"conversation_id":{"type":"integer","description":"对话ID"},"limit":{"type":"integer","description":"消息数量上限","default":20},"username":{"type":"string","description":"当前用户名"}},"required":["conversation_id"]}, ensure_ascii=False),
-             "{}", 1, 1, 2, "{}"),
-
-            # ── 娱乐类 (entertainment) ──
-            (14, "get_random_music", "随机音乐", "从网易云音乐热歌榜随机推荐歌曲", "entertainment", "builtin",
-             "app.mcp.builtin_tools.entertainment_tools._get_random_music", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
-             "{}", 1, 1, 1, "{}"),
-
-            # ── 爬虫增强类 (crawl4ai) ──
-            (15, "collect_with_crawl4ai", "Crawl4ai智能采集", "使用Crawl4ai对URL进行智能深度采集", "crawl4ai", "builtin",
-             "app.mcp.builtin_tools.crawl4ai_tools._collect_with_crawl4ai", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"url":{"type":"string","description":"目标URL"},"extract_mode":{"type":"string","enum":["auto","article","full"],"default":"auto"}},"required":["url"]}, ensure_ascii=False),
-             "{}", 1, 1, 1, "{}"),
-            (16, "batch_deep_collect", "批量深度采集", "批量对多个URL进行深度采集", "crawl4ai", "builtin",
-             "app.mcp.builtin_tools.crawl4ai_tools._batch_deep_collect", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"urls":{"type":"array","items":{"type":"string"},"description":"目标URL列表"},"extract_mode":{"type":"string","enum":["auto","article","full"],"default":"auto"}},"required":["urls"]}, ensure_ascii=False),
-             "{}", 1, 1, 2, "{}"),
-
-            # ── 系统管理类 (system) ──
-            (17, "load_skill", "加载技能", "加载指定技能的完整执行指令", "system", "builtin",
-             "app.mcp.builtin_tools.system_tools._load_skill", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"skill_name":{"type":"string","description":"技能名称"}},"required":["skill_name"]}, ensure_ascii=False),
-             "{}", 1, 1, 1, "{}"),
-            (18, "get_system_stats", "系统概览", "获取系统统计概览（用户数/数据量/员工数等）", "system", "builtin",
-             "app.mcp.builtin_tools.system_tools._get_system_stats", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
-             "{}", 1, 1, 2, "{}"),
-        ]
-
-        conn.executemany(
-            "INSERT INTO mcp_tools (id, name, display_name, description, category, tool_type, "
-            "handler_module, api_url, api_method, api_headers, api_params_template, "
-            "input_schema, output_schema, is_enabled, is_system, sort_order, config) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            tools_data,
-        )
-        print("[种子] 默认 MCP 工具已创建（18个工具，覆盖7个分类）")
+            print("[种子] 默认数字化员工已创建（7个：产业专员/天机助手/天气/采集专员/文案编写/新闻聚合/科普助手）")

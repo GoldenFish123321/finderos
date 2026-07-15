@@ -76,108 +76,35 @@
                 </div>
 
                 <div class="layui-form-item">
-                    <label class="layui-form-label">选择技能</label>
+                    <label class="layui-form-label">技能标签</label>
                     <div class="layui-input-block">
-                        {% if skills_library %}
-                        <div style="max-height:240px;overflow-y:auto;border:1px solid var(--border-subtle);border-radius:8px;padding:12px;">
-                            {% for sk in skills_library %}
-                            <div style="display:inline-block;margin:4px 8px 4px 0;">
-                                <input type="checkbox" name="skill_ids" value="{{ sk['id'] }}"
-                                       id="skill-cb-{{ sk['id'] }}" lay-skin="primary"
-                                       title="{{ sk['name'] }}"
-                                       {% if employee %}
-                                           {% try %}
-                                               {% set emp_skills = __import__('json').loads(employee.get('skills','[]')) %}
-                                               {% if sk['id'] in emp_skills %}checked{% end %}
-                                           {% except %}{% end %}
-                                       {% end %}>
-                            </div>
+                        <div style="display:flex;gap:8px;">
+                            <input type="text" id="skill-input" class="layui-input" placeholder="输入技能后按回车添加"
+                                   style="flex:1;">
+                            <button type="button" id="add-skill-btn" class="layui-btn layui-btn-sm">添加</button>
+                        </div>
+                        {% set skills = [] %}
+                        {% if employee %}{% try %}{% set skills = __import__('json').loads(employee.get('skills','[]')) %}{% except %}{% end %}{% end %}
+                        <div class="skill-tags" id="skill-tags">
+                            {% for s in skills %}
+                            <span class="skill-tag">{{ s }}<span class="remove-skill" onclick="this.parentElement.remove()">×</span></span>
                             {% end %}
                         </div>
-                        <div class="layui-form-mid layui-word-aux" style="float:none;margin-left:0;">
-                            {% if skills_library %}
-                            💡 勾选员工可加载的技能。LLM 在对话中会按需通过 <code>load_skill</code> 工具获取完整指令。
-                            {% else %}
-                            ⚠️ 技能库为空，请先在「技能管理」中添加技能。
-                            {% end %}
-                        </div>
-                        {% else %}
-                        <div style="padding:12px;color:var(--text-muted);border:1px dashed var(--border-subtle);border-radius:8px;">
-                            ⚠️ 技能库为空，请先在「<a href="/admin/skill" target="_blank">技能管理</a>」中添加技能。
-                        </div>
-                        {% end %}
+                        <input type="hidden" name="skills" id="skills-hidden" value='{{ employee.get("skills", "[]") if employee else "[]" }}'>
                     </div>
                 </div>
 
-                <!-- v0.8: Crawl4ai 已迁移至 MCP 工具权限体系 -->
-                <!-- 旧 crawl4ai_enabled 复选框已移除，请在下方 MCP 工具权限中勾选「Crawl4ai 智能采集」和「批量深度采集」 -->
-
-                <!-- v0.8: MCP 工具权限选择 -->
                 <div class="layui-form-item">
-                    <label class="layui-form-label">MCP 工具权限</label>
+                    <label class="layui-form-label">Crawl4ai</label>
                     <div class="layui-input-block">
-                        {% if mcp_tools %}
-                        <div style="max-height:240px;overflow-y:auto;border:1px solid var(--border-subtle);border-radius:8px;padding:12px;">
-                            {% set emp_tool_ids = [] %}
-                            {% if employee %}
-                                {% try %}
-                                    {% set emp_tool_ids = __import__('json').loads(employee.get('mcp_tool_ids','[]')) %}
-                                {% except %}{% end %}
-                            {% end %}
-                            {% for cat in mcp_categories %}
-                            <div style="margin-bottom:8px;">
-                                <div style="font-weight:600;font-size:13px;color:{{ cat.get('color','#6B7280') }};padding:4px 0;">
-                                    {{ cat.get('name', cat.get('value','')) }} ({{ cat.get('count',0) }})
-                                </div>
-                                {% for tool in mcp_tools %}
-                                {% if tool['category'] == cat['value'] %}
-                                <div style="display:inline-block;margin:2px 8px 2px 0;">
-                                    <input type="checkbox" name="mcp_tool_ids" value="{{ tool['id'] }}"
-                                           id="mcp-tool-cb-{{ tool['id'] }}" lay-skin="primary"
-                                           title="{{ tool['display_name'] }}"
-                                           {% if tool['id'] in emp_tool_ids %}checked{% end %}>
-                                </div>
-                                {% end %}
-                                {% end %}
-                            </div>
-                            {% end %}
-                        </div>
-                        <div class="layui-form-mid layui-word-aux" style="float:none;margin-left:0;">
-                            💡 勾选员工可使用的 MCP 工具。未勾选任何工具时，员工将无权调用任何 MCP 工具（最小权限原则）。
-                        </div>
-                        {% else %}
-                        <div style="padding:12px;color:var(--text-muted);border:1px dashed var(--border-subtle);border-radius:8px;">
-                            ⚠️ MCP 工具库为空，请先在「<a href="/admin/mcp" target="_blank">MCP 工具管理</a>」中配置工具。
-                        </div>
-                        {% end %}
+                        <input type="checkbox" name="crawl4ai_enabled" value="1" title="启用 Crawl4ai 网页采集能力"
+                               {% if employee and employee.get('crawl4ai_enabled') == 1 %}checked{% end %}>
                     </div>
                 </div>
             </div>
 
             <!-- === API 型字段 === -->
             <div class="api-fields {{ 'active' if employee and employee['employee_type'] == 'api' else '' }}">
-                <div class="layui-form-item">
-                    <label class="layui-form-label">接口模板</label>
-                    <div class="layui-input-block">
-                        <select name="api_interface_id" id="api-interface-select" lay-filter="apiInterface">
-                            <option value="">-- 手动配置或选择接口模板 --</option>
-                            {% for iface in api_interfaces %}
-                            <option value="{{ iface['id'] }}"
-                                    data-url="{{ iface.get('api_url','') }}"
-                                    data-method="{{ iface.get('api_method','GET') }}"
-                                    data-headers="{{ iface.get('api_headers','{}') }}"
-                                    data-params="{{ iface.get('api_params_template','') }}"
-                                    data-response="{{ iface.get('response_render_template','') }}"
-                                    {% if employee and employee.get('api_interface_id') == iface['id'] %}selected{% end %}>
-                                {{ iface['name'] }} ({{ iface.get('api_method','GET') }}){% if iface.get('is_enabled') != 1 %} — 已禁用{% end %}
-                            </option>
-                            {% end %}
-                        </select>
-                        <div class="layui-form-mid layui-word-aux">
-                            选择后自动填充 URL、Method、Headers、参数模板和响应模板；接口密钥在服务端复用，不会回显。
-                        </div>
-                    </div>
-                </div>
                 <div class="layui-form-item">
                     <label class="layui-form-label">API URL</label>
                     <div class="layui-input-block">
@@ -192,9 +119,6 @@
                         <select name="api_method">
                             <option value="GET" {% if employee and employee.get('api_method')=='GET' %}selected{% end %}>GET</option>
                             <option value="POST" {% if employee and employee.get('api_method')=='POST' %}selected{% end %}>POST</option>
-                            <option value="PUT" {% if employee and employee.get('api_method')=='PUT' %}selected{% end %}>PUT</option>
-                            <option value="PATCH" {% if employee and employee.get('api_method')=='PATCH' %}selected{% end %}>PATCH</option>
-                            <option value="DELETE" {% if employee and employee.get('api_method')=='DELETE' %}selected{% end %}>DELETE</option>
                         </select>
                     </div>
                 </div>
@@ -224,7 +148,6 @@
                     <div class="layui-input-block">
                         <input type="password" name="api_secret" class="layui-input"
                                value="" placeholder="{{ '留空则不修改' if employee else 'API 认证密钥' }}">
-                        <div class="layui-form-mid layui-word-aux">若已选择含密钥的接口模板且此处留空，将复用接口模板密钥。</div>
                     </div>
                 </div>
             </div>
@@ -256,39 +179,53 @@ layui.use(['form'], function(){
         });
     });
 
+    // 技能标签管理
+    var skillInput = document.getElementById('skill-input');
+    var skillTags = document.getElementById('skill-tags');
+    var skillsHidden = document.getElementById('skills-hidden');
+
+    function updateSkillsHidden(){
+        var tags = skillTags.querySelectorAll('.skill-tag');
+        var skills = [];
+        tags.forEach(function(tag){
+            skills.push(tag.textContent.replace('×','').trim());
+        });
+        skillsHidden.value = JSON.stringify(skills);
+    }
+
+    function addSkill(name){
+        name = name.trim();
+        if (!name) return;
+        var existing = skillTags.querySelectorAll('.skill-tag');
+        for (var i = 0; i < existing.length; i++){
+            if (existing[i].textContent.replace('×','').trim() === name) return;
+        }
+        var tag = document.createElement('span');
+        tag.className = 'skill-tag';
+        tag.innerHTML = name + '<span class="remove-skill" onclick="this.parentElement.remove();updateSkillsHidden();">×</span>';
+        skillTags.appendChild(tag);
+        updateSkillsHidden();
+    }
+
+    document.getElementById('add-skill-btn').addEventListener('click', function(){
+        addSkill(skillInput.value);
+        skillInput.value = '';
+        skillInput.focus();
+    });
+
+    skillInput.addEventListener('keypress', function(e){
+        if (e.key === 'Enter'){
+            e.preventDefault();
+            addSkill(skillInput.value);
+            skillInput.value = '';
+        }
+    });
+
     // 初始化类型显示
     var checkedType = document.querySelector('input[name="employee_type"]:checked');
     if (checkedType){
         document.querySelector('.llm-fields').classList.toggle('active', checkedType.value === 'llm');
         document.querySelector('.api-fields').classList.toggle('active', checkedType.value === 'api');
-    }
-
-    // 接口模板联动：选择接口后自动填充 API 型员工配置
-    function fillApiFromSelectedInterface(){
-        var sel = document.getElementById('api-interface-select');
-        if (!sel || !sel.value) return;
-        var opt = sel.options[sel.selectedIndex];
-        var fields = {
-            api_url: opt.getAttribute('data-url') || '',
-            api_headers: opt.getAttribute('data-headers') || '{}',
-            api_params_template: opt.getAttribute('data-params') || '',
-            response_render_template: opt.getAttribute('data-response') || ''
-        };
-        Object.keys(fields).forEach(function(name){
-            var el = document.querySelector('[name="' + name + '"]');
-            if (el) el.value = fields[name];
-        });
-        var method = opt.getAttribute('data-method') || 'GET';
-        var methodSelect = document.querySelector('[name="api_method"]');
-        if (methodSelect) {
-            methodSelect.value = method;
-            form.render('select');
-        }
-    }
-    var interfaceSelect = document.getElementById('api-interface-select');
-    if (interfaceSelect) {
-        interfaceSelect.addEventListener('change', fillApiFromSelectedInterface);
-        form.on('select(apiInterface)', fillApiFromSelectedInterface);
     }
 });
 </script>

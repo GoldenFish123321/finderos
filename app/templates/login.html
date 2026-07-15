@@ -166,6 +166,9 @@
         {% if error %}
         <div class="error-msg">⚠ {{ error }}</div>
         {% end %}
+        {% if message %}
+        <div class="error-msg" style="background: rgba(95,184,120,0.12); border-color: rgba(95,184,120,0.25); color: var(--accent-green);">✅ {{ message }}</div>
+        {% end %}
 
         <form method="post" action="/" id="login-form" onsubmit="var btn=document.getElementById('login-submit');btn.disabled=true;btn.textContent='登录中...';">
             {% module xsrf_form_html() %}
@@ -183,7 +186,8 @@
         </form>
 
         <div class="form-footer">
-            <p>瞭望与问数系统 v{{ app_version }} · DataFinderAgentOS</p>
+            <p>还没有账号？<a href="/register">立即注册</a></p>
+            <p style="margin-top:8px;">瞭望与问数系统 v0.4 · DataFinderAgentOS</p>
         </div>
     </div>
 </div>
