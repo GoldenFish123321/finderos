@@ -112,14 +112,19 @@ class SkillRepository:
         ]
 
     @staticmethod
-    def create(name: str, description: str = "", prompt_template: str = "") -> int:
-        """创建技能。返回新 ID 或 -1。"""
+    def create(name: str, description: str = "", prompt_template: str = "",
+               mcp_tool_id: int = None) -> int:
+        """创建技能。返回新 ID 或 -1。
+        
+        Args:
+            mcp_tool_id: 关联的 MCP 工具 ID（v0.4.2 新增，允许为空表示纯 prompt 型）
+        """
         try:
             with get_db() as conn:
                 cur = conn.execute(
-                    "INSERT INTO skills (name, description, prompt_template) "
-                    "VALUES (?, ?, ?)",
-                    (name.strip(), description.strip(), prompt_template.strip()),
+                    "INSERT INTO skills (name, description, prompt_template, mcp_tool_id) "
+                    "VALUES (?, ?, ?, ?)",
+                    (name.strip(), description.strip(), prompt_template.strip(), mcp_tool_id),
                 )
                 conn.commit()
                 return cur.lastrowid
@@ -128,14 +133,19 @@ class SkillRepository:
 
     @staticmethod
     def update(skill_id: int, name: str, description: str = "",
-               prompt_template: str = "") -> bool:
-        """更新技能。返回是否成功。"""
+               prompt_template: str = "", mcp_tool_id: int = None) -> bool:
+        """更新技能。返回是否成功。
+        
+        Args:
+            mcp_tool_id: 关联的 MCP 工具 ID（v0.4.2 新增，允许为空）
+        """
         try:
             with get_db() as conn:
                 conn.execute(
                     "UPDATE skills SET name = ?, description = ?, "
-                    "prompt_template = ? WHERE id = ?",
-                    (name.strip(), description.strip(), prompt_template.strip(), skill_id),
+                    "prompt_template = ?, mcp_tool_id = ? WHERE id = ?",
+                    (name.strip(), description.strip(), prompt_template.strip(),
+                     mcp_tool_id, skill_id),
                 )
                 conn.commit()
             return True

@@ -22,7 +22,10 @@
 .emp-card-meta { display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:var(--text-muted); margin-bottom:12px; }
 .emp-card-meta span { background:rgba(255,255,255,0.04); padding:3px 8px; border-radius:4px; }
 .emp-card-badges { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
-.emp-card-badges .skill-tag { font-size:11px; padding:2px 8px; border-radius:10px; background:rgba(255,184,0,0.12); color:var(--accent-orange); }
+/* 三色徽章体系 (v0.4.2 MCP 重构) */
+.emp-card-badges .mcp-tag    { font-size:11px; padding:2px 8px; border-radius:10px; background:rgba(94,163,255,0.12); color:#5EA3FF; border:1px solid rgba(94,163,255,0.2); }
+.emp-card-badges .skill-tag  { font-size:11px; padding:2px 8px; border-radius:10px; background:rgba(95,184,120,0.12); color:#5FB878; border:1px solid rgba(95,184,120,0.2); }
+.emp-card-badges .legacy-tag { font-size:11px; padding:2px 8px; border-radius:10px; background:rgba(255,184,0,0.12); color:#FFB800; border:1px solid rgba(255,184,0,0.2); }
 .emp-card-actions { display:flex; gap:8px; flex-wrap:wrap; }
 .emp-card-actions a, .emp-card-actions button { font-size:12px; padding:5px 12px; border-radius:5px; cursor:pointer; text-decoration:none; border:none; }
 .emp-card-actions .btn-test { background:var(--accent-blue); color:#fff; }
@@ -84,13 +87,19 @@
             {% end %}
             <span>🕐 {{ emp.get('created_at', '')[:10] }}</span>
         </div>
+        {% set mcp_tools = emp.get('mcp_tools_list', []) %}
         {% set skills = emp.get('skills_list', []) %}
-        {% if skills %}
+        {% set is_legacy = emp.get('skills_legacy', False) %}
+        {% if mcp_tools or skills %}
         <div class="emp-card-badges">
-            {% for s in skills[:4] %}
-            <span class="skill-tag">{{ s }}</span>
+            {% for t in mcp_tools[:4] %}
+            <span class="mcp-tag">🔧 {{ t }}</span>
             {% end %}
-            {% if len(skills) > 4 %}<span class="skill-tag">+{{ len(skills) - 4 }}</span>{% end %}
+            {% if len(mcp_tools) > 4 %}<span class="mcp-tag">+{{ len(mcp_tools) - 4 }}</span>{% end %}
+            {% for s in skills[:4] %}
+            <span class="{{ 'legacy-tag' if is_legacy else 'skill-tag' }}">{{ '📋 ' if is_legacy else '⭐ ' }}{{ s }}</span>
+            {% end %}
+            {% if len(skills) > 4 %}<span class="{{ 'legacy-tag' if is_legacy else 'skill-tag' }}">+{{ len(skills) - 4 }}</span>{% end %}
         </div>
         {% end %}
         <div class="emp-card-actions">

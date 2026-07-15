@@ -21,6 +21,12 @@ async def _collect_with_crawl4ai(url: str, extract_mode: str = "auto") -> Dict[s
     """
     import asyncio
     from app.services.deep_collector import deep_fetch, _HAS_CRAWL4AI
+    from app.utils.security import validate_url_safe
+
+    # SSRF 防护：验证 URL 安全性
+    safe, reason, _ = validate_url_safe(url)
+    if not safe:
+        return {"success": False, "url": url, "error": f"URL 安全校验未通过: {reason}"}
 
     loop = asyncio.get_event_loop()
 

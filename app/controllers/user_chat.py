@@ -23,6 +23,8 @@ from app.models.api_interface import normalize_api_method, normalize_headers
 from app.models.conversation import ConversationRepository
 from app.models.digital_employee import DigitalEmployeeRepository
 from app.models.data_warehouse import DataWarehouseRepository
+from app.models.skill import SkillRepository
+from app.models.mcp_tool import MCPToolRepository
 from app.utils.security import has_crlf, write_audit_log
 from app.utils.safe_http import SafeHttpError, safe_http_request
 
@@ -380,11 +382,43 @@ class UserEmployeeListHandler(BaseHandler):
     @tornado.web.authenticated
     def get(self):
         employees = DigitalEmployeeRepository.get_enabled()
-        items = [{
-            "id": e["id"], "name": e["name"],
-            "employee_type": e.get("employee_type", "llm"),
-            "description": e.get("description", ""),
-        } for e in employees]
+        items = []
+        for e in employees:
+            item = {
+                "id": e["id"], "name": e["name"],
+                "employee_type": e.get("employee_type", "llm"),
+                "description": e.get("description", ""),
+            }
+            # v0.4.2: 解析技能标签（兼容旧格式字符串和新格式 ID）
+            try:
+                raw_skills = json.loads(e.get("skills", "[]"))
+            except (json.JSONDecodeError, TypeError):
+                raw_skills = []
+            if raw_skills and isinstance(raw_skills[0], int):
+                resolved = SkillRepository.resolve_by_ids(raw_skills)
+                item["skills_list"] = [s["name"] for s in resolved]
+                item["skills_legacy"] = False
+            elif raw_skills and isinstance(raw_skills[0], str):
+                resolved = SkillRepository.resolve_by_names(raw_skills)
+                if resolved:
+                    item["skills_list"] = [s["name"] for s in resolved]
+                else:
+                    item["skills_list"] = raw_skills
+                item["skills_legacy"] = True
+            else:
+                item["skills_list"] = []
+                item["skills_legacy"] = False
+            # v0.4.2: 解析 MCP 工具
+            try:
+                raw_tool_ids = json.loads(e.get("mcp_tool_ids", "[]"))
+            except (json.JSONDecodeError, TypeError):
+                raw_tool_ids = []
+            if raw_tool_ids:
+                mcp_tool_rows = MCPToolRepository.get_by_ids(raw_tool_ids)
+                item["mcp_tools_list"] = [t["display_name"] for t in mcp_tool_rows]
+            else:
+                item["mcp_tools_list"] = []
+            items.append(item)
         self.write({"code": 0, "items": items})
 
 
