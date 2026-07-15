@@ -320,7 +320,7 @@ def _load_skill(skill_name: str) -> Dict[str, Any]:
         "skill_name": skill["name"],
         "description": skill.get("description", ""),
         "content": skill.get("prompt_template", ""),
-        "usage": "请将以上 content 作为你的系统指令严格遵循，完成用户的任务。",
+        "usage": "请将以上 content 作为你的系统指令严格遵循，完成用户的任务。如需使用 MCP 工具，请在 content 中自行描述。",
     }
 
 
