@@ -819,8 +819,8 @@ def _seed_default_employees():
             # 随机音乐 — LLM 型数字员工（MCP 工具驱动，调用 get_random_music）
             conn.execute(
                 "INSERT INTO digital_employees (id, name, employee_type, description, "
-                "model_id, system_prompt, skills, crawl4ai_enabled, is_enabled) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     8, "随机音乐", "llm",
                     "随机推荐一首来自网易云音乐热歌榜的歌曲，展示歌曲名、歌手、封面图和试听链接",
@@ -835,6 +835,7 @@ def _seed_default_employees():
                     "- 展示格式：先介绍歌曲名和歌手，再引导用户点击试听",
                     json.dumps(["随机音乐", "歌曲推荐", "音乐点播"], ensure_ascii=False),
                     0,
+                    json.dumps([14], ensure_ascii=False),  # v0.6.1: get_random_music 工具
                     1,
                 ),
             )
