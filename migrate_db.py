@@ -14,6 +14,7 @@ migrate_db.py — 数据库迁移脚本
   v0.3.0  — 添加 digital_employees 表
   v0.3.0  — 添加 data_warehouse_fts 虚拟表 + 同步触发器
   v0.4.0  — 添加 watch_sources.schedule_interval 列
+  v0.4.1  — 添加 api_interfaces 表与 digital_employees.api_interface_id
   v0.5.0  — 添加 skills 技能库表
   v0.6.0  — 添加 mcp_tools MCP工具注册表 + mcp_tool_test_logs
   v0.6.0  — 添加 skills.mcp_tool_id / digital_employees.mcp_tool_ids
@@ -229,6 +230,48 @@ def run_migrations():
                 )
             """,
             "check": lambda c: _table_exists(c, "skills"),
+        },
+        # v0.4.1: 接口管理模块
+        {
+            "name": "create_api_interfaces",
+            "sql": """
+                CREATE TABLE IF NOT EXISTS api_interfaces (
+                    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name                     TEXT UNIQUE NOT NULL,
+                    description              TEXT DEFAULT '',
+                    api_url                  TEXT NOT NULL,
+                    api_method               TEXT DEFAULT 'GET',
+                    api_headers              TEXT DEFAULT '{}',
+                    api_params_template      TEXT DEFAULT '',
+                    response_render_template TEXT DEFAULT '',
+                    api_secret               TEXT DEFAULT '',
+                    is_enabled               INTEGER DEFAULT 1,
+                    sort_order               INTEGER DEFAULT 0,
+                    created_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """,
+            "check": lambda c: _table_exists(c, "api_interfaces"),
+        },
+        {
+            "name": "add_digital_employees_api_interface_id",
+            "sql": "ALTER TABLE digital_employees ADD COLUMN api_interface_id INTEGER DEFAULT NULL",
+            "check": lambda c: _column_exists(c, "digital_employees", "api_interface_id"),
+        },
+        {
+            "name": "idx_api_interfaces_enabled",
+            "sql": "CREATE INDEX IF NOT EXISTS idx_api_interfaces_enabled ON api_interfaces(is_enabled)",
+            "check": lambda c: _index_exists(c, "idx_api_interfaces_enabled"),
+        },
+        {
+            "name": "idx_api_interfaces_name",
+            "sql": "CREATE INDEX IF NOT EXISTS idx_api_interfaces_name ON api_interfaces(name)",
+            "check": lambda c: _index_exists(c, "idx_api_interfaces_name"),
+        },
+        {
+            "name": "idx_digital_employees_api_interface",
+            "sql": "CREATE INDEX IF NOT EXISTS idx_digital_employees_api_interface ON digital_employees(api_interface_id)",
+            "check": lambda c: _index_exists(c, "idx_digital_employees_api_interface"),
         },
         # v0.6.0: MCP 工具注册表
         {

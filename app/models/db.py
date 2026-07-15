@@ -252,6 +252,25 @@ def init_db():
             )
         """)
 
+        # 接口管理表 (v0.4.1 新增)：可复用 API 接口模板，供 API 型数字员工联动选择
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS api_interfaces (
+                id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+                name                     TEXT UNIQUE NOT NULL,
+                description              TEXT DEFAULT '',
+                api_url                  TEXT NOT NULL,
+                api_method               TEXT DEFAULT 'GET',
+                api_headers              TEXT DEFAULT '{}',
+                api_params_template      TEXT DEFAULT '',
+                response_render_template TEXT DEFAULT '',
+                api_secret               TEXT DEFAULT '',
+                is_enabled               INTEGER DEFAULT 1,
+                sort_order               INTEGER DEFAULT 0,
+                created_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # 数字化员工表 (v0.3.0 新增)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS digital_employees (
@@ -264,6 +283,7 @@ def init_db():
                 system_prompt           TEXT DEFAULT '',
                 skills                  TEXT DEFAULT '[]',
                 crawl4ai_enabled        INTEGER DEFAULT 0,
+                mcp_tool_ids            TEXT DEFAULT '[]',
                 -- API 型字段
                 api_url                 TEXT DEFAULT '',
                 api_method              TEXT DEFAULT 'GET',
@@ -271,12 +291,25 @@ def init_db():
                 api_params_template     TEXT DEFAULT '',
                 response_render_template TEXT DEFAULT '',
                 api_secret              TEXT DEFAULT '',
+                api_interface_id        INTEGER DEFAULT NULL,
                 -- 通用字段
                 is_enabled              INTEGER DEFAULT 1,
                 created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (model_id) REFERENCES ai_models(id) ON DELETE SET NULL
+                FOREIGN KEY (model_id) REFERENCES ai_models(id) ON DELETE SET NULL,
+                FOREIGN KEY (api_interface_id) REFERENCES api_interfaces(id) ON DELETE SET NULL
             )
         """)
+
+        # 兼容旧表迁移：为已存在的 digital_employees 表添加 api_interface_id 列
+        try:
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(digital_employees)").fetchall()}
+            if "api_interface_id" not in cols:
+                conn.execute("ALTER TABLE digital_employees ADD COLUMN api_interface_id INTEGER DEFAULT NULL")
+                logger.info("Database migration: added api_interface_id column to digital_employees")
+        except Exception as e:
+            logger.error(f"Database migration failed (digital_employees.api_interface_id): {e}", exc_info=True)
+
+        # 对话管理表 (v0.5.0 新增 — 多轮对话支持)
 
         # 对话管理表 (v0.3.0 新增 — 多轮对话支持)
         conn.execute("""
@@ -312,6 +345,9 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_watch_sources_enabled ON watch_sources(is_enabled)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_watch_results_source ON watch_results(source_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_models_default ON ai_models(is_default)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_api_interfaces_enabled ON api_interfaces(is_enabled)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_api_interfaces_name ON api_interfaces(name)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_digital_employees_api_interface ON digital_employees(api_interface_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_username ON audit_logs(username)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at)")
@@ -435,6 +471,8 @@ def seed_default_data():
                 (14, "技能管理", "layui-icon-util", "/admin/skill", None, 9, 1),
                 # MCP 工具管理 (v0.6.0 新增)
                 (15, "MCP 工具管理", "layui-icon-component", "/admin/mcp/tool", None, 10, 1),
+                # 接口管理 (v0.4.1 新增)
+                (16, "接口管理", "layui-icon-link", "/admin/interface", None, 11, 1),
             ]
             conn.executemany(
                 "INSERT INTO functions (id, name, icon, route_path, parent_id, sort_order, is_enabled) "
@@ -442,6 +480,27 @@ def seed_default_data():
                 functions,
             )
             print("[种子] 默认功能模块已创建")
+
+        # 兼容旧数据库：补齐后续版本新增的功能节点并授权给系统管理员
+        managed_func_ids = []
+        for name, icon, route_path, sort_order in (
+            ("MCP 工具管理", "layui-icon-component", "/admin/mcp/tool", 10),
+            ("接口管理", "layui-icon-link", "/admin/interface", 11),
+        ):
+            func = conn.execute(
+                "SELECT id FROM functions WHERE route_path = ?", (route_path,)
+            ).fetchone()
+            if not func:
+                cur = conn.execute(
+                    "INSERT INTO functions (name, icon, route_path, parent_id, sort_order, is_enabled) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (name, icon, route_path, None, sort_order, 1),
+                )
+                func_id = cur.lastrowid
+                print(f"[种子] {name}功能模块已补齐")
+            else:
+                func_id = func["id"]
+            managed_func_ids.append(func_id)
 
         existing_rf = conn.execute("SELECT COUNT(*) as cnt FROM role_functions").fetchone()
         if existing_rf["cnt"] == 0:
@@ -451,12 +510,19 @@ def seed_default_data():
                 [(1, row["id"]) for row in func_ids],
             )
             print("[种子] 管理员角色功能关联已创建")
+        else:
+            for func_id in managed_func_ids:
+                conn.execute(
+                    "INSERT OR IGNORE INTO role_functions (role_id, function_id) VALUES (?, ?)",
+                    (1, func_id),
+                )
 
         conn.commit()
 
     _seed_default_sources()
     _seed_default_models()
     _seed_default_skills()
+    _seed_default_interfaces()
     _seed_default_employees()
     _seed_default_mcp_tools()
 
@@ -547,10 +613,56 @@ def _seed_default_models():
             print("[种子] 默认AI模型已创建（6个模型，覆盖6种分类）")
 
 
+def _seed_default_interfaces():
+    """种子：默认接口模板（供 API 型数字员工复用）。返回天气接口 ID。"""
+    import json
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT id FROM api_interfaces WHERE name = ?", ("天气查询接口",)
+        ).fetchone()
+        if existing:
+            return existing["id"]
+
+        cur = conn.execute(
+            "INSERT INTO api_interfaces (name, description, api_url, api_method, "
+            "api_headers, api_params_template, response_render_template, sort_order, is_enabled) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "天气查询接口",
+                "wttr.in 天气查询 JSON 接口，支持将用户输入作为城市名。",
+                "https://wttr.in/{message}?format=j1",
+                "GET",
+                json.dumps({"Accept": "application/json"}, ensure_ascii=False),
+                "",
+                json.dumps({
+                    "type": "weather_card",
+                    "title": "{{current_condition.0.weatherDesc.0.value}}",
+                    "fields": [
+                        {"label": "温度", "value": "{{current_condition.0.temp_C}}°C"},
+                        {"label": "体感温度", "value": "{{current_condition.0.FeelsLikeC}}°C"},
+                        {"label": "湿度", "value": "{{current_condition.0.humidity}}%"},
+                        {"label": "风力", "value": "{{current_condition.0.windspeedKmph}} km/h"},
+                        {"label": "风向", "value": "{{current_condition.0.winddir16Point}}"},
+                    ]
+                }, ensure_ascii=False),
+                1,
+                1,
+            ),
+        )
+        weather_interface_id = cur.lastrowid
+        if weather_interface_id:
+            print("[种子] 默认接口模板已创建（天气查询接口）")
+        return weather_interface_id
+
+
 def _seed_default_employees():
     """种子：默认数字化员工（产业专员 + 天机助手 + 天气 + 采集专员 + 文案编写 + 新闻聚合 + 科普助手 + 随机音乐）。"""
     import json
     with get_db() as conn:
+        weather_interface = conn.execute(
+            "SELECT id FROM api_interfaces WHERE name = ?", ("天气查询接口",)
+        ).fetchone()
+        weather_interface_id = weather_interface["id"] if weather_interface else None
         existing = conn.execute("SELECT COUNT(*) as cnt FROM digital_employees").fetchone()
         if existing["cnt"] == 0:
             # 产业专员 — LLM 型数字员工
@@ -596,8 +708,8 @@ def _seed_default_employees():
             # 天气查询 — API 型数字员工（免费天气 API）
             conn.execute(
                 "INSERT INTO digital_employees (id, name, employee_type, description, "
-                "api_url, api_method, api_headers, api_params_template, response_render_template, is_enabled) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "api_url, api_method, api_headers, api_params_template, response_render_template, api_interface_id, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     3, "天气", "api",
                     "查询指定城市的天气信息，返回温度、天气状况、风力等",
@@ -616,6 +728,7 @@ def _seed_default_employees():
                             {"label": "风向", "value": "{{current_condition.0.winddir16Point}}"},
                         ]
                     }, ensure_ascii=False),
+                    weather_interface_id,
                     1,
                 ),
             )
@@ -724,6 +837,13 @@ def _seed_default_employees():
             )
             print("[种子] 默认数字化员工已创建（8个：产业专员/天机助手/天气/采集专员/文案编写/新闻聚合/科普助手/随机音乐）")
 
+        elif weather_interface_id:
+            conn.execute(
+                "UPDATE digital_employees SET api_interface_id = ? "
+                "WHERE name = ? AND employee_type = 'api' "
+                "AND (api_interface_id IS NULL OR api_interface_id = '')",
+                (weather_interface_id, "天气"),
+            )
 
 def _seed_default_skills():
     """种子：默认技能（5个，纯 Prompt 模板，模板中直接描述 MCP 工具用法）。"""

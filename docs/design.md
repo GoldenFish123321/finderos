@@ -131,6 +131,22 @@ audit_logs (独立审计)
 - **API 型**：HTTP 调用 + 参数模板 + 响应渲染模板（天气卡片等）
 - **默认 8 个员工**：产业专员/天机助手/天气/采集专员/文案编写/新闻聚合/科普助手/随机音乐
 
+### 3.5.1 接口管理与 API 型员工联动（Issue #26）
+
+```
+管理员维护接口模板 (/admin/interface)
+    → 填写 URL / Method / Headers / Params / Response Template / Secret
+    → 表单或列表发起接口测试（SSRF + DNS 固定解析 + 禁止自动重定向 + Header CRLF 校验）
+    → 创建/编辑 API 型数字员工时选择接口模板
+    → 前端自动填充接口配置，服务端复用加密密钥
+```
+
+关键设计：
+- 接口模板独立存储在 `api_interfaces`，多个 API 型员工可复用。
+- `digital_employees.api_interface_id` 记录来源接口模板；删除接口时显式清空员工引用。
+- `api_secret` 复用 Fernet 加密能力，列表 API 只返回 `has_secret`。
+- `Authorization` / `Cookie` / `X-API-Key` 等敏感 Header 在联动 API 和编辑表单中脱敏展示；保存未修改的脱敏值时服务端恢复原始 Header。
+
 ### 3.6 定时采集调度
 
 - 基于 Tornado PeriodicCallback 的轻量级调度器
@@ -188,7 +204,7 @@ audit_logs (独立审计)
 | **CSRF** | Tornado `xsrf_cookies=True` 全局开启 |
 | **XSS** | Tornado 模板默认转义 + 采集内容 HTML 清洗 |
 | **SQL 注入** | 全参数化查询 (`?` 占位符) |
-| **SSRF** | URL 协议白名单 + 内网 IP 段拦截 + DNS 解析校验 |
+| **SSRF** | URL 协议白名单 + 内网 IP 段拦截 + DNS 解析校验；接口管理/ API 员工调用固定已校验 IP 且不自动跟随重定向 |
 | **Header 注入** | CRLF 字符检测 |
 | **安全响应头** | CSP / X-Frame-Options / X-Content-Type-Options / X-XSS-Protection |
 | **登录限速** | IP+用户名维度，5次失败/15分钟锁定 |

@@ -12,14 +12,62 @@ test_mcp_refactor.py — MCP 重构验证测试 (v0.6.0)
 import json
 import sys
 import os
+import tempfile
 
 # Add project root to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import app.config.settings as settings
+import app.models.db as db_module
 from app.models.db import init_db, seed_default_data
 from app.models.mcp_tool import MCPToolRepository, MCP_TOOL_CATEGORIES
 from app.models.digital_employee import DigitalEmployeeRepository
 from app.models.skill import SkillRepository
+
+
+TEST_DB_PATH = None
+_ORIGINAL_SETTINGS_DB_PATH = None
+_ORIGINAL_MODULE_DB_PATH = None
+_ORIGINAL_DB_MODULE_DB_PATH = None
+
+
+def setup_module():
+    """pytest 路径下初始化独立测试库，避免依赖或污染本地开发库。"""
+    global TEST_DB_PATH
+    global _ORIGINAL_SETTINGS_DB_PATH, _ORIGINAL_MODULE_DB_PATH, _ORIGINAL_DB_MODULE_DB_PATH
+
+    _ORIGINAL_SETTINGS_DB_PATH = settings.settings.DB_PATH
+    _ORIGINAL_MODULE_DB_PATH = getattr(settings, "DB_PATH", None)
+    _ORIGINAL_DB_MODULE_DB_PATH = db_module.DB_PATH
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    TEST_DB_PATH = tmp.name
+    tmp.close()
+
+    settings.DB_PATH = TEST_DB_PATH
+    settings.settings.DB_PATH = TEST_DB_PATH
+    db_module.DB_PATH = TEST_DB_PATH
+
+    init_db()
+    seed_default_data()
+
+
+def teardown_module():
+    """恢复全局 DB 路径，清理测试库。"""
+    if _ORIGINAL_MODULE_DB_PATH is None:
+        try:
+            delattr(settings, "DB_PATH")
+        except AttributeError:
+            pass
+    else:
+        settings.DB_PATH = _ORIGINAL_MODULE_DB_PATH
+    if _ORIGINAL_SETTINGS_DB_PATH is not None:
+        settings.settings.DB_PATH = _ORIGINAL_SETTINGS_DB_PATH
+    if _ORIGINAL_DB_MODULE_DB_PATH is not None:
+        db_module.DB_PATH = _ORIGINAL_DB_MODULE_DB_PATH
+
+    if TEST_DB_PATH and os.path.exists(TEST_DB_PATH):
+        os.remove(TEST_DB_PATH)
 
 
 def test_mcp_tool_table():

@@ -81,7 +81,7 @@ class DigitalEmployeeRepository:
                api_url: str = "", api_method: str = "GET",
                api_headers: str = "{}", api_params_template: str = "",
                response_render_template: str = "",
-               api_secret: str = "") -> int:
+               api_secret: str = "", api_interface_id: int = None) -> int:
         """创建数字员工。返回新 ID 或 -1。"""
         try:
             # 加密 API 型员工的敏感凭证
@@ -91,12 +91,12 @@ class DigitalEmployeeRepository:
                     "INSERT INTO digital_employees (name, employee_type, description, "
                     "model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids, "
                     "api_url, api_method, api_headers, api_params_template, "
-                    "response_render_template, api_secret) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "response_render_template, api_secret, api_interface_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (name.strip(), employee_type, description,
                      model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids,
                      api_url.strip(), api_method, api_headers, api_params_template,
-                     response_render_template, encrypted_secret),
+                     response_render_template, encrypted_secret, api_interface_id),
                 )
                 conn.commit()
             return cur.lastrowid
@@ -111,7 +111,7 @@ class DigitalEmployeeRepository:
                api_url: str = "", api_method: str = "GET",
                api_headers: str = "{}", api_params_template: str = "",
                response_render_template: str = "",
-               api_secret: str = "") -> bool:
+               api_secret: str = "", api_interface_id: int = None) -> bool:
         """更新数字员工。api_secret 为空时保留旧值。"""
         try:
             if not api_secret:
@@ -124,11 +124,11 @@ class DigitalEmployeeRepository:
                     "UPDATE digital_employees SET name=?, employee_type=?, description=?, "
                     "model_id=?, system_prompt=?, skills=?, crawl4ai_enabled=?, mcp_tool_ids=?, "
                     "api_url=?, api_method=?, api_headers=?, api_params_template=?, "
-                    "response_render_template=?, api_secret=? WHERE id=?",
+                    "response_render_template=?, api_secret=?, api_interface_id=? WHERE id=?",
                     (name.strip(), employee_type, description,
                      model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids,
                      api_url.strip(), api_method, api_headers, api_params_template,
-                     response_render_template, encrypted_secret, emp_id),
+                     response_render_template, encrypted_secret, api_interface_id, emp_id),
                 )
                 conn.commit()
             return True

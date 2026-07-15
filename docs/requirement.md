@@ -80,6 +80,14 @@
 - 前台 `@` 触发自动匹配调用
 - 后台测试对话页
 
+### 11.1 接口管理 (`/admin/interface`) — Issue #26
+
+- **需求来源**：团队任务1 — 管理侧接口管理，支持数字员工通过接口库联动创建 API 型数字员工。
+- **功能**：接口模板列表、搜索、新增、编辑、删除、启用/禁用、接口测试。
+- **字段**：名称、描述、URL、请求方法、Headers(JSON)、参数模板、响应渲染模板、接口密钥、排序、启用状态。
+- **联动**：在 `/admin/employee/add` 或 `/admin/employee/edit` 中选择接口模板后，自动填充 API 型员工的 URL/Method/Headers/Params/响应模板，并保存 `api_interface_id`。
+- **安全**：接口测试与 API 型员工调用必须执行 SSRF 防护、固定已校验 DNS 解析结果且不自动跟随重定向；Header 禁止 CR/LF；接口密钥加密存储且不通过列表 API 回显；敏感 Header 脱敏展示。
+
 ### 12. 深度采集引擎
 
 - 正文提取（article/main/body 标签识别）
@@ -129,7 +137,8 @@ watch_sources ── watch_results
                    │
                    └── data_warehouse ── data_warehouse_fts
 
-ai_models ── digital_employees
+api_interfaces ── digital_employees
+ai_models ─────── digital_employees
 
 audit_logs
 ```

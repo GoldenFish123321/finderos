@@ -19,10 +19,12 @@ import tornado.web
 
 from app.controllers.base import BaseHandler
 from app.models.ai_model import AiModelRepository
+from app.models.api_interface import normalize_api_method, normalize_headers
 from app.models.conversation import ConversationRepository
 from app.models.digital_employee import DigitalEmployeeRepository
 from app.models.data_warehouse import DataWarehouseRepository
-from app.utils.security import write_audit_log
+from app.utils.security import has_crlf, write_audit_log
+from app.utils.safe_http import SafeHttpError, safe_http_request
 
 # ── MCP 模块（新增） ──
 from app.mcp.server import MCPServer
@@ -1181,6 +1183,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
         system_prompt = emp.get("system_prompt", "") or model.get("system_prompt", "")
         temperature = model.get("temperature", 0.7)
         max_tokens = model.get("max_tokens", 4096)
+        emp_name = emp.get("name", "数字员工")
 
         # ── 使用 MCP 智能匹配执行工具 ──
         match = _mcp_client.match_tool_by_query(message)
@@ -1217,7 +1220,6 @@ class UserEmployeeInvokeHandler(BaseHandler):
         self.set_header("Connection", "keep-alive")
         self.set_header("X-Accel-Buffering", "no")
 
-        emp_name = emp.get("name", "数字员工")
         self.write(
             f"event: employee\ndata: {json.dumps({'name': emp_name, 'type': emp.get('employee_type', 'llm')}, ensure_ascii=False)}\n\n"
         )
@@ -1481,7 +1483,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
         _start = _time.time()
 
         api_url = emp.get("api_url", "")
-        api_method = emp.get("api_method", "GET")
+        api_method = normalize_api_method(emp.get("api_method", "GET"))
         api_headers_raw = emp.get("api_headers", "{}")
         api_params = emp.get("api_params_template", "")
         api_secret = emp.get("api_secret", "")
@@ -1497,8 +1499,8 @@ class UserEmployeeInvokeHandler(BaseHandler):
         # ── FIX-1: URL 模板编码（显式 UTF-8，防御 ASCII 编码错误）──
         try:
             encoded_msg = urllib.parse.quote(message, safe="", encoding="utf-8")
-            api_url = api_url.replace("{message}", encoded_msg)
-            api_params = api_params.replace("{message}", encoded_msg)
+            api_url = api_url.replace("{message}", encoded_msg).replace("{message_raw}", encoded_msg)
+            api_params = api_params.replace("{message}", encoded_msg).replace("{message_raw}", message)
         except Exception as e:
             logger.warning(f"URL 模板替换失败: {e}，使用原始 URL")
 
@@ -1508,33 +1510,32 @@ class UserEmployeeInvokeHandler(BaseHandler):
         except Exception:
             pass
 
-        try:
-            headers = json.loads(api_headers_raw) if api_headers_raw else {}
-        except (json.JSONDecodeError, TypeError):
-            headers = {}
+        normalized_headers = normalize_headers(api_headers_raw or "{}")
+        if normalized_headers is None:
+            self.set_header("Content-Type", "text/event-stream")
+            self.set_header("Cache-Control", "no-cache")
+            await _sse_write(self, "API Headers 配置非法")
+            await _sse_done(self)
+            return
+        headers = json.loads(normalized_headers)
 
         if api_secret:
-            headers["Authorization"] = f"Bearer {api_secret}"
+            if has_crlf(api_secret):
+                self.set_header("Content-Type", "text/event-stream")
+                self.set_header("Cache-Control", "no-cache")
+                await _sse_write(self, "API 密钥配置非法")
+                await _sse_done(self)
+                return
+            if not any(str(k).lower() == "authorization" for k in headers):
+                headers["Authorization"] = f"Bearer {api_secret}"
 
-        from app.utils.security import validate_url_safe, pin_url_to_ip
-        safe, reason, resolved_ip = validate_url_safe(api_url)
+        from app.utils.security import validate_url_safe
+        safe, reason, _ = validate_url_safe(api_url)
         if not safe:
             logger.warning(f"API 员工 [{emp.get('name', '数字员工')}] SSRF 校验失败: {reason}，回退到 Mock 模式")
             await self._mock_api_employee_fallback(emp, message, _start, reason)
             return
 
-        # DNS 重绑定防护：用已验证的 IP 替换 hostname，防止 TOCTOU 攻击 (Issue #11)
-        # 注意：HTTPS 下 IP 直连会导致 SSL 证书校验失败（证书绑定域名），
-        # 而 HTTPS 自身的证书校验已等效防范 DNS 重绑定，故仅对 HTTP 做 IP pinning。
-        is_https = api_url.startswith("https://") or api_url.startswith("HTTPS://")
-        if is_https:
-            pinned_url = api_url
-            host_headers = {}
-        else:
-            pinned_url, host_headers = pin_url_to_ip(api_url, resolved_ip)
-        # Host 头优先级低于用户自定义 headers（用户可覆盖）
-        for k, v in host_headers.items():
-            headers.setdefault(k, v)
 
         self.set_header("Content-Type", "text/event-stream")
         self.set_header("Cache-Control", "no-cache")
@@ -1549,18 +1550,33 @@ class UserEmployeeInvokeHandler(BaseHandler):
         await self.flush()
 
         def _sync_api_call():
-            import urllib.request
             try:
-                if api_method.upper() == "POST":
+                request_url = api_url
+                data = None
+                if api_method == "POST":
                     data = api_params.encode("utf-8") if api_params else None
-                    req = urllib.request.Request(pinned_url, data=data, headers=headers, method="POST")
-                else:
-                    full_url = pinned_url
+                elif api_method == "GET":
                     if api_params:
-                        full_url += ("&" if "?" in pinned_url else "?") + api_params
-                    req = urllib.request.Request(full_url, headers=headers)
-                with urllib.request.urlopen(req, timeout=30) as resp:
-                    return resp.read().decode("utf-8", errors="replace"), resp.status, None
+                        request_url += ("&" if "?" in api_url else "?") + api_params
+                else:
+                    data = api_params.encode("utf-8") if api_params else None
+                request_url = urllib.parse.quote(
+                    request_url, safe=":/?#[]@!$&'()*+,;=%-", encoding="utf-8"
+                )
+                resp = safe_http_request(
+                    request_url,
+                    method=api_method,
+                    headers=headers,
+                    body=data,
+                    timeout=30,
+                    max_bytes=256 * 1024,
+                )
+                body = resp.body.decode("utf-8", errors="replace")
+                if resp.status >= 400:
+                    return body, resp.status, f"HTTP {resp.status}: {body[:500]}"
+                return body, resp.status, None
+            except SafeHttpError as e:
+                return "", 0, str(e)
             except Exception as e:
                 return "", 0, str(e)
 
