@@ -1,8 +1,9 @@
 """
 admin_home.py — 管理后台 Dashboard 控制器
 
-后台首页展示概览数据和统计卡片。
+后台首页展示概览数据、统计卡片和 ECharts 趋势图表。
 """
+import json
 import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
 from app.models.user import UserRepository
@@ -12,6 +13,7 @@ from app.models.watch_source import WatchSourceRepository
 from app.models.watch_result import WatchResultRepository
 from app.models.data_warehouse import DataWarehouseRepository
 from app.models.ai_model import AiModelRepository
+from app.models.db import get_db
 
 
 class AdminIndexHandler(AdminBaseHandler):
@@ -29,6 +31,14 @@ class AdminIndexHandler(AdminBaseHandler):
         result_stats = WatchResultRepository.get_stats()
         model_stats = AiModelRepository.get_stats()
 
+        # ── ECharts 图表数据 ──
+        # 1. 数据仓库来源分布（饼图）
+        source_distribution = self._get_source_distribution()
+        # 2. 采集趋势（近7天每日采集量，柱状图）
+        collect_trend = self._get_collect_trend()
+        # 3. 深度采集占比
+        deep_stats = DataWarehouseRepository.get_stats()
+
         self.render(
             "admin/index.html",
             title="管理后台 — 瞭望与问数系统",
@@ -42,4 +52,41 @@ class AdminIndexHandler(AdminBaseHandler):
             model_count=model_count,
             result_stats=result_stats,
             model_stats=model_stats,
+            source_distribution=json.dumps(source_distribution, ensure_ascii=False),
+            collect_trend=json.dumps(collect_trend, ensure_ascii=False),
+            deep_collected=deep_stats.get("deep_collected", 0),
+            deep_total=deep_stats.get("total", 0),
         )
+
+    @staticmethod
+    def _get_source_distribution() -> list:
+        """获取数据仓库来源分布（Top 8）。"""
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT source_name, COUNT(*) as cnt FROM data_warehouse "
+                "WHERE source_name != '' GROUP BY source_name "
+                "ORDER BY cnt DESC LIMIT 8"
+            ).fetchall()
+            return [{"name": r["source_name"] or "未知", "value": r["cnt"]} for r in rows]
+
+    @staticmethod
+    def _get_collect_trend() -> dict:
+        """获取近7天每日采集量趋势。"""
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT DATE(created_at) as dt, COUNT(*) as cnt "
+                "FROM data_warehouse "
+                "WHERE created_at >= DATE('now', '-6 days') "
+                "GROUP BY dt ORDER BY dt"
+            ).fetchall()
+            dates = [r["dt"] for r in rows]
+            counts = [r["cnt"] for r in rows]
+            # 补全缺失日期
+            from datetime import datetime, timedelta
+            today = datetime.now().date()
+            all_dates = [(today - timedelta(days=i)).isoformat() for i in range(6, -1, -1)]
+            date_map = dict(zip(dates, counts))
+            return {
+                "dates": all_dates,
+                "counts": [date_map.get(d, 0) for d in all_dates],
+            }
