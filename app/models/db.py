@@ -622,23 +622,25 @@ def _seed_default_employees():
                     1,
                 ),
             )
-            # 随机音乐 — API 型数字员工（Meting API，基于网易云音乐热歌榜）
+            # 随机音乐 — LLM 型数字员工（MCP 工具驱动，调用 get_random_music）
             conn.execute(
                 "INSERT INTO digital_employees (id, name, employee_type, description, "
-                "api_url, api_method, api_headers, api_params_template, response_render_template, is_enabled) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "model_id, system_prompt, skills, crawl4ai_enabled, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    8, "随机音乐", "api",
-                    "随机推荐一首歌曲，返回歌曲名、歌手、封面图片和试听链接",
-                    "https://api.injahow.cn/meting/?server=netease&type=playlist&id=3778678",
-                    "GET",
-                    json.dumps({"Accept": "application/json", "User-Agent": "FinderOS/1.0"}, ensure_ascii=False),
-                    "",
-                    json.dumps(
-                        "🎵 **{{name}}** — *{{artist}}*\n\n"
-                        "> 💿 来自网易云音乐热歌榜，点击下方卡片试听。\n",
-                        ensure_ascii=False
-                    ),
+                    8, "随机音乐", "llm",
+                    "随机推荐一首来自网易云音乐热歌榜的歌曲，展示歌曲名、歌手、封面图和试听链接",
+                    None,
+                    "你是随机音乐助手，专门为用户推荐歌曲。你的核心能力：\n"
+                    "1. 调用 get_random_music 工具获取随机歌曲\n"
+                    "2. 基于工具返回的真实数据向用户展示歌曲信息\n"
+                    "3. 用轻松愉快的语气介绍歌曲\n\n"
+                    "重要规则：\n"
+                    "- 必须使用 get_random_music 工具获取歌曲数据，不要编造歌曲名\n"
+                    "- 如果工具返回了歌曲数据，直接向用户展示，不要问「要不要来一首」之类的废话\n"
+                    "- 展示格式：先介绍歌曲名和歌手，再引导用户点击试听",
+                    json.dumps(["随机音乐", "歌曲推荐", "音乐点播"], ensure_ascii=False),
+                    0,
                     1,
                 ),
             )

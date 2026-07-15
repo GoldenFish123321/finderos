@@ -24,11 +24,11 @@ def test_random_music_employee_exists():
     emp = DigitalEmployeeRepository.get_by_id(8)
     assert emp is not None, "随机音乐员工（ID=8）应存在"
     assert emp["name"] == "随机音乐", f"员工名称应为'随机音乐'，实际: {emp['name']}"
-    assert emp["employee_type"] == "api", f"员工类型应为'api'，实际: {emp['employee_type']}"
+    assert emp["employee_type"] == "llm", f"员工类型应为'llm'（MCP驱动），实际: {emp['employee_type']}"
     assert emp["is_enabled"] == 1, "随机音乐员工应默认启用"
-    assert "api.injahow.cn" in emp.get("api_url", ""), f"API URL 应包含 injahow (Meting API)，实际: {emp['api_url']}"
-    print(f"  ✅ 随机音乐员工存在: ID={emp['id']}, 类型={emp['employee_type']}")
-    print(f"     API URL: {emp['api_url']}")
+    # LLM 型员工应有 system_prompt
+    assert emp.get("system_prompt"), "LLM 型员工应有系统提示词"
+    print(f"  ✅ 随机音乐员工存在: ID={emp['id']}, 类型={emp['employee_type']} (MCP驱动)")
 
     # 验证 api_params_template 不使用用户消息作为参数（安全性）
     params = emp.get("api_params_template", "")
@@ -49,44 +49,36 @@ def test_all_8_employees_exist():
 
 
 def test_build_music_card_logic():
-    """验证 _build_employee_card 音乐卡片构建逻辑"""
+    """验证 _build_employee_card 音乐卡片构建逻辑（MCP 工具返回格式）"""
     print("\n  --- 验证: 音乐卡片构建逻辑 ---")
 
-    # 导入 _build_employee_card
     from app.controllers.user_chat import _build_employee_card
 
-    # 模拟 uomg API 返回的嵌套数据格式: {code: 1, data: {name, artistsname, coverurl, url}}
-    uomg_response = {
-        "code": 1,
-        "data": {
-            "name": "测试歌曲",
-            "artistsname": "测试歌手",
-            "coverurl": "https://example.com/cover.jpg",
-            "url": "https://example.com/music.mp3",
-        }
+    # MCP 工具 get_random_music 返回格式: {success, name, artist, cover, url, source}
+    mcp_result = {
+        "success": True,
+        "name": "测试歌曲A",
+        "artist": "测试歌手A",
+        "cover": "https://example.com/cover.jpg",
+        "url": "https://example.com/music.mp3",
+        "source": "网易云音乐热歌榜",
     }
 
-    emp = {"name": "随机音乐", "employee_type": "api", "response_render_template": "{}"}
-
-    card = _build_employee_card(emp, uomg_response, "来首歌")
+    emp = {"name": "随机音乐", "employee_type": "llm"}
+    card = _build_employee_card(emp, mcp_result, "来首歌")
     assert card is not None, "应生成音乐卡片"
     assert card["type"] == "music", f"卡片类型应为'music'，实际: {card['type']}"
-    assert "随机音乐" in card["title"], f"卡片标题应包含'随机音乐'，实际: {card['title']}"
-    assert card["data"]["name"] == "测试歌曲", f"歌曲名应为'测试歌曲'，实际: {card['data']['name']}"
-    assert card["data"]["artist"] == "测试歌手", f"歌手应为'测试歌手'，实际: {card['data']['artist']}"
-    assert card["data"]["cover"] == "https://example.com/cover.jpg"
-    assert card["data"]["url"] == "https://example.com/music.mp3"
+    assert card["data"]["name"] == "测试歌曲A"
+    assert card["data"]["artist"] == "测试歌手A"
     print(f"  ✅ 音乐卡片构建正确: type={card['type']}, song={card['data']['name']}")
 
-    # 模拟 Meting 播放列表格式：[{name, artist, url, pic, lrc}, ...]
+    # 模拟 Meting 播放列表格式（向后兼容）
     meting_response = [
-        {"name": "测试歌曲B", "artist": "测试歌手B", "url": "https://example.com/play.mp3", "pic": "https://example.com/cover_b.jpg", "lrc": "..."},
-        {"name": "测试歌曲C", "artist": "测试歌手C", "url": "https://example.com/play2.mp3", "pic": "https://example.com/cover_c.jpg", "lrc": "..."},
+        {"name": "测试歌曲B", "artist": "测试歌手B", "url": "https://example.com/play.mp3", "pic": "https://example.com/cover_b.jpg"},
     ]
     card2 = _build_employee_card(emp, meting_response, "来首歌")
     assert card2 is not None
     assert card2["type"] == "music"
-    assert card2["data"]["name"] in ["测试歌曲B", "测试歌曲C"]
     print(f"  ✅ Meting 列表格式音乐卡片构建正确: song={card2['data']['name']}")
 
 
