@@ -9,8 +9,11 @@ import base64
 import hashlib
 import ipaddress
 import logging
+import os
 import re
+import secrets
 import socket
+import stat
 import time
 from datetime import datetime, timezone
 from urllib.parse import urlparse
@@ -21,6 +24,12 @@ from app.config.settings import settings
 from app.models.db import get_db
 
 logger = logging.getLogger(__name__)
+
+# ── .secret_key 文件路径（与 main.py 中的定义保持一致）──
+_SECRET_KEY_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    ".secret_key"
+)
 
 # ── CRLF 注入检测 ──────────────────────────────────────────────
 _CRLF_PATTERN = re.compile(r"[\r\n]")
@@ -216,20 +225,68 @@ def pin_url_to_ip(url: str, resolved_ip: str) -> tuple[str, dict]:
 _fernet_instance: Fernet | None = None
 
 
+def _ensure_secret_key() -> str:
+    """确保 COOKIE_SECRET 已初始化，按优先级从多处来源加载。
+
+    优先级：
+    1. settings.COOKIE_SECRET（环境变量或 main.py 已注入）
+    2. .secret_key 文件（持久化密钥，跨重启保持一致）
+    3. 自动生成新密钥并保存到 .secret_key 文件
+
+    这确保 API Key 加密模块在任何入口点（main.py、make_admin.py、
+    migrate_db.py、测试脚本等）都能获得一致的加密密钥。
+    """
+    secret = settings.COOKIE_SECRET
+    if secret:
+        return secret
+
+    # 尝试从 .secret_key 文件加载
+    try:
+        if os.path.exists(_SECRET_KEY_FILE):
+            with open(_SECRET_KEY_FILE, "r") as f:
+                saved = f.read().strip()
+                if saved:
+                    logger.info("已从 .secret_key 文件加载密钥用于 API Key 加密")
+                    # 同步回 settings，避免后续重复读取文件
+                    settings.COOKIE_SECRET = saved
+                    return saved
+    except OSError as e:
+        logger.warning(f"读取 .secret_key 文件失败: {e}")
+
+    # 生成新密钥并持久化
+    new_secret = secrets.token_hex(32)
+    try:
+        with open(_SECRET_KEY_FILE, "w") as f:
+            f.write(new_secret)
+        # 设置安全权限：仅所有者可读写 (600)，防止其他用户读取密钥
+        os.chmod(_SECRET_KEY_FILE, stat.S_IRUSR | stat.S_IWUSR)
+        logger.info("已生成新的密钥并保存到 .secret_key 文件（用于 API Key 加密）")
+    except OSError as e:
+        logger.warning(f"无法保存 .secret_key 文件: {e}，密钥仅存在于本次会话")
+
+    # 同步回 settings
+    settings.COOKIE_SECRET = new_secret
+    return new_secret
+
+
 def _get_fernet() -> Fernet:
     """获取或创建 Fernet 加密实例（从应用 secret 派生密钥）。
 
-    如果 COOKIE_SECRET 未设置，抛出 RuntimeError 拒绝启动——
-    不允许使用硬编码回退密钥，那会使加密形同虚设。
+    密钥来源优先级：
+    1. 环境变量 COOKIE_SECRET
+    2. .secret_key 持久化文件
+    3. 自动生成（保存到 .secret_key）
+
+    绝不允许使用硬编码回退密钥，那会使加密形同虚设。
     """
     global _fernet_instance
     if _fernet_instance is not None:
         return _fernet_instance
-    secret = settings.COOKIE_SECRET
+    secret = _ensure_secret_key()
     if not secret:
         raise RuntimeError(
-            "COOKIE_SECRET 环境变量未设置，无法初始化 API Key 加密模块。"
-            "请设置 COOKIE_SECRET 环境变量后重启应用。"
+            "无法初始化 API Key 加密模块：未能获取有效的加密密钥。"
+            "请设置 COOKIE_SECRET 环境变量或确保 .secret_key 文件可读写。"
         )
     derived = hashlib.sha256(secret.encode()).digest()
     fernet_key = base64.urlsafe_b64encode(derived)

@@ -6,60 +6,16 @@ main.py — 瞭望与问数系统 (DataFinderAgentOS) 主入口
 
 import logging
 import os
-import secrets
-import stat
 
 import tornado.ioloop
 import tornado.web
 from tornado.httpserver import HTTPServer
 
 from app.config.settings import settings
+from app.utils.security import _ensure_secret_key
 
 # ── 模块级日志（必须在任何使用 logger 的函数之前定义）──
 logger = logging.getLogger(__name__)
-
-# ── COOKIE_SECRET 持久化文件路径 ──
-_SECRET_KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".secret_key")
-
-
-def _load_or_create_secret_key() -> str:
-    """加载或创建持久化的 COOKIE_SECRET。
-
-    优先级：
-    1. 环境变量 COOKIE_SECRET（生产环境推荐）
-    2. .secret_key 文件（自动生成，跨重启持久化）
-    3. 自动生成并保存到 .secret_key 文件
-
-    这确保 API Key 加密密钥在重启后保持一致，避免数据丢失。
-    """
-    # 1. 环境变量优先
-    env_secret = os.environ.get("COOKIE_SECRET", "")
-    if env_secret:
-        return env_secret
-
-    # 2. 尝试从文件加载
-    try:
-        if os.path.exists(_SECRET_KEY_FILE):
-            with open(_SECRET_KEY_FILE, "r") as f:
-                saved = f.read().strip()
-                if saved:
-                    logger.info("已从 .secret_key 文件加载持久化密钥")
-                    return saved
-    except OSError as e:
-        logger.warning(f"读取 .secret_key 文件失败: {e}")
-
-    # 3. 生成新密钥并持久化
-    new_secret = secrets.token_hex(32)
-    try:
-        with open(_SECRET_KEY_FILE, "w") as f:
-            f.write(new_secret)
-        # 设置安全权限：仅所有者可读写 (600)，防止其他用户读取密钥
-        os.chmod(_SECRET_KEY_FILE, stat.S_IRUSR | stat.S_IWUSR)
-        logger.info("已生成新的持久化密钥并保存到 .secret_key 文件")
-    except OSError as e:
-        logger.warning(f"无法保存 .secret_key 文件: {e}，密钥仅存在于本次会话")
-
-    return new_secret
 from app.controllers.auth import LoginHandler, LogoutHandler, RegisterHandler
 from app.controllers.home import IndexHandler
 from app.controllers.admin_home import AdminIndexHandler
@@ -224,9 +180,8 @@ def make_app() -> tornado.web.Application:
 
 if __name__ == "__main__":
     # 确保 COOKIE_SECRET 在数据库初始化之前已设置（加密模块依赖此密钥）
-    # 使用持久化密钥加载策略，避免重启后 API Key 无法解密
-    if not settings.COOKIE_SECRET:
-        settings.COOKIE_SECRET = _load_or_create_secret_key()
+    # _ensure_secret_key() 统一管理密钥：环境变量 → .secret_key 文件 → 自动生成
+    _ensure_secret_key()
 
     # 初始化数据库（自动建表）
     init_db()
