@@ -112,6 +112,54 @@ def sanitize_user_input(user_input: str) -> str:
     return cleaned
 
 
+# ── XSS 防护：HTML 清洗与 JSON 安全序列化 ─────────────────────
+
+
+def sanitize_html(value: str) -> str:
+    """对字符串进行 HTML 实体转义，防止 XSS 攻击。
+
+    将 < > & " ' 转义为对应的 HTML 实体。
+    用于清洗从数据库读取的用户输入数据，确保在模板中安全渲染。
+
+    参考: OWASP XSS Prevention Cheat Sheet, Rule #1
+    """
+    if not value:
+        return value
+    return (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#x27;")
+    )
+
+
+def sanitize_json_data(data):
+    """递归清洗数据结构中的所有字符串值，防止 XSS。
+
+    对 dict/list 中的每个字符串值调用 sanitize_html()，
+    确保通过 {% raw json_encode(...) %} 嵌入模板的数据是安全的。
+
+    注意：此函数不会修改 HTML 中已包含的安全标签（如 <i>），
+    它只清洗来自用户/数据库的纯文本字段。
+    如果某个字段包含合法的 HTML 片段，调用方应在构建数据
+    结构前先对用户输入部分做清洗，而非对整个字段调用此函数。
+
+    Args:
+        data: 待清洗的数据结构（dict / list / str / 其他基本类型）
+
+    Returns:
+        清洗后的数据结构（保持原类型）
+    """
+    if isinstance(data, dict):
+        return {k: sanitize_json_data(v) for k, v in data.items()}
+    if isinstance(data, list):
+        return [sanitize_json_data(item) for item in data]
+    if isinstance(data, str):
+        return sanitize_html(data)
+    return data
+
+
 # ── SSRF 防护 ──────────────────────────────────────────────────
 
 
