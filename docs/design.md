@@ -142,11 +142,11 @@ audit_logs (独立审计)
 | **SQL 注入** | 全参数化查询 (`?` 占位符) |
 | **SSRF** | URL 协议白名单 + 内网 IP 段拦截 + DNS 解析校验 |
 | **Header 注入** | CRLF 字符检测 |
-| **安全响应头** | CSP / X-Frame-Options / X-Content-Type-Options / HSTS |
+| **安全响应头** | CSP / X-Frame-Options / X-Content-Type-Options / X-XSS-Protection |
 | **登录限速** | IP+用户名维度，5次失败/15分钟锁定 |
 | **审计日志** | 关键操作全量写入 `audit_logs` 表 |
 | **API Key 加密** | Fernet 对称加密存储 |
-| **Prompt Injection** | 用户输入敏感词过滤 + System Prompt 安全指令 |
+| **Prompt Injection** | System Prompt 内置安全指令约束 |
 
 ## 5. 端口与配置
 

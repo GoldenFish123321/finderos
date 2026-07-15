@@ -9,7 +9,7 @@
 - **数据库**: SQLite3 (`sqlite3` 内置模块，零外部依赖)，DB 文件 `database/finderos.db`
 - **模板**: Tornado 原生模板 (`{% extends %}` / `{% block %}` / `{% module xsrf_form_html() %}`)
 - **前端**: Layui 2.x + 原生 HTML + CSS + JS (未引入构建工具与前端框架)
-- **虚拟环境**: `venv/`；一切依赖安装与运行必须激活 venv
+- **虚拟环境**: `.venv/`；一切依赖安装与运行必须激活 venv
 
 ## 2. 运行约束
 
@@ -18,9 +18,9 @@
 - 启动命令:
   ```bash
   # macOS / Linux:
-  source venv/bin/activate
+  source .venv/bin/activate
   # Windows:
-  # venv\Scripts\activate
+  # .venv\Scripts\activate
   python main.py
   ```
 - 启动前 `init_db()` 自动创建表结构，`seed_default_data()` 插入种子数据（默认管理员账号/角色/功能），无需手动建库
@@ -44,7 +44,7 @@
 - SQL 注入防护: 全部使用 `?` 参数占位符
 - 密码存储: 服务端 PBKDF2-SHA256 600K 轮 + 随机盐
 - 登录拦截: `login_url="/"` + `@tornado.web.authenticated`
-- 管理员权限: 继承 `AdminBaseHandler`，prepare() 中校验角色为"系统管理员"
+- 管理员权限: 继承 `AdminBaseHandler`，prepare() 中校验用户是否有关联的后台功能权限（非硬编码角色名）
 - 系统角色保护: `is_system=1` 的角色不允许编辑/删除
 - 超级管理员保护: `admin` 用户不允许禁用/删除自身
 
@@ -107,7 +107,7 @@
 | request_headers | TEXT | HTTP请求头（JSON格式） |
 | is_enabled | INTEGER DEFAULT 1 | 启用状态 |
 | sort_order | INTEGER DEFAULT 0 | 排序 |
-| schedule_interval | INTEGER DEFAULT 0 | 定时采集间隔（秒，0=不启用） |
+| schedule_interval | INTEGER DEFAULT 0 | 定时采集间隔（分钟，0=不启用） |
 | created_at | TIMESTAMP | 创建时间 |
 
 ### watch_results 表（采集结果记录）
@@ -119,7 +119,7 @@
 | request_url | TEXT | 实际请求URL（UNIQUE 去重：非空 URL 唯一索引） |
 | response_status | INTEGER | 响应状态码 |
 | response_size | INTEGER | 响应数据大小（字节） |
-| result_data | TEXT | 响应数据内容（标记保存到数据仓库时前缀 "SAVED:"） |
+| result_data | TEXT | 响应数据内容（JSON 格式存储结构化采集结果） |
 | created_at | TIMESTAMP | 采集时间 |
 
 > **注意**：本表存储每次采集的原始记录。标记保存后的结构化数据存入独立的 `data_warehouse` 表。

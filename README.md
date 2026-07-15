@@ -296,8 +296,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-> **唯一外部依赖为 `tornado>=6.4`，安装极快（约 2 秒）。**  
-> 所有其他功能（数据库、HTTP 采集、HTML 解析、加密）均使用 Python 标准库。
+> **核心外部依赖**：`tornado>=6.4`（Web 框架）、`cryptography>=41.0`（API Key 加密）、`brotli>=1.1`（HTTP 解压）、`crawl4ai>=0.4`（深度采集，可选）。  
+> 数据库、HTTP 采集、HTML 基础解析、密码哈希等功能均使用 Python 标准库。
 
 #### 4. 启动服务
 
