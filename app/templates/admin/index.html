@@ -108,5 +108,105 @@
         <div class="stat-label">AI模型</div>
         <div class="stat-desc">已启用 {{ model_stats['enabled'] }} 个</div>
     </div>
+
+    <!-- 仓库数据总览卡片 -->
+    <div class="stat-card-dark">
+        <div class="stat-icon">🗄️</div>
+        <div class="stat-number" style="background:linear-gradient(135deg,var(--accent-cyan),var(--accent-blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">{{ warehouse_count }}</div>
+        <div class="stat-label">数据仓库</div>
+        <div class="stat-desc">已深度采集 {{ deep_collected }} / {{ deep_total }} 条</div>
+    </div>
 </div>
+
+<!-- ECharts 图表区 -->
+<div class="dashboard-grid" style="grid-template-columns: 1fr 1fr;">
+    <div class="chart-panel">
+        <div class="chart-panel-title">📊 近7天采集趋势</div>
+        <div id="chart-collect-trend" style="height:280px;"></div>
+    </div>
+    <div class="chart-panel">
+        <div class="chart-panel-title">🍩 数据来源分布</div>
+        <div id="chart-source-pie" style="height:280px;"></div>
+    </div>
+</div>
+
+<style>
+.chart-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    backdrop-filter: blur(10px);
+}
+.chart-panel-title {
+    font-size: 14px; font-weight: 600; color: var(--text-primary);
+    margin-bottom: 8px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script>
+(function() {
+    // 等待 ECharts 加载
+    var checkInterval = setInterval(function() {
+        if (typeof echarts !== 'undefined') {
+            clearInterval(checkInterval);
+            initDashboardCharts();
+        }
+    }, 200);
+
+    function initDashboardCharts() {
+        var isDark = document.body.classList.contains('dark-theme');
+
+        // 采集趋势柱状图
+        var trendDom = document.getElementById('chart-collect-trend');
+        if (trendDom) {
+            var trendChart = echarts.init(trendDom, isDark ? 'dark' : null);
+            trendChart.setOption({
+                tooltip: { trigger: 'axis' },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'category', data: {{ collect_trend['dates'] if collect_trend else '[]' }}.map(function(d){ return d.slice(5); }) },
+                yAxis: { type: 'value', minInterval: 1 },
+                series: [{
+                    name: '采集量', type: 'bar',
+                    data: {{ collect_trend['counts'] if collect_trend else '[]' }},
+                    itemStyle: {
+                        borderRadius: [4, 4, 0, 0],
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            {offset: 0, color: isDark ? '#5ea3ff' : '#1e6fff'},
+                            {offset: 1, color: isDark ? '#3d7dd8' : '#69b1ff'}
+                        ])
+                    }
+                }]
+            });
+            new ResizeObserver(function(){ trendChart.resize(); }).observe(trendDom);
+        }
+
+        // 来源分布饼图
+        var pieDom = document.getElementById('chart-source-pie');
+        if (pieDom) {
+            var pieChart = echarts.init(pieDom, isDark ? 'dark' : null);
+            pieChart.setOption({
+                tooltip: { trigger: 'item', formatter: '{b}: {c} 条 ({d}%)' },
+                legend: {
+                    orient: 'vertical', right: 10, top: 'center',
+                    textStyle: { color: isDark ? '#aaa' : '#666', fontSize: 11 }
+                },
+                series: [{
+                    name: '来源', type: 'pie',
+                    radius: ['45%', '75%'],
+                    center: ['35%', '50%'],
+                    label: { show: false },
+                    emphasis: {
+                        label: { show: true, fontSize: 14, fontWeight: 'bold' }
+                    },
+                    data: {{ source_distribution if source_distribution else '[]' }}
+                }]
+            });
+            new ResizeObserver(function(){ pieChart.resize(); }).observe(pieDom);
+        }
+    }
+})();
+</script>
 {% end %}
