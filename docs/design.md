@@ -129,7 +129,7 @@ audit_logs (独立审计)
 
 ### 3.5 数字化员工
 
-- **LLM 型**：绑定 AI 模型 + system_prompt + skills + crawl4ai 可选
+- **LLM 型**：绑定 AI 模型 + system_prompt + skills + MCP 工具权限（含 Crawl4ai 深度采集）
 - **API 型**：HTTP 调用 + 参数模板 + 响应渲染模板（天气卡片等）
 - **默认 8 个员工**：产业专员/天机助手/天气/采集专员/文案编写/新闻聚合/科普助手/随机音乐
 

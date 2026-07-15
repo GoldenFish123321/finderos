@@ -76,7 +76,7 @@
 
 ### 11. 数字化员工 (`/admin/employee`)
 
-- **LLM 型**：模型绑定 + system_prompt + skills + crawl4ai 可选
+- **LLM 型**：模型绑定 + system_prompt + skills + MCP 工具权限（含 Crawl4ai 深度采集）
 - **API 型**：HTTP 调用 + 参数模板 + 响应渲染模板
 - 8 个默认员工（天气/采集专员/文案编写/新闻聚合/科普助手/产业专员/天机助手/随机音乐）
 - 前台 `@` 触发自动匹配调用
@@ -93,7 +93,7 @@
 ### 12. 深度采集引擎
 
 - 正文提取（article/main/body 标签识别）
-- crawl4ai 可选增强
+- Crawl4ai 通过 MCP 工具权限控制（v0.6.1）
 
 ### 13. 定时采集调度器
 
