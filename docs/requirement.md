@@ -74,6 +74,7 @@
 - SSE 流式对话（Markdown 气泡渲染）
 - 多轮对话持久化（`conversations` + `conversation_messages`）
 - 模型切换 + 对话历史管理（创建/切换/删除）
+- 模型选择区与欢迎快捷操作向有 `/admin/model/config` 权限的用户提供链接，便于普通用户在聊天过程中自助配置模型 API
 - ECharts 图表自动注入（`[CHART:...]` / `[TABLE:...]` 标记）
 - 快捷指令（`/clear` `/summary` `/trans` `/tools`）
 

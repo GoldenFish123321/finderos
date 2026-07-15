@@ -117,6 +117,23 @@ def test_model_quick_config_route_and_template():
     assert template is not None
 
 
+def test_chat_page_exposes_model_api_config_link():
+    from pathlib import Path
+    from tornado.template import Loader
+
+    template = Path("app/templates/user_chat.html").read_text(encoding="utf-8")
+    controller = Path("app/controllers/user_chat.py").read_text(encoding="utf-8")
+    Loader("app/templates").load("user_chat.html")
+
+    assert 'href="/admin/model/config"' in template
+    assert "配置模型 API" in template
+    assert "model-config-link" in template
+    assert "quick-action quick-action-link" in template
+    assert "{% if can_config_model_api %}" in template
+    assert "can_config_model_api" in controller
+    assert "UserRepository.get_user_function_routes" in controller
+
+
 def test_model_quick_config_detects_endpoint_change():
     from app.controllers.admin_model import _model_connection_changed
 

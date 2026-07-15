@@ -115,6 +115,25 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
     .model-selector select option {
         background: #141830; color: var(--text-primary);
     }
+    .model-config-link {
+        margin-top: 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 6px 8px;
+        border: 1px solid rgba(94,163,255,0.18);
+        border-radius: var(--radius-sm);
+        background: rgba(94,163,255,0.08);
+        color: var(--accent-blue);
+        font-size: 12px;
+        text-decoration: none;
+        transition: all var(--transition-fast);
+    }
+    .model-config-link:hover {
+        border-color: var(--accent-blue);
+        background: rgba(94,163,255,0.14);
+        color: #8dc3ff;
+    }
 
     /* ====== C区: 任务列表 ====== */
     .task-list {
@@ -259,6 +278,9 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
         color: var(--accent-blue);
         background: rgba(94,163,255,0.1);
         box-shadow: var(--glow-blue);
+    }
+    .quick-action-link {
+        text-decoration: none;
     }
 
     /* 消息气泡 */
@@ -553,6 +575,10 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
                 {% end %}
                 {% end %}
             </select>
+            {% if can_config_model_api %}
+            <a class="model-config-link" href="/admin/model/config"
+               title="配置模型 API Key、API Base 和模型标识">🔑 配置模型 API</a>
+            {% end %}
         </div>
 
         <!-- C区: 任务列表 -->
@@ -613,6 +639,9 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
                     <span class="quick-action" onclick="setInput('数据仓库概况统计')">📈 数据统计</span>
                     <span class="quick-action" onclick="setInput('@天气 成都')">🌤 @天气</span>
                     <span class="quick-action" onclick="setInput('@采集专员 搜索科技新闻')">🕷 @采集专员</span>
+                    {% if can_config_model_api %}
+                    <a class="quick-action quick-action-link" href="/admin/model/config">🔑 配置模型 API</a>
+                    {% end %}
                 </div>
             </div>
         </div>
@@ -707,6 +736,9 @@ function resetChatToWelcome() {
             '<span class="quick-action" onclick="setInput(\'数据仓库概况统计\')">📈 数据统计</span>' +
             '<span class="quick-action" onclick="setInput(\'@天气 成都\')">🌤 @天气</span>' +
             '<span class="quick-action" onclick="setInput(\'@采集专员 搜索科技新闻\')">🕷 @采集专员</span>' +
+            {% if can_config_model_api %}
+            '<a class="quick-action quick-action-link" href="/admin/model/config">🔑 配置模型 API</a>' +
+            {% end %}
             '</div>';
         container.insertBefore(welcome, container.firstChild);
     }
