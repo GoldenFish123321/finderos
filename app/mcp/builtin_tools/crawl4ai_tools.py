@@ -1,5 +1,5 @@
 """
-crawl4ai_tools.py — Crawl4ai 爬虫增强类 MCP 工具处理函数 (v0.6.0 新增)
+crawl4ai_tools.py — Crawl4ai 爬虫增强类 MCP 工具处理函数 (v0.4.2 新增)
 
 工具:
 - collect_with_crawl4ai: Crawl4ai 智能采集

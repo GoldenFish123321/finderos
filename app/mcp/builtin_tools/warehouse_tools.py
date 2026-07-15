@@ -5,7 +5,7 @@ warehouse_tools.py — 数据仓库类 MCP 工具处理函数
 - search_warehouse: 关键词搜索
 - get_recent_warehouse_data: 最新数据
 - get_warehouse_stats: 统计概况
-- search_warehouse_fulltext: FTS5 全文检索 (v0.6.0 新增)
+- search_warehouse_fulltext: FTS5 全文检索 (v0.4.2 新增)
 """
 
 from typing import Any, Dict
@@ -60,7 +60,7 @@ def _get_warehouse_stats() -> Dict[str, Any]:
 
 
 def _search_warehouse_fulltext(query: str, limit: int = 10) -> Dict[str, Any]:
-    """使用 FTS5 对数据仓库进行全文检索（v0.6.0 新增）。
+    """使用 FTS5 对数据仓库进行全文检索（v0.4.2 新增）。
     
     如果 FTS5 不可用，回退到普通搜索。
     """

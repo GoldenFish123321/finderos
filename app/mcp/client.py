@@ -53,7 +53,7 @@ class MCPClient:
         return self._server.list_tools()
 
     def get_openai_tools_for_employee(self, emp_id: int = None) -> List[Dict[str, Any]]:
-        """获取按员工权限过滤后的 OpenAI 格式工具列表 (v0.6.0 新增)。
+        """获取按员工权限过滤后的 OpenAI 格式工具列表 (v0.4.2 新增)。
 
         Args:
             emp_id: 数字员工 ID。None 或 0 表示返回所有工具。

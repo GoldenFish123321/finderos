@@ -180,7 +180,7 @@ def make_app() -> tornado.web.Application:
             (r"/admin/skill/delete", SkillDeleteHandler),
             (r"/admin/skill/toggle", SkillToggleHandler),
 
-            # ========== v0.6.0 MCP 工具管理 ==========
+            # ========== v0.4.2 MCP 工具管理 ==========
             (r"/admin/mcp/tool", MCPToolListHandler),
             (r"/admin/mcp/tool/add", MCPToolFormHandler),
             (r"/admin/mcp/tool/edit", MCPToolFormHandler),
