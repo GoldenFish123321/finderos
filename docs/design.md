@@ -66,7 +66,7 @@
 ```
 users ── roles ── role_functions ── functions (树形)
   │
-  ├── conversations ── conversation_messages
+  ├── conversations (username 应用层关联) ── conversation_messages
   │
 watch_sources ── watch_results
                    │
@@ -108,7 +108,7 @@ audit_logs (独立审计)
   → 无 API Key → MCP Client 语义匹配
       → 基于工具描述多维评分 → 执行最佳匹配工具
       → 格式化结果 → SSE 流式输出
-  → 写入 audit_logs (CHAT)
+  → 写入 audit_logs (USER_CHAT)
   → Token 消耗累加到 ai_models.total_tokens
 ```
 
