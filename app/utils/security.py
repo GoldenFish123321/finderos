@@ -125,53 +125,89 @@ def _is_ip_in_ranges(ip_str: str, cidr_list: list[str]) -> bool:
     return False
 
 
-def validate_url_safe(url: str) -> tuple[bool, str]:
+def validate_url_safe(url: str) -> tuple[bool, str, str]:
     """
     SSRF 防护校验：检查 URL 是否安全可用。
 
-    返回 (is_safe, reason)。
+    返回 (is_safe, reason, resolved_ip)。
     拦截条件：
     1. 仅允许 http/https 协议
     2. 不允许包含 CR/LF（防 Header 注入）
     3. 不允许指向内网/回环地址
     4. 不允许空 hostname
 
-    注意: 存在 DNS 重绑定攻击窗口（TOCTOU），
-    DNS 解析验证与实际 HTTP 请求之间 DNS 可能变化。
-    如需更强的防护，建议在网络层（防火墙）限制出站流量。
+    同时返回已解析的 IP 地址（防 DNS 重绑定 TOCTOU 攻击）：
+    调用方应使用 resolved_ip 直接发起请求，避免二次 DNS 解析。
+    详见 GitHub Issue #11。
     """
     if not url:
-        return False, "URL 为空"
+        return False, "URL 为空", ""
 
     # CRLF 检测
     if has_crlf(url):
-        return False, "URL 包含非法字符（CR/LF）"
+        return False, "URL 包含非法字符（CR/LF）", ""
 
     try:
         parsed = urlparse(url)
     except Exception:
-        return False, "URL 解析失败"
+        return False, "URL 解析失败", ""
 
     # 协议白名单
     if parsed.scheme.lower() not in settings.SSRF_ALLOWED_SCHEMES:
-        return False, f"不支持的协议: {parsed.scheme}"
+        return False, f"不支持的协议: {parsed.scheme}", ""
 
     # 必须有 hostname
     hostname = parsed.hostname
     if not hostname:
-        return False, "URL 缺少主机名"
+        return False, "URL 缺少主机名", ""
 
-    # DNS 解析 hostname → IP
+    # DNS 解析 hostname → IP（只解析一次，防止 TOCTOU）
     try:
         ip = socket.gethostbyname(hostname)
     except socket.gaierror:
-        return False, f"无法解析主机名: {hostname}"
+        return False, f"无法解析主机名: {hostname}", ""
 
     # 检查是否命中内网/回环地址
     if _is_ip_in_ranges(ip, settings.SSRF_BLOCKED_HOSTS):
-        return False, f"禁止访问内网地址: {hostname} ({ip})"
+        return False, f"禁止访问内网地址: {hostname} ({ip})", ""
 
-    return True, ""
+    return True, "", ip
+
+
+def pin_url_to_ip(url: str, resolved_ip: str) -> tuple[str, dict]:
+    """
+    将 URL 中的 hostname 替换为已解析的 IP，并返回需要设置的 Host 头。
+
+    防止 DNS 重绑定 TOCTOU 攻击：调用方应在 DNS 解析后
+    使用本函数构造 IP 固定的请求 URL 和 Host 头，
+    避免 urllib 在发起请求时进行二次 DNS 解析。
+
+    Args:
+        url: 原始 URL
+        resolved_ip: 已验证的 IP 地址（来自 validate_url_safe）
+
+    Returns:
+        (pinned_url, extra_headers): pinned_url 为 IP 替换后的 URL，
+        extra_headers 为需要合并到请求头的 {"Host": "..."} 字典。
+    """
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("URL 缺少 hostname")
+
+    # 构造新的 netloc（使用 IP 替换 hostname）
+    default_port = 443 if parsed.scheme == "https" else 80
+    if parsed.port and parsed.port != default_port:
+        netloc = f"{resolved_ip}:{parsed.port}"
+        host_header = f"{hostname}:{parsed.port}"
+    else:
+        netloc = resolved_ip
+        host_header = hostname
+
+    pinned_url = parsed._replace(netloc=netloc).geturl()
+    extra_headers = {"Host": host_header}
+
+    return pinned_url, extra_headers
 
 
 # ── API Key 加密存储 ──────────────────────────────────────────
