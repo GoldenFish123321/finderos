@@ -734,16 +734,21 @@ def _migrate_legacy_tags_to_skills(conn):
         "音乐点播": "随机音乐",
     }
 
-    # 员工角色 → 推荐 MCP 工具 ID 映射
-    # 工具 ID 参考：1=search_warehouse, 2=get_recent_warehouse_data, ...
-    EMPLOYEE_MCP_TOOLS = {
-        "产业专员": [1, 2, 3, 4, 5, 7],           # 数据仓库 + 采集
-        "天机助手": [1, 2, 3, 4, 5, 8, 10, 12, 17],  # 综合能力
-        "采集专员": [1, 2, 4, 5, 6, 7, 15, 16],    # 采集核心
-        "文案编写": [1, 2, 12, 17],                 # 搜索 + 对话
-        "新闻聚合": [1, 2, 3, 4, 5, 12],            # 数据 + 对话
-        "科普助手": [1, 2, 4, 17],                  # 搜索 + 技能
-        "随机音乐": [14],                           # 音乐工具
+    # 员工角色 → 推荐 MCP 工具名称映射（v0.4.2: 使用名称而非硬编码 ID，避免 ID 漂移）
+    EMPLOYEE_MCP_TOOL_NAMES = {
+        "产业专员": ["search_warehouse", "get_recent_warehouse_data", "get_warehouse_stats",
+                    "search_warehouse_fulltext", "collect_web_data", "list_watch_sources"],
+        "天机助手": ["search_warehouse", "get_recent_warehouse_data", "get_warehouse_stats",
+                    "search_warehouse_fulltext", "collect_web_data", "list_digital_employees",
+                    "list_ai_models", "list_conversations", "load_skill"],
+        "采集专员": ["search_warehouse", "get_recent_warehouse_data", "search_warehouse_fulltext",
+                    "collect_web_data", "deep_collect_url", "list_watch_sources",
+                    "collect_with_crawl4ai", "batch_deep_collect"],
+        "文案编写": ["search_warehouse", "get_recent_warehouse_data", "list_conversations", "load_skill"],
+        "新闻聚合": ["search_warehouse", "get_recent_warehouse_data", "get_warehouse_stats",
+                    "search_warehouse_fulltext", "collect_web_data", "list_conversations"],
+        "科普助手": ["search_warehouse", "get_recent_warehouse_data", "search_warehouse_fulltext", "load_skill"],
+        "随机音乐": ["get_random_music"],
     }
 
     # 1. 确保需要的 Skill 记录存在
@@ -797,17 +802,18 @@ def _migrate_legacy_tags_to_skills(conn):
             (_json.dumps(new_skill_ids, ensure_ascii=False), emp["id"]),
         )
 
-        # 4. 配置 mcp_tool_ids
+        # 4. 配置 mcp_tool_ids（基于名称解析，避免 ID 漂移）
         emp_name = emp["name"]
-        if emp_name in EMPLOYEE_MCP_TOOLS:
-            tool_ids = EMPLOYEE_MCP_TOOLS[emp_name]
-            # 检查工具是否实际存在
-            placeholders = ",".join("?" * len(tool_ids))
-            existing_ids = conn.execute(
-                f"SELECT id FROM mcp_tools WHERE id IN ({placeholders}) AND is_enabled = 1",
-                tool_ids,
-            ).fetchall()
-            valid_ids = [r["id"] for r in existing_ids]
+        if emp_name in EMPLOYEE_MCP_TOOL_NAMES:
+            tool_names = EMPLOYEE_MCP_TOOL_NAMES[emp_name]
+            # 按名称查找工具 ID
+            valid_ids = []
+            for tname in tool_names:
+                tool_row = conn.execute(
+                    "SELECT id FROM mcp_tools WHERE name = ? AND is_enabled = 1", (tname,)
+                ).fetchone()
+                if tool_row:
+                    valid_ids.append(tool_row["id"])
             if valid_ids:
                 conn.execute(
                     "UPDATE digital_employees SET mcp_tool_ids = ? WHERE id = ?",

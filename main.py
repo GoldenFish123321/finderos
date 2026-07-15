@@ -239,6 +239,10 @@ if __name__ == "__main__":
     # 插入种子数据（默认角色、管理员、功能）
     seed_default_data()
 
+    # v0.4.2: 显式注册 MCP 工具（确保数据库驱动工具在启动时加载）
+    from app.mcp.tools import register_all_tools
+    register_all_tools()
+
     # 创建应用
     app = make_app()
 
