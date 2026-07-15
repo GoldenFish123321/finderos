@@ -70,12 +70,3 @@ layui.use(['form'], function(){
 });
 </script>
 {% end %}
-    document.querySelectorAll('input[name="skill_type"]').forEach(function(radio){
-        radio.addEventListener('change', function(){
-            document.querySelector('.prompt-fields').classList.toggle('active', this.value === 'prompt');
-            document.querySelector('.function-fields').classList.toggle('active', this.value === 'function');
-        });
-    });
-});
-</script>
-{% end %}
