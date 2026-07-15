@@ -56,7 +56,9 @@ class MCPClient:
 
         from app.models.mcp_tool import MCPToolRepository
         tools = MCPToolRepository.get_by_employee(emp_id)
-        tool_names = [t["name"] for t in tools] if tools else None
+        if not tools:
+            return []  # 未配置工具时返回空列表，最小权限原则
+        tool_names = [t["name"] for t in tools]
         return self._server.get_openai_tools(tool_names)
 
     # ── 工具执行 ─────────────────────────────────────────

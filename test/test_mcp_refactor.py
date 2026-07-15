@@ -130,11 +130,13 @@ def test_employee_mcp_tool_ids():
             tool_ids = []
         print(f"  员工「{emp['name']}」mcp_tool_ids: {tool_ids}")
 
-        # 获取该员工的 MCP 工具
+        # 获取该员工的 MCP 工具（未配置 mcp_tool_ids 应返回空）
         tools = MCPToolRepository.get_by_employee(emp["id"])
-        print(f"  可用 MCP 工具: {len(tools)} 个")
-        for t in tools[:3]:
-            print(f"    - {t['name']} ({t['display_name']})")
+        print(f"  可用 MCP 工具: {len(tools)} 个 (未配置时遵循最小权限原则)")
+        if emp.get("mcp_tool_ids") and emp["mcp_tool_ids"] != "[]":
+            assert len(tools) > 0, "已配置工具但返回空"
+        else:
+            print(f"    员工未配置 mcp_tool_ids，正确返回空列表")
 
     print("  ✓ 测试通过")
 

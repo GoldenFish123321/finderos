@@ -215,7 +215,7 @@ class MCPToolTestHandler(AdminBaseHandler):
     """MCP 工具在线测试（API）"""
 
     @tornado.web.authenticated
-    def post(self):
+    async def post(self):
         tool_id = self.get_body_argument("id", None)
         test_params_str = self.get_body_argument("params", "{}").strip()
 
@@ -246,11 +246,9 @@ class MCPToolTestHandler(AdminBaseHandler):
             self.write({"code": 1, "msg": "工具构建失败，请检查 handler_module"})
             return
 
-        import asyncio
         start_time = time.time()
         try:
-            loop = asyncio.get_event_loop()
-            result = loop.run_until_complete(tool.call(test_params))
+            result = await tool.call(test_params)
             duration_ms = int((time.time() - start_time) * 1000)
             result_str = json.dumps(result, ensure_ascii=False, indent=2)
             MCPToolRepository.log_test(

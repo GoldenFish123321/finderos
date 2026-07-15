@@ -30,10 +30,9 @@ def _list_digital_employees() -> Dict[str, Any]:
 async def _invoke_digital_employee(employee_name: str, message: str) -> Dict[str, Any]:
     """调用指定数字员工执行任务（v0.6.0 新增）。
 
-    支持按名称或 ID 查找员工，LLM 型和 API 型分别处理。
+    支持按名称精确匹配或 ID 查找员工。
     """
     from app.models.digital_employee import DigitalEmployeeRepository
-    from app.models.ai_model import AIModelRepository
 
     # 按名称查找
     emp = None
@@ -41,12 +40,13 @@ async def _invoke_digital_employee(employee_name: str, message: str) -> Dict[str
         emp_id = int(employee_name)
         emp = DigitalEmployeeRepository.get_by_id(emp_id)
     except ValueError:
-        # 按名称模糊匹配
-        employees, _ = DigitalEmployeeRepository.get_all(page=1, page_size=100)
+        # 按名称精确匹配
+        employees, _ = DigitalEmployeeRepository.get_all(page=1, page_size=200)
         for e in employees:
-            if e["name"] == employee_name or employee_name in e["name"]:
+            if e["name"] == employee_name:
                 emp = e
                 break
+        # 如果没有精确匹配，不做模糊匹配（安全性考虑）
 
     if not emp:
         return {
@@ -60,6 +60,7 @@ async def _invoke_digital_employee(employee_name: str, message: str) -> Dict[str
     if emp_type == "api":
         # API 型：直接 HTTP 调用
         import urllib.request
+        from app.utils.security import validate_url_safe
         api_url = emp.get("api_url", "")
         api_method = emp.get("api_method", "GET")
         api_headers_str = emp.get("api_headers", "{}")
@@ -72,6 +73,13 @@ async def _invoke_digital_employee(employee_name: str, message: str) -> Dict[str
         # 替换 URL 中的 {message} 占位符
         import urllib.parse
         final_url = api_url.replace("{message}", urllib.parse.quote(message))
+
+        # SSRF 防护：验证目标 URL 安全性
+        if not validate_url_safe(final_url):
+            return {
+                "success": False,
+                "error": "目标 URL 不安全，已阻止请求",
+            }
 
         try:
             req = urllib.request.Request(final_url, headers=api_headers, method=api_method)
