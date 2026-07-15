@@ -263,7 +263,7 @@ def init_db():
             )
         """)
 
-        # 对话管理表 (v0.4.0 新增 — 多轮对话支持)
+        # 对话管理表 (v0.3.0 新增 — 多轮对话支持)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS conversations (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -212,7 +212,7 @@ DataFinderAgentOS/
 │   │   ├── admin_watch.py        # 瞭望采集页 + 执行采集 + 保存仓库 + 深度采集
 │   │   ├── admin_watch_source.py # 瞭望源管理 CRUD + 启用/禁用
 │   │   ├── admin_warehouse.py    # 数据仓库列表/详情/单删/批量删除 + 深度采集
-│   │   ├── admin_model.py        # 模型引擎 CRUD + SSE 流式对话 + 多轮对话 API
+│   │   ├── admin_model.py        # 模型引擎 CRUD（对话已统一迁移至前台 /chat）
 │   │   └── admin_employee.py     # 数字化员工 CRUD + SSE 调用 + 测试页
 │   │
 │   ├── models/                   # 数据模型层（Repository 模式）
@@ -597,6 +597,7 @@ limiter.clear(client_ip, username)
 | `url_template` | TEXT | URL 模板（支持占位符） | `https://www.baidu.com/s?tn=news&word={keyword}&pn={(page-1)*10}` |
 | `request_headers` | TEXT(JSON) | 自定义 HTTP 请求头 | `{"Referer":"https://www.baidu.com/"}` |
 | `sort_order` | INTEGER | 排序权重 | 数字越小越靠前 |
+| `schedule_interval` | INTEGER | 定时采集间隔（分钟） | 0=不启用，60=每小时 |
 | `is_enabled` | INTEGER | 启用状态 | 1=启用, 0=禁用 |
 
 支持的操作：**新增、编辑、删除、启用/禁用切换**。
@@ -747,40 +748,11 @@ limiter.clear(client_ip, username)
 | `is_enabled` | INTEGER | `1` | 启用状态 |
 | `is_default` | INTEGER | `0` | 是否默认模型（全局唯一） |
 
-支持的操作：**新增、编辑、删除、启用/禁用、设为默认、Token 清零**。
+支持的操作：**新增、编辑、删除、启用/禁用、设为默认**。
 
-#### 5.3 流式对话 (`/admin/model/chat`)
+> **注**：模型流式对话功能已统一迁移至前台 `/chat/stream`（MCP 架构），后台不再提供独立对话页面。
 
-```
-用户选择模型 → 输入消息
-    ├── 有 API Key → 真实 OpenAI API 调用
-    │       ├── 携带 MCP 工具定义 (tools 参数)
-    │       ├── LLM 返回 tool_calls → MCP Server 执行 → 结果回传
-    │       └── LLM 返回 content → SSE 逐字推送到前端
-    └── 无 API Key → MCP 语义匹配 + 本地 Mock 流式输出
-            ├── 匹配工具 → 执行 → 格式化结果 → 打字效果输出
-            └── 无匹配 → 通用 Mock 逐字输出
-
-    → Token 消耗自动累加到 ai_models.total_tokens
-    → 对话记录写入 audit_logs (action=CHAT)
-    → /tools 指令可查看所有可用 MCP 工具
-```
-
-**SSE 事件格式**：
-
-```
-data: {"content": "你"}
-data: {"content": "好"}
-data: {"content": "！"}
-...
-data: [DONE]
-event: stats
-data: {"tokens": 42, "mock": false}
-```
-
-**Mock 模式**：当 API Key 未配置时自动回退到本地模拟流式输出，方便开发调试。在对话页顶部会显示当前使用的模型名称和连接状态。
-
-#### 5.4 模型 API 接口
+#### 5.3 模型 API 接口
 
 | 端点 | 说明 |
 |------|------|
@@ -984,6 +956,7 @@ data: {"tokens": 42, "mock": false}
 | GET | `/admin/watch` | 瞭望采集页 + 历史结果（`?keyword=&page=&source_id=`） |
 | POST | `/admin/watch` | 执行采集，返回 JSON（`keyword=&source_ids=&page=`） |
 | POST | `/admin/watch/save` | 保存采集结果到数据仓库 |
+| POST | `/admin/watch/deep-collect` | 一站式深度采集 |
 
 #### 瞭望源管理
 | 方法 | 路径 | 说明 |
@@ -1003,6 +976,7 @@ data: {"tokens": 42, "mock": false}
 | GET | `/admin/warehouse/detail` | 查看详情（`?id=`） |
 | POST | `/admin/warehouse/delete` | 删除单条记录 |
 | POST | `/admin/warehouse/batch-delete` | 批量删除 |
+| POST | `/admin/warehouse/deep-collect` | 深度采集指定记录 |
 
 #### 模型引擎
 | 方法 | 路径 | 说明 |
@@ -1015,9 +989,6 @@ data: {"tokens": 42, "mock": false}
 | POST | `/admin/model/delete` | 删除模型 |
 | POST | `/admin/model/toggle` | 启用/禁用模型 |
 | POST | `/admin/model/default` | 设为默认模型 |
-| POST | `/admin/model/clear-tokens` | Token 消耗清零 |
-| GET | `/admin/model/chat` | 对话页面（`?model_id=`） |
-| POST | `/admin/model/chat/stream` | **SSE 流式对话**（需设置 `Accept: text/event-stream`） |
 | GET | `/admin/api/model/list` | 模型 JSON API（返回已启用模型列表） |
 
 #### 数字化员工（v0.3）
@@ -1046,14 +1017,6 @@ data: {"tokens": 42, "mock": false}
 | POST | `/api/chat/conversation/create` | 创建新对话 |
 | POST | `/api/chat/conversation/delete` | 删除对话 |
 | GET | `/api/chat/conversation/messages` | 获取对话消息（`?id=`） |
-
-#### 多轮对话管理（v0.3）
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/admin/api/conversation/list` | 对话列表 |
-| POST | `/admin/api/conversation/create` | 创建对话 |
-| POST | `/admin/api/conversation/delete` | 删除对话 |
-| GET | `/admin/api/conversation/messages` | 获取对话消息 |
 
 ---
 
