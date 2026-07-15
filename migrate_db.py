@@ -15,6 +15,8 @@ migrate_db.py — 数据库迁移脚本
   v0.3.0  — 添加 data_warehouse_fts 虚拟表 + 同步触发器
   v0.4.0  — 添加 watch_sources.schedule_interval 列
   v0.5.0  — 添加 skills 技能库表
+  v0.6.0  — 添加 mcp_tools MCP工具注册表 + mcp_tool_test_logs
+  v0.6.0  — 添加 skills.mcp_tool_id / digital_employees.mcp_tool_ids
 
 Usage:
   python migrate_db.py              # 执行待处理迁移
@@ -227,6 +229,63 @@ def run_migrations():
                 )
             """,
             "check": lambda c: _table_exists(c, "skills"),
+        },
+        # v0.6.0: MCP 工具注册表
+        {
+            "name": "create_mcp_tools",
+            "sql": """
+                CREATE TABLE IF NOT EXISTS mcp_tools (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name            TEXT UNIQUE NOT NULL,
+                    display_name    TEXT NOT NULL,
+                    description     TEXT DEFAULT '',
+                    category        TEXT DEFAULT 'general',
+                    tool_type       TEXT DEFAULT 'builtin',
+                    handler_module  TEXT DEFAULT '',
+                    api_url         TEXT DEFAULT '',
+                    api_method      TEXT DEFAULT 'GET',
+                    api_headers     TEXT DEFAULT '{}',
+                    api_params_template TEXT DEFAULT '',
+                    input_schema    TEXT DEFAULT '{}',
+                    output_schema   TEXT DEFAULT '{}',
+                    is_enabled      INTEGER DEFAULT 1,
+                    is_system       INTEGER DEFAULT 0,
+                    sort_order      INTEGER DEFAULT 0,
+                    config          TEXT DEFAULT '{}',
+                    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """,
+            "check": lambda c: _table_exists(c, "mcp_tools"),
+        },
+        # v0.6.0: MCP 工具测试日志表
+        {
+            "name": "create_mcp_tool_test_logs",
+            "sql": """
+                CREATE TABLE IF NOT EXISTS mcp_tool_test_logs (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tool_id         INTEGER NOT NULL,
+                    test_params     TEXT DEFAULT '{}',
+                    test_result     TEXT DEFAULT '',
+                    is_success      INTEGER DEFAULT 0,
+                    duration_ms     INTEGER DEFAULT 0,
+                    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (tool_id) REFERENCES mcp_tools(id) ON DELETE CASCADE
+                )
+            """,
+            "check": lambda c: _table_exists(c, "mcp_tool_test_logs"),
+        },
+        # v0.6.0: skills 新增 mcp_tool_id 列
+        {
+            "name": "add_skills_mcp_tool_id",
+            "sql": "ALTER TABLE skills ADD COLUMN mcp_tool_id INTEGER DEFAULT NULL REFERENCES mcp_tools(id) ON DELETE SET NULL",
+            "check": lambda c: _column_exists(c, "skills", "mcp_tool_id"),
+        },
+        # v0.6.0: digital_employees 新增 mcp_tool_ids 列
+        {
+            "name": "add_digital_employees_mcp_tool_ids",
+            "sql": "ALTER TABLE digital_employees ADD COLUMN mcp_tool_ids TEXT DEFAULT '[]'",
+            "check": lambda c: _column_exists(c, "digital_employees", "mcp_tool_ids"),
         },
     ]
 
