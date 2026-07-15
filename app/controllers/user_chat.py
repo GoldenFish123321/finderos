@@ -161,6 +161,30 @@ def _build_employee_card(emp: dict, api_data: dict, user_message: str = "") -> d
             }
         return card
 
+    # 音乐类员工：识别音乐数据（支持 api.uomg.com 等随机音乐 API）
+    if ("音乐" in emp_name or "music" in emp_name.lower() or
+            "song" in str(api_data).lower() or "music" in str(api_data).lower() or
+            (isinstance(api_data, dict) and ("artistsname" in api_data or "coverurl" in api_data))):
+        card = {"type": "music", "title": f"{emp_name} · 随机音乐", "data": {}}
+        if isinstance(api_data, dict):
+            # 支持 api.uomg.com 的 rand.music 接口返回格式
+            if "data" in api_data and isinstance(api_data["data"], dict):
+                inner = api_data["data"]
+                card["data"] = {
+                    "name": inner.get("name", inner.get("title", "未知歌曲")),
+                    "artist": inner.get("artistsname", inner.get("artist", inner.get("singer", "未知歌手"))),
+                    "cover": inner.get("coverurl", inner.get("cover", inner.get("pic", ""))),
+                    "url": inner.get("url", inner.get("play_url", inner.get("music_url", ""))),
+                }
+            else:
+                card["data"] = {
+                    "name": api_data.get("name", api_data.get("title", "未知歌曲")),
+                    "artist": api_data.get("artistsname", api_data.get("artist", api_data.get("singer", "未知歌手"))),
+                    "cover": api_data.get("coverurl", api_data.get("cover", api_data.get("pic", ""))),
+                    "url": api_data.get("url", api_data.get("play_url", api_data.get("music_url", ""))),
+                }
+        return card
+
     # 新闻类员工
     if "新闻" in emp_name or "news" in emp_name.lower():
         card = {"type": "news", "title": f"{emp_name} · 新闻聚合", "data": {"items": []}}
@@ -1365,10 +1389,18 @@ class UserEmployeeInvokeHandler(BaseHandler):
                     data_obj = json.loads(body)
                 except (json.JSONDecodeError, TypeError):
                     data_obj = {"raw": body}
+                # 扁平化：支持嵌套 data 字段（如 uomg rand.music API 返回 {code, data:{name, artistsname, ...}}）
+                flat_data = {}
                 for key, value in data_obj.items():
                     if isinstance(value, str):
-                        # HTML-escape 第三方 API 返回值，防止 XSS 注入
-                        rendered = rendered.replace("{{" + key + "}}", html.escape(value))
+                        flat_data[key] = value
+                    elif isinstance(value, dict):
+                        for sub_key, sub_val in value.items():
+                            if isinstance(sub_val, str):
+                                flat_data[sub_key] = sub_val
+                for key, value in flat_data.items():
+                    # HTML-escape 第三方 API 返回值，防止 XSS 注入
+                    rendered = rendered.replace("{{" + key + "}}", html.escape(value))
                 rendered = _re.sub(r'\{\{.*?\}\}', '', rendered)
                 rendered_body = rendered
             except Exception:
