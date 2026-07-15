@@ -470,7 +470,7 @@ def _seed_default_models():
 
 
 def _seed_default_employees():
-    """种子：默认数字化员工（产业专员 + 天机助手 + 天气 + 采集专员 + 文案编写 + 新闻聚合 + 科普助手）。"""
+    """种子：默认数字化员工（产业专员 + 天机助手 + 天气 + 采集专员 + 文案编写 + 新闻聚合 + 科普助手 + 随机音乐）。"""
     import json
     with get_db() as conn:
         existing = conn.execute("SELECT COUNT(*) as cnt FROM digital_employees").fetchone()
@@ -622,4 +622,28 @@ def _seed_default_employees():
                     1,
                 ),
             )
-            print("[种子] 默认数字化员工已创建（7个：产业专员/天机助手/天气/采集专员/文案编写/新闻聚合/科普助手）")
+            # 随机音乐 — API 型数字员工（免费随机音乐 API）
+            conn.execute(
+                "INSERT INTO digital_employees (id, name, employee_type, description, "
+                "api_url, api_method, api_headers, api_params_template, response_render_template, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    8, "随机音乐", "api",
+                    "随机推荐一首歌曲，返回歌曲名、歌手、封面图片和试听链接",
+                    "https://api.uomg.com/api/rand.music",
+                    "GET",
+                    json.dumps({"Accept": "application/json"}, ensure_ascii=False),
+                    "sort=热歌榜&format=json",
+                    json.dumps({
+                        "type": "music_card",
+                        "title": "{{name}}",
+                        "fields": [
+                            {"label": "歌手", "value": "{{artistsname}}"},
+                            {"label": "封面", "value": "{{coverurl}}"},
+                            {"label": "试听", "value": "{{url}}"},
+                        ]
+                    }, ensure_ascii=False),
+                    1,
+                ),
+            )
+            print("[种子] 默认数字化员工已创建（8个：产业专员/天机助手/天气/采集专员/文案编写/新闻聚合/科普助手/随机音乐）")

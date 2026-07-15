@@ -1345,6 +1345,35 @@ function renderInfoCard(container, card) {
         if (d.detail) {
             cardHtml += '<div style="margin-top:8px;font-size:12px;color:var(--text-muted);">' + escapeHtml(d.detail) + '</div>';
         }
+    } else if (card.type === 'music' && card.data) {
+        // 音乐卡片特殊渲染（封面 + 歌曲信息 + 试听链接）
+        const m = card.data;
+        cardHtml += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
+        if (m.cover) {
+            // 安全检查：仅允许 http/https 协议，防止 javascript: XSS
+            var safeCover = m.cover;
+            if (!/^https?:\/\//i.test(safeCover)) {
+                safeCover = '';
+            }
+            if (safeCover) {
+                cardHtml += '<img src="' + escapeHtml(safeCover) + '" alt="封面" style="width:80px;height:80px;border-radius:8px;object-fit:cover;flex-shrink:0;" onerror="this.style.display=\'none\'">';
+            }
+        }
+        cardHtml += '<div style="flex:1;min-width:150px;">';
+        cardHtml += '<div style="font-size:16px;font-weight:600;margin-bottom:4px;">🎵 ' + escapeHtml(m.name || '未知歌曲') + '</div>';
+        cardHtml += '<div style="font-size:13px;color:var(--text-muted);">👤 ' + escapeHtml(m.artist || '未知歌手') + '</div>';
+        if (m.url) {
+            // 安全检查：仅允许 http/https 协议，防止 javascript: XSS
+            var safeUrl = m.url;
+            if (!/^https?:\/\//i.test(safeUrl)) {
+                safeUrl = '#';
+            }
+            cardHtml += '<div style="margin-top:8px;">';
+            cardHtml += '<a href="' + escapeHtml(safeUrl) + '" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:4px 14px;background:linear-gradient(135deg,var(--accent-purple),var(--accent-blue));color:#fff;border-radius:16px;text-decoration:none;font-size:12px;">▶ 试听</a>';
+            cardHtml += '</div>';
+        }
+        cardHtml += '</div>';
+        cardHtml += '</div>';
     } else if (card.data && card.data.items && Array.isArray(card.data.items)) {
         // 列表型卡片
         cardHtml += '<ul style="margin:0;padding-left:18px;">';
