@@ -558,10 +558,10 @@ def seed_default_data():
 
     _seed_default_sources()
     _seed_default_models()
+    _seed_default_mcp_tools()      # v0.10: 先种子 MCP 工具，后续 skills/employees 需要按名称查找其 ID
     _seed_default_skills()
     _seed_default_interfaces()
     _seed_default_employees()
-    _seed_default_mcp_tools()
 
 
 def _seed_default_sources():
@@ -697,6 +697,11 @@ def _seed_default_employees():
     """种子：默认数字化员工（产业专员 + 天机助手 + 天气 + 采集专员 + 文案编写 + 新闻聚合 + 科普助手 + 随机音乐）。"""
     import json
     with get_db() as conn:
+        # 按名称查找所有 MCP 工具 ID，避免硬编码数字 ID 导致 ID 漂移
+        tool_name_to_id = {
+            r["name"]: r["id"]
+            for r in conn.execute("SELECT id, name FROM mcp_tools").fetchall()
+        }
         weather_interface = conn.execute(
             "SELECT id FROM api_interfaces WHERE name = ?", ("天气查询接口",)
         ).fetchone()
@@ -706,8 +711,8 @@ def _seed_default_employees():
             # 产业专员 — LLM 型数字员工
             conn.execute(
                 "INSERT INTO digital_employees (id, name, employee_type, description, "
-                "model_id, system_prompt, skills, crawl4ai_enabled, is_enabled) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     1, "产业专员", "llm",
                     "专注于产业分析和行业研究的AI助手，能够追踪行业动态、分析产业链结构、生成产业报告",
@@ -720,14 +725,18 @@ def _seed_default_employees():
                     "请用专业但不晦涩的语言回答，引用数据时注明来源。",
                     json.dumps(["产业分析", "政策解读", "竞品分析", "趋势预判"], ensure_ascii=False),
                     1,
+                    json.dumps([tool_name_to_id[n] for n in [
+                        "search_warehouse", "get_recent_warehouse_data", "get_warehouse_stats",
+                        "search_warehouse_fulltext", "collect_web_data", "list_watch_sources",
+                    ]], ensure_ascii=False),
                     1,
                 ),
             )
             # 天机助手 — LLM 型数字员工
             conn.execute(
                 "INSERT INTO digital_employees (id, name, employee_type, description, "
-                "model_id, system_prompt, skills, crawl4ai_enabled, is_enabled) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     2, "天机助手", "llm",
                     "通用智能助手，具备信息检索、数据分析、文案撰写、代码辅助等多维能力",
@@ -740,6 +749,11 @@ def _seed_default_employees():
                     "请保持友好、高效的回答风格，根据用户需求灵活调整。",
                     json.dumps(["信息检索", "数据分析", "文案撰写", "代码辅助"], ensure_ascii=False),
                     0,
+                    json.dumps([tool_name_to_id[n] for n in [
+                        "search_warehouse", "get_recent_warehouse_data", "get_warehouse_stats",
+                        "search_warehouse_fulltext", "collect_web_data", "list_digital_employees",
+                        "list_ai_models", "list_conversations", "load_skill",
+                    ]], ensure_ascii=False),
                     1,
                 ),
             )
@@ -787,15 +801,19 @@ def _seed_default_employees():
                     "请高效、准确地完成采集任务，输出清晰的结构化结果。",
                     json.dumps(["数据搜索", "深度采集", "内容提取", "数据整理"], ensure_ascii=False),
                     0,  # v0.8: crawl4ai_enabled 已废弃，改用 mcp_tool_ids
-                    json.dumps([15, 16], ensure_ascii=False),  # collect_with_crawl4ai + batch_deep_collect
+                    json.dumps([tool_name_to_id[n] for n in [
+                        "search_warehouse", "get_recent_warehouse_data", "search_warehouse_fulltext",
+                        "collect_web_data", "deep_collect_url", "list_watch_sources",
+                        "collect_with_crawl4ai", "batch_deep_collect",
+                    ]], ensure_ascii=False),
                     1,
                 ),
             )
             # 文案编写 — LLM 型数字员工
             conn.execute(
                 "INSERT INTO digital_employees (id, name, employee_type, description, "
-                "model_id, system_prompt, skills, crawl4ai_enabled, is_enabled) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     5, "文案编写", "llm",
                     "专注于各类文案创作的AI助手，支持报告、方案、邮件、宣传稿等多种文体",
@@ -809,14 +827,18 @@ def _seed_default_employees():
                     "请根据用户需求，输出格式规范、逻辑清晰、语言得体的专业文案。",
                     json.dumps(["报告撰写", "方案策划", "公文起草", "宣传文案", "演讲稿"], ensure_ascii=False),
                     0,
+                    json.dumps([tool_name_to_id[n] for n in [
+                        "search_warehouse", "get_recent_warehouse_data",
+                        "list_conversations", "load_skill",
+                    ]], ensure_ascii=False),
                     1,
                 ),
             )
             # 新闻聚合 — LLM 型数字员工
             conn.execute(
                 "INSERT INTO digital_employees (id, name, employee_type, description, "
-                "model_id, system_prompt, skills, crawl4ai_enabled, is_enabled) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     6, "新闻聚合", "llm",
                     "专注于新闻资讯聚合与摘要的AI助手，能够快速整理热点新闻并生成简报",
@@ -829,14 +851,18 @@ def _seed_default_employees():
                     "请输出清晰、有条理的新闻摘要，标注来源和时间。",
                     json.dumps(["新闻检索", "资讯聚合", "热点追踪", "每日简报"], ensure_ascii=False),
                     0,
+                    json.dumps([tool_name_to_id[n] for n in [
+                        "search_warehouse", "get_recent_warehouse_data", "get_warehouse_stats",
+                        "search_warehouse_fulltext", "collect_web_data", "list_conversations",
+                    ]], ensure_ascii=False),
                     1,
                 ),
             )
             # 科普助手 — LLM 型数字员工
             conn.execute(
                 "INSERT INTO digital_employees (id, name, employee_type, description, "
-                "model_id, system_prompt, skills, crawl4ai_enabled, is_enabled) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     7, "科普助手", "llm",
                     "专注于知识科普与百科问答的AI助手，能够深入浅出地解释各类知识",
@@ -849,6 +875,10 @@ def _seed_default_employees():
                     "请用生动有趣但严谨准确的方式回答问题，必要时引用权威来源。",
                     json.dumps(["百科问答", "知识科普", "概念解释", "学术参考"], ensure_ascii=False),
                     0,
+                    json.dumps([tool_name_to_id[n] for n in [
+                        "search_warehouse", "get_recent_warehouse_data",
+                        "search_warehouse_fulltext", "load_skill",
+                    ]], ensure_ascii=False),
                     1,
                 ),
             )
@@ -871,7 +901,7 @@ def _seed_default_employees():
                     "- 展示格式：先介绍歌曲名和歌手，再引导用户点击试听",
                     json.dumps(["随机音乐", "歌曲推荐", "音乐点播"], ensure_ascii=False),
                     0,
-                    json.dumps([14], ensure_ascii=False),  # v0.8: get_random_music 工具
+                    json.dumps([tool_name_to_id["get_random_music"]], ensure_ascii=False),
                     1,
                 ),
             )
@@ -886,12 +916,19 @@ def _seed_default_employees():
             )
 
 def _seed_default_skills():
-    """种子：默认技能（5个，纯 Prompt 模板，模板中直接描述 MCP 工具用法）。"""
+    """种子：默认技能（14个，纯 Prompt 模板，含 MCP 工具绑定）。"""
     import json
     with get_db() as conn:
         existing = conn.execute("SELECT COUNT(*) as cnt FROM skills").fetchone()
         if existing["cnt"] == 0:
+            # 按名称查找 MCP 工具 ID
+            tool_name_to_id = {
+                r["name"]: r["id"]
+                for r in conn.execute("SELECT id, name FROM mcp_tools").fetchall()
+            }
+
             skills_data = [
+                # ── 原有 5 个技能 ──
                 # 数据统计报告
                 (1, "数据统计", "生成数据仓库统计报告，含图表标记",
                  "你正在进行数据统计分析任务。请遵循以下指令：\n"
@@ -899,14 +936,16 @@ def _seed_default_skills():
                  "2. 根据统计结果生成自然语言报告，包含：总记录数、已深度采集数、来源分布\n"
                  "3. 如果数据适合可视化，请使用 [CHART:bar|pie|line] 标记建议图表类型\n"
                  "4. 报告格式清晰，使用 Markdown 标题和列表\n"
-                 "5. 最后给出数据利用建议（如：可对Top来源进行深度采集）"),
-                # 数据搜索（原 function 型，现改为在模板中说明用哪个 MCP 工具）
+                 "5. 最后给出数据利用建议（如：可对Top来源进行深度采集）",
+                 tool_name_to_id.get("get_warehouse_stats")),
+                # 数据搜索
                 (2, "数据搜索", "在数据仓库中按关键词搜索采集结果",
                  "你正在执行数据搜索任务。请遵循以下指令：\n"
                  "1. 使用 search_warehouse 工具搜索数据仓库，参数 keyword 填写用户搜索的关键词，limit 默认 10\n"
                  "2. 将搜索结果整理为清晰的列表格式\n"
                  "3. 每条结果输出：标题、来源、50字摘要\n"
-                 "4. 如果结果较多，按相关性排序，优先展示最匹配的内容"),
+                 "4. 如果结果较多，按相关性排序，优先展示最匹配的内容",
+                 tool_name_to_id.get("search_warehouse")),
                 # 新闻摘要
                 (3, "新闻摘要", "聚合多源新闻并生成结构化摘要",
                  "你正在执行新闻摘要任务。请遵循以下指令：\n"
@@ -914,16 +953,18 @@ def _seed_default_skills():
                  "2. 按主题分类整理新闻（如：科技/财经/政策/社会）\n"
                  "3. 每条新闻输出：标题、来源、50字摘要、发布时间\n"
                  "4. 在末尾生成一份「今日要闻速览」（3-5条最重要新闻）\n"
-                 "5. 使用 Markdown 格式，标题用 ###，列表用 -"),
-                # 深度采集（原 function 型，现改为在模板中说明 URL 采集流程）
+                 "5. 使用 Markdown 格式，标题用 ###，列表用 -",
+                 tool_name_to_id.get("get_recent_warehouse_data")),
+                # 深度采集
                 (4, "深度采集", "对指定 URL 进行正文深度抓取和内容提取",
                  "你正在执行深度采集任务。请遵循以下指令：\n"
                  "1. 使用 deep_collect_url 工具对用户提供的 URL 进行深度采集\n"
                  "2. 如果 URL 内容复杂，可额外使用 collect_with_crawl4ai 工具获取更完整内容\n"
                  "3. 提取文章正文、标题、关键信息\n"
                  "4. 输出结构化内容：标题 → 正文摘要 → 关键数据 → 来源链接\n"
-                 "5. 用 Markdown 格式组织输出"),
-                # 翻译助手
+                 "5. 用 Markdown 格式组织输出",
+                 tool_name_to_id.get("deep_collect_url")),
+                # 翻译助手（纯 prompt 无需 MCP 工具）
                 (5, "翻译助手", "高质量中英文双向翻译，保持专业术语准确",
                  "你正在执行翻译任务。请遵循以下指令：\n"
                  "1. 识别用户输入的源语言和目标语言\n"
@@ -932,14 +973,98 @@ def _seed_default_skills():
                  "   - 专业术语使用行业标准译法\n"
                  "   - 长句合理断句，符合目标语言习惯\n"
                  "3. 输出格式：先给出翻译结果，再附加【术语注释】（如有专业术语）\n"
-                 "4. 如涉及中文成语/典故，添加简短解释"),
+                 "4. 如涉及中文成语/典故，添加简短解释",
+                 None),
+
+                # ── 新增 9 个技能（来自 TAG_SKILL_MAP）──
+                (6, "产业分析", "分析产业链结构、上下游关系和行业格局",
+                 "你正在执行产业分析任务。请遵循以下指令：\n"
+                 "1. 使用 search_warehouse 或 get_recent_warehouse_data 获取相关产业数据\n"
+                 "2. 分析产业链结构：上游供应商、中游制造商、下游渠道和终端用户\n"
+                 "3. 识别关键节点和瓶颈环节\n"
+                 "4. 评估产业集中度和竞争格局\n"
+                 "5. 使用 get_warehouse_stats 了解数据概况作为参考\n"
+                 "6. 输出结构化的产业分析报告，使用 Markdown 格式",
+                 tool_name_to_id.get("search_warehouse")),  # 主要工具，实际可调用多个
+                (7, "政策解读", "解读行业政策法规，分析政策影响",
+                 "你正在执行政策解读任务。请遵循以下指令：\n"
+                 "1. 使用 search_warehouse 或 collect_web_data 搜集相关政策文本和解读\n"
+                 "2. 提取政策核心要点和关键条款\n"
+                 "3. 分析政策对不同利益相关方的影响\n"
+                 "4. 预测政策实施后的行业变化趋势\n"
+                 "5. 使用 get_recent_warehouse_data 获取最新的政策动态\n"
+                 "6. 输出清晰的政策解读报告",
+                 tool_name_to_id.get("search_warehouse")),
+                (8, "竞品分析", "对比分析竞争对手的产品、策略和市场表现",
+                 "你正在执行竞品分析任务。请遵循以下指令：\n"
+                 "1. 使用 search_warehouse 搜索竞品相关信息\n"
+                 "2. 从产品功能、定价策略、市场份额、用户评价等维度对比\n"
+                 "3. 使用 get_recent_warehouse_data 获取最新动态\n"
+                 "4. 使用 get_warehouse_stats 了解整体数据分布\n"
+                 "5. 输出 SWOT 分析或对比矩阵\n"
+                 "6. 使用 Markdown 表格呈现对比数据",
+                 tool_name_to_id.get("search_warehouse")),
+                (9, "趋势预判", "基于数据趋势分析，预判行业和技术发展方向",
+                 "你正在执行趋势预判任务。请遵循以下指令：\n"
+                 "1. 使用 get_recent_warehouse_data 获取最新数据\n"
+                 "2. 使用 get_warehouse_stats 分析整体数据趋势\n"
+                 "3. 使用 search_warehouse 搜索历史相关数据\n"
+                 "4. 识别关键变化趋势和拐点\n"
+                 "5. 预测未来3-6个月的发展方向\n"
+                 "6. 输出趋势分析报告，包含数据支撑和预测依据",
+                 tool_name_to_id.get("get_warehouse_stats")),
+                (10, "文案撰写", "撰写各类商业文案、报告、方案等专业文档",
+                 "你正在执行文案撰写任务。请遵循以下指令：\n"
+                 "1. 使用 search_warehouse 和 get_recent_warehouse_data 搜集背景资料\n"
+                 "2. 使用 load_skill 加载相关技能模板（如需要）\n"
+                 "3. 根据用户需求选择文体格式\n"
+                 "4. 保持逻辑清晰、语言专业、格式规范\n"
+                 "5. 必要时添加数据引用和来源标注\n"
+                 "6. 输出可直接使用的最终文稿",
+                 tool_name_to_id.get("load_skill")),
+                (11, "代码辅助", "提供编程问题解答、代码审查和技术方案建议",
+                 "你正在执行代码辅助任务。请遵循以下指令：\n"
+                 "1. 理解用户的技术问题和编程需求\n"
+                 "2. 提供清晰、可运行的代码示例\n"
+                 "3. 解释关键算法和设计思路\n"
+                 "4. 标注潜在的性能问题或安全隐患\n"
+                 "5. 必要时提供替代方案和最佳实践\n"
+                 "6. 使用代码块格式输出代码，注明语言类型",
+                 None),  # 代码辅助主要靠 LLM 自身能力
+                (12, "百科问答", "解答各类知识性问题，提供准确的百科信息",
+                 "你正在执行百科问答任务。请遵循以下指令：\n"
+                 "1. 使用 search_warehouse 或 search_warehouse_fulltext 检索相关知识\n"
+                 "2. 使用 get_recent_warehouse_data 获取最新资讯补充\n"
+                 "3. 提供准确、客观的百科知识解答\n"
+                 "4. 区分事实和观点，标注不确定信息\n"
+                 "5. 引用权威来源，提供延伸阅读建议\n"
+                 "6. 用通俗易懂的语言解释专业概念",
+                 tool_name_to_id.get("search_warehouse")),
+                (13, "信息检索", "高效检索和整理多源信息，生成结构化摘要",
+                 "你正在执行信息检索任务。请遵循以下指令：\n"
+                 "1. 使用 search_warehouse 或 search_warehouse_fulltext 进行关键词检索\n"
+                 "2. 使用 get_recent_warehouse_data 补充最新信息\n"
+                 "3. 对检索结果去重、分类和排序\n"
+                 "4. 生成结构化信息摘要\n"
+                 "5. 标注每条信息的来源和时间\n"
+                 "6. 使用 Markdown 列表和表格组织输出",
+                 tool_name_to_id.get("search_warehouse")),
+                (14, "数据分析", "对采集数据进行分析处理，生成数据洞察",
+                 "你正在执行数据分析任务。请遵循以下指令：\n"
+                 "1. 使用 get_warehouse_stats 了解数据全貌\n"
+                 "2. 使用 get_recent_warehouse_data 获取待分析数据\n"
+                 "3. 使用 search_warehouse 检索特定维度数据\n"
+                 "4. 进行数据清洗、统计和趋势分析\n"
+                 "5. 识别异常值和数据模式\n"
+                 "6. 生成数据分析报告，包含图表建议",
+                 tool_name_to_id.get("get_warehouse_stats")),
             ]
             conn.executemany(
-                "INSERT INTO skills (id, name, description, prompt_template) "
-                "VALUES (?, ?, ?, ?)",
+                "INSERT INTO skills (id, name, description, prompt_template, mcp_tool_id) "
+                "VALUES (?, ?, ?, ?, ?)",
                 skills_data,
             )
-            print("[种子] 默认技能已创建（5个：数据统计/数据搜索/新闻摘要/深度采集/翻译助手）")
+            print("[种子] 默认技能已创建（14个：数据统计/数据搜索/新闻摘要/深度采集/翻译助手/产业分析/政策解读/竞品分析/趋势预判/文案撰写/代码辅助/百科问答/信息检索/数据分析）")
 
 
 def _seed_default_mcp_tools():
@@ -952,89 +1077,89 @@ def _seed_default_mcp_tools():
 
         tools_data = [
             # ── 数据仓库类 (warehouse) ──
-            (1, "search_warehouse", "数据仓库搜索", "在数据仓库中搜索关键词相关内容", "warehouse", "builtin",
+            (1, "search_warehouse", "数据仓库搜索", "在瞭望与问数系统的数据仓库中搜索关键词相关的内容。当用户询问「有没有关于XX的数据」「搜索XX」「查找XX」「帮我找XX」等问题时使用此工具。不要用于获取最新数据或统计信息（请使用其他专用工具）。", "warehouse", "builtin",
              "app.mcp.builtin_tools.warehouse_tools._search_warehouse", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{"keyword":{"type":"string","description":"搜索关键词"},"limit":{"type":"integer","description":"返回结果数量上限，默认10","default":10}},"required":["keyword"]}, ensure_ascii=False),
              "{}", 1, 1, 1, "{}"),
-            (2, "get_recent_warehouse_data", "最新数据", "获取数据仓库中最新入库的数据记录", "warehouse", "builtin",
+            (2, "get_recent_warehouse_data", "最新数据查询", "获取数据仓库中最新入库的数据记录。当用户询问「最新数据」「最近有什么」「看看数据仓库」「浏览数据」时使用此工具。也适用于用户没有明确关键词但想了解数据仓库内容时。", "warehouse", "builtin",
              "app.mcp.builtin_tools.warehouse_tools._get_recent_warehouse_data", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{"limit":{"type":"integer","description":"返回记录数，默认10","default":10}}}, ensure_ascii=False),
              "{}", 1, 1, 2, "{}"),
-            (3, "get_warehouse_stats", "数据统计", "获取数据仓库的统计概况", "warehouse", "builtin",
+            (3, "get_warehouse_stats", "数据统计", "获取数据仓库的统计概况，包括总记录数、已深度采集数、来源分布等。当用户询问「有多少数据」「数据统计」「数据概况」「数据分布」时使用此工具。", "warehouse", "builtin",
              "app.mcp.builtin_tools.warehouse_tools._get_warehouse_stats", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
              "{}", 1, 1, 3, "{}"),
-            (4, "search_warehouse_fulltext", "全文检索", "使用FTS5对数据仓库进行全文检索", "warehouse", "builtin",
+            (4, "search_warehouse_fulltext", "全文检索(FTS5)", "使用 FTS5 全文搜索引擎在数据仓库中进行高级全文检索。比普通关键词搜索更精确，支持布尔表达式和短语匹配。当用户需要精确查找某段文字或使用高级搜索语法时使用此工具。", "warehouse", "builtin",
              "app.mcp.builtin_tools.warehouse_tools._search_warehouse_fulltext", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{"query":{"type":"string","description":"全文检索关键词"},"limit":{"type":"integer","description":"返回数量","default":10}},"required":["query"]}, ensure_ascii=False),
              "{}", 1, 1, 4, "{}"),
 
             # ── 数据采集类 (collect) ──
-            (5, "collect_web_data", "全网采集", "从瞭望源采集指定关键词的新闻数据", "collect", "builtin",
+            (5, "collect_web_data", "全网采集", "执行全网瞭望数据采集任务，从配置的瞭望源（如百度新闻、搜狗新闻等）搜索指定关键词。当用户要求「采集关于XX的新闻」「帮我在网上搜索XX」「瞭望一下XX」时使用此工具。注意：这是一个批量采集工具，不是搜索数据仓库已有内容。", "collect", "builtin",
              "app.mcp.builtin_tools.collect_tools._collect_web_data", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{"keyword":{"type":"string","description":"采集关键词"},"source_ids":{"type":"array","items":{"type":"integer"},"description":"瞭望源ID列表"}},"required":["keyword"]}, ensure_ascii=False),
              "{}", 1, 1, 1, "{}"),
-            (6, "deep_collect_url", "深度采集", "对指定URL进行正文深度抓取", "collect", "builtin",
+            (6, "deep_collect_url", "深度采集URL", "对指定网页 URL 进行深度内容采集，提取文章正文、标题等结构化内容。当用户提供具体URL并要求「深度采集」「抓取这个网页」「提取文章内容」「帮我看看这个链接」时使用。仅用于采集单个 URL 的详细内容，不是搜索引擎。", "collect", "builtin",
              "app.mcp.builtin_tools.collect_tools._deep_collect_url", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{"url":{"type":"string","description":"目标网页URL"}},"required":["url"]}, ensure_ascii=False),
              "{}", 1, 1, 2, "{}"),
-            (7, "list_watch_sources", "瞭望源列表", "列出所有启用的瞭望采集源", "collect", "builtin",
+            (7, "list_watch_sources", "瞭望源列表", "列出系统中所有已启用的瞭望源（数据采集源）。当用户询问「有哪些采集源」「瞭望源列表」「从哪些网站采集数据」时使用此工具。", "collect", "builtin",
              "app.mcp.builtin_tools.collect_tools._list_watch_sources", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
              "{}", 1, 1, 3, "{}"),
 
             # ── 数字员工类 (employee) ──
-            (8, "list_digital_employees", "员工列表", "列出系统中所有可用的数字员工", "employee", "builtin",
+            (8, "list_digital_employees", "数字员工列表", "列出系统中所有可用的数字员工。当用户询问「有哪些数字员工」「可以用哪些助手」「@谁」或不确定该调用哪个员工时使用。", "employee", "builtin",
              "app.mcp.builtin_tools.employee_tools._list_digital_employees", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
              "{}", 1, 1, 1, "{}"),
-            (9, "invoke_digital_employee", "调用数字员工", "调用指定数字员工执行任务", "employee", "builtin",
+            (9, "invoke_digital_employee", "调用数字员工", "调用指定的数字员工执行任务。支持按名称或 ID 查找员工，将用户消息转发给该员工并返回执行结果。当用户想委托特定员工完成某项工作时使用此工具。", "employee", "builtin",
              "app.mcp.builtin_tools.employee_tools._invoke_digital_employee", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{"employee_name":{"type":"string","description":"员工名称或ID"},"message":{"type":"string","description":"发送给员工的消息"}},"required":["employee_name","message"]}, ensure_ascii=False),
              "{}", 1, 1, 2, "{}"),
 
             # ── AI模型类 (model) ──
-            (10, "list_ai_models", "AI模型列表", "列出所有可用的AI模型", "model", "builtin",
+            (10, "list_ai_models", "AI模型列表", "列出系统中所有已启用的 AI 模型，包括模型名称、提供商、分类和默认状态。当用户询问「有哪些AI模型」「当前可用模型」「切换模型」时使用此工具。", "model", "builtin",
              "app.mcp.builtin_tools.model_tools._list_ai_models", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
              "{}", 1, 1, 1, "{}"),
-            (11, "get_default_model", "默认模型", "获取当前默认AI模型信息", "model", "builtin",
+            (11, "get_default_model", "获取默认模型", "获取当前系统默认的 AI 模型信息。当用户询问「当前用的是什么模型」「默认模型是什么」时使用此工具。", "model", "builtin",
              "app.mcp.builtin_tools.model_tools._get_default_model", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
              "{}", 1, 1, 2, "{}"),
 
             # ── 对话管理类 (chat) ──
-            (12, "list_conversations", "对话历史", "列出用户的对话历史记录", "chat", "builtin",
+            (12, "list_conversations", "对话历史", "列出用户的历史对话记录。当用户询问「之前的对话」「对话历史」「我之前的提问」时使用此工具。", "chat", "builtin",
              "app.mcp.builtin_tools.chat_tools._list_conversations", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{"username":{"type":"string","description":"用户名"},"limit":{"type":"integer","description":"返回数量上限","default":20}}}, ensure_ascii=False),
              "{}", 1, 1, 1, "{}"),
-            (13, "get_conversation_messages", "对话消息", "获取指定对话的消息历史", "chat", "builtin",
+            (13, "get_conversation_messages", "对话消息", "获取指定对话的完整消息历史。当用户指定对话ID要求「查看那个对话」「回顾之前的聊天」时使用。", "chat", "builtin",
              "app.mcp.builtin_tools.chat_tools._get_conversation_messages", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{"conversation_id":{"type":"integer","description":"对话ID"},"limit":{"type":"integer","description":"消息数量上限","default":20},"username":{"type":"string","description":"当前用户名"}},"required":["conversation_id"]}, ensure_ascii=False),
              "{}", 1, 1, 2, "{}"),
 
             # ── 娱乐类 (entertainment) ──
-            (14, "get_random_music", "随机音乐", "从网易云音乐热歌榜随机推荐歌曲", "entertainment", "builtin",
+            (14, "get_random_music", "随机音乐", "随机推荐一首歌曲。从网易云音乐热歌榜中随机选取一首，返回歌曲名、歌手、封面图和试听链接。当用户说「来首歌」「随机音乐」「推荐一首歌」「放首歌」「来点音乐」时使用此工具。注意：此工具直接返回歌曲数据，调用后应基于数据向用户展示歌曲信息。", "entertainment", "builtin",
              "app.mcp.builtin_tools.entertainment_tools._get_random_music", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
              "{}", 1, 1, 1, "{}"),
 
             # ── 爬虫增强类 (crawl4ai) ──
-            (15, "collect_with_crawl4ai", "Crawl4ai智能采集", "使用Crawl4ai对URL进行智能深度采集", "crawl4ai", "builtin",
+            (15, "collect_with_crawl4ai", "Crawl4ai智能采集", "使用 Crawl4ai 智能爬虫引擎对指定 URL 进行深度网页内容采集。替代旧的 crawl4ai_enabled 复选框功能，支持自动检测页面结构并提取正文。优先使用 crawl4ai 引擎，不可用时回退到标准采集。当用户提供 URL 并要求「用 crawl4ai 采集」「智能爬取这个网页」时使用。", "crawl4ai", "builtin",
              "app.mcp.builtin_tools.crawl4ai_tools._collect_with_crawl4ai", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{"url":{"type":"string","description":"目标URL"},"extract_mode":{"type":"string","enum":["auto","article","full"],"default":"auto"}},"required":["url"]}, ensure_ascii=False),
              "{}", 1, 1, 1, "{}"),
-            (16, "batch_deep_collect", "批量深度采集", "批量对多个URL进行深度采集", "crawl4ai", "builtin",
+            (16, "batch_deep_collect", "批量深度采集", "批量对多个 URL 进行深度内容采集。一次性提交多个链接，系统逐一采集并汇总结果。当用户需要「批量抓取这些网页」「同时采集这几个链接」时使用此工具。", "crawl4ai", "builtin",
              "app.mcp.builtin_tools.crawl4ai_tools._batch_deep_collect", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{"urls":{"type":"array","items":{"type":"string"},"description":"目标URL列表"},"extract_mode":{"type":"string","enum":["auto","article","full"],"default":"auto"}},"required":["urls"]}, ensure_ascii=False),
              "{}", 1, 1, 2, "{}"),
 
             # ── 系统管理类 (system) ──
-            (17, "load_skill", "加载技能", "加载指定技能的完整执行指令", "system", "builtin",
+            (17, "load_skill", "加载技能", "加载指定技能的完整执行指令。当系统提示中的「可用技能」列表里存在你需要的技能时，调用此工具获取该技能的详细 prompt 模板或 function 映射。不要猜测技能内容，始终通过此工具按需加载。", "system", "builtin",
              "app.mcp.builtin_tools.system_tools._load_skill", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{"skill_name":{"type":"string","description":"技能名称"}},"required":["skill_name"]}, ensure_ascii=False),
              "{}", 1, 1, 1, "{}"),
-            (18, "get_system_stats", "系统概览", "获取系统统计概览（用户数/数据量/员工数等）", "system", "builtin",
+            (18, "get_system_stats", "系统统计", "获取系统整体统计概览，包括用户数、数据仓库记录数、数字员工数、AI模型数、瞭望源数和对话数。当用户询问「系统概况」「系统有多少数据」「整体统计」时使用此工具。", "system", "builtin",
              "app.mcp.builtin_tools.system_tools._get_system_stats", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
              "{}", 1, 1, 2, "{}"),

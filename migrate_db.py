@@ -18,6 +18,7 @@ migrate_db.py — 数据库迁移脚本
   v0.7  — 添加 skills 技能库表
   v0.10 — 添加 mcp_tools MCP工具注册表 + mcp_tool_test_logs
   v0.10 — 添加 skills.mcp_tool_id / digital_employees.mcp_tool_ids
+  v0.11 — 迁移旧 crawl4ai_enabled=1 员工的权限到 mcp_tool_ids
 
 Usage:
   python migrate_db.py              # 执行待处理迁移
@@ -337,6 +338,12 @@ def run_migrations():
                 "SELECT COUNT(*) as cnt FROM mcp_tools"
             ).fetchone()["cnt"] >= 18,
             "run": _seed_mcp_tools,
+        },
+        # v0.11: 将旧 crawl4ai_enabled=1 员工的爬虫权限迁移到 mcp_tool_ids
+        {
+            "name": "migrate_crawl4ai_to_mcp_tool_ids_v043",
+            "check": _check_crawl4ai_migrated,
+            "run": _migrate_crawl4ai_to_mcp_tool_ids,
         },
         # v0.10: 旧 TAG 迁移 — 将员工 skills 字符串数组迁移为 Skill ID 数组
         {
@@ -664,6 +671,84 @@ def _seed_mcp_tools(conn):
         except Exception as e:
             logger.warning(f"种子工具插入失败: {t['name']} — {e}")
     logger.info(f"已插入 {len(tools)} 个 MCP 工具种子数据")
+
+
+
+def _check_crawl4ai_migrated(conn) -> bool:
+    """v0.11: 检查是否所有旧 crawl4ai_enabled=1 员工已迁移到 mcp_tool_ids。
+
+    如果 mcp_tools 表不存在或 mcp_tool_ids 列不存在，返回 True（无需迁移）。
+    如果所有 crawl4ai_enabled=1 的员工 mcp_tool_ids 都包含了爬虫工具，返回 True。
+    """
+    if not _table_exists(conn, "mcp_tools"):
+        return True
+    if not _column_exists(conn, "digital_employees", "mcp_tool_ids"):
+        return True
+    rows = conn.execute(
+        "SELECT id, name, mcp_tool_ids FROM digital_employees WHERE crawl4ai_enabled = 1 AND employee_type = 'llm'"
+    ).fetchall()
+    if not rows:
+        return True  # 没有需要迁移的员工
+    import json as _json
+    # 获取爬虫工具ID
+    tool_rows = conn.execute(
+        "SELECT id FROM mcp_tools WHERE name IN ('collect_with_crawl4ai', 'batch_deep_collect')"
+    ).fetchall()
+    tool_ids = {r["id"] for r in tool_rows}
+    if not tool_ids:
+        return True  # 工具不存在
+    for row in rows:
+        try:
+            existing = set(_json.loads(row["mcp_tool_ids"] or "[]"))
+        except (_json.JSONDecodeError, TypeError):
+            existing = set()
+        if not tool_ids.issubset(existing):
+            return False  # 至少一个员工未包含所有爬虫工具
+    return True
+
+
+def _migrate_crawl4ai_to_mcp_tool_ids(conn):
+    """v0.11: 将旧 crawl4ai_enabled=1 员工的爬虫权限迁移到 mcp_tool_ids。
+
+    找出所有 crawl4ai_enabled=1 的 LLM 型员工，
+    将 collect_with_crawl4ai 和 batch_deep_collect 的 ID 合并到 mcp_tool_ids 中（去重）。
+    """
+    import json as _json
+
+    tool_rows = conn.execute(
+        "SELECT id, name FROM mcp_tools WHERE name IN ('collect_with_crawl4ai', 'batch_deep_collect')"
+    ).fetchall()
+    tool_id_map = {r["name"]: r["id"] for r in tool_rows}
+    if not tool_id_map:
+        logger.warning("爬虫工具不存在，跳过 crawl4ai 迁移")
+        return
+
+    employees = conn.execute(
+        "SELECT id, name, mcp_tool_ids FROM digital_employees "
+        "WHERE crawl4ai_enabled = 1 AND employee_type = 'llm'"
+    ).fetchall()
+
+    if not employees:
+        logger.info("没有需要迁移 crawl4ai 权限的员工")
+        return
+
+    migrated = 0
+    for emp in employees:
+        try:
+            existing = set(_json.loads(emp["mcp_tool_ids"] or "[]"))
+        except (_json.JSONDecodeError, TypeError):
+            existing = set()
+        new_ids = existing | set(tool_id_map.values())
+        if new_ids != existing:
+            conn.execute(
+                "UPDATE digital_employees SET mcp_tool_ids = ? WHERE id = ?",
+                (_json.dumps(sorted(new_ids), ensure_ascii=False), emp["id"]),
+            )
+            logger.info(f"  迁移: {emp['name']} (ID={emp['id']}) crawl4ai → mcp_tool_ids "
+                        f"(新增 {len(new_ids) - len(existing)} 个工具)")
+            migrated += 1
+
+    logger.info(f"crawl4ai 权限迁移完成: {migrated} 个员工已更新")
 
 
 def _check_legacy_tags_migrated(conn) -> bool:
