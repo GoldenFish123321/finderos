@@ -101,7 +101,10 @@ _REMOVE_COMMENTS = re.compile(r'<!--.*?-->', re.DOTALL)
 
 
 def _decompress(data: bytes, encoding: str) -> bytes:
-    """解压 HTTP 响应体。"""
+    """解压 HTTP 响应体。
+
+    Brotli (br) 未安装或解压失败时返回原始数据（与 gzip/deflate 行为一致），避免数据静默丢失。
+    """
     if not data:
         return data
     enc = (encoding or "").lower()
@@ -123,11 +126,11 @@ def _decompress(data: bytes, encoding: str) -> bytes:
             import brotli
             return brotli.decompress(data)
         except ImportError:
-            logger.error("Brotli 压缩内容无法解压：未安装 brotli 包，内容将丢失。请执行: pip install brotli")
-            return b""
+            logger.error("Brotli 压缩内容无法解压：未安装 brotli 包，将使用原始数据。请执行: pip install brotli")
+            return data
         except Exception as e:
-            logger.error(f"Brotli 解压失败: {e}，内容将丢失")
-            return b""
+            logger.error(f"Brotli 解压失败: {e}，将使用原始数据")
+            return data
     return data
 
 
