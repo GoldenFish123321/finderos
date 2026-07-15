@@ -275,5 +275,58 @@ class TestSkillMCPRegistration(unittest.TestCase):
         self.assertEqual(load_skill_def["input_schema"]["required"], ["skill_name"])
 
 
+class TestAllToolDefinitions(unittest.TestCase):
+    """验证 ALL_TOOL_DEFINITIONS 包含完整的 18 个工具定义 (v0.10 补齐)。"""
+
+    EXPECTED_TOOLS = {
+        # 数据仓库类
+        "search_warehouse", "get_recent_warehouse_data", "get_warehouse_stats",
+        "search_warehouse_fulltext",
+        # 数据采集类
+        "deep_collect_url", "collect_web_data", "list_watch_sources",
+        # 数字员工类
+        "list_digital_employees", "invoke_digital_employee",
+        # AI 模型类
+        "list_ai_models", "get_default_model",
+        # Crawl4ai 增强类
+        "collect_with_crawl4ai", "batch_deep_collect",
+        # 音乐/娱乐类
+        "get_random_music",
+        # 对话管理类
+        "list_conversations", "get_conversation_messages",
+        # 技能管理类
+        "load_skill",
+        # 系统管理类
+        "get_system_stats",
+    }
+
+    def test_all_18_tools_defined(self):
+        """ALL_TOOL_DEFINITIONS 应包含全部 18 个工具定义。"""
+        from app.mcp.tools import ALL_TOOL_DEFINITIONS
+        actual = {t["name"] for t in ALL_TOOL_DEFINITIONS}
+        self.assertEqual(len(actual), 18, f"期望 18 个工具，实际 {len(actual)} 个")
+        missing = self.EXPECTED_TOOLS - actual
+        self.assertEqual(missing, set(), f"缺失工具: {missing}")
+        extra = actual - self.EXPECTED_TOOLS
+        self.assertEqual(extra, set(), f"多余工具: {extra}")
+
+    def test_all_tools_have_handler(self):
+        """每个工具定义必须有 handler 且 handler 可调用。"""
+        from app.mcp.tools import ALL_TOOL_DEFINITIONS
+        for t in ALL_TOOL_DEFINITIONS:
+            self.assertIn("handler", t, f"工具 {t['name']} 缺少 handler")
+            self.assertTrue(callable(t["handler"]), f"工具 {t['name']} 的 handler 不可调用")
+
+    def test_all_tools_have_required_schema(self):
+        """每个工具定义必须有 name、description、input_schema。"""
+        from app.mcp.tools import ALL_TOOL_DEFINITIONS
+        for t in ALL_TOOL_DEFINITIONS:
+            self.assertIn("name", t)
+            self.assertIn("description", t)
+            self.assertIn("input_schema", t)
+            self.assertIn("type", t["input_schema"])
+            self.assertEqual(t["input_schema"]["type"], "object")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
