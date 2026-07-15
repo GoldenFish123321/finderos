@@ -156,7 +156,6 @@ def make_app() -> tornado.web.Application:
             # 员工测试对话页
             (r"/admin/employee/test", EmployeeTestPageHandler),
 
-            # ========== v0.5.0 新增模块 ==========
             # 技能管理
             (r"/admin/skill", SkillListHandler),
             (r"/admin/skill/add", SkillFormHandler),

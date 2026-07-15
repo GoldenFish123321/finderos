@@ -1,4 +1,4 @@
-# 瞭望与问数系统 (DataFinderAgentOS) — 设计文档 v0.5.0
+# 瞭望与问数系统 (DataFinderAgentOS) — 设计文档 v0.4.1
 
 ## 1. 项目概述
 
@@ -11,7 +11,7 @@
 - 🧠 **MCP 协议**：9 个标准化工具，LLM Function Calling 智能决策调用
 - 💬 **智能问数**：用户前台 A/B/C/D/E 五区 SSE 流式对话
 - 🤖 **数字员工**：LLM 型 / API 型双模式，@ 触发自动匹配
-- 🎯 **技能管理** (v0.5.0)：Prompt 增强 + Function 调用双模式，MCP `load_skill` 按需加载
+- 🎯 **技能管理**：Prompt 增强 + Function 调用双模式，MCP `load_skill` 按需加载
 
 ## 2. 技术架构
 
