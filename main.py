@@ -7,6 +7,7 @@ main.py — 瞭望与问数系统 (DataFinderAgentOS) 主入口
 import logging
 import os
 import secrets
+import stat
 
 import tornado.ioloop
 import tornado.web
@@ -52,6 +53,8 @@ def _load_or_create_secret_key() -> str:
     try:
         with open(_SECRET_KEY_FILE, "w") as f:
             f.write(new_secret)
+        # 设置安全权限：仅所有者可读写 (600)，防止其他用户读取密钥
+        os.chmod(_SECRET_KEY_FILE, stat.S_IRUSR | stat.S_IWUSR)
         logger.info("已生成新的持久化密钥并保存到 .secret_key 文件")
     except OSError as e:
         logger.warning(f"无法保存 .secret_key 文件: {e}，密钥仅存在于本次会话")
