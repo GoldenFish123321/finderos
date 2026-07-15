@@ -17,7 +17,7 @@
 
 ### POST /register — 用户注册
 - **Content-Type**: `application/x-www-form-urlencoded`
-- **参数**: `username`, `password`, `confirm_password`
+- **参数**: `username`, `password`, `password_confirm`
 - **成功**: 自动登录并 302 跳转（管理员→/admin，普通用户→/index）
 - **失败**: 渲染注册页 + 错误提示（用户名已存在 / 密码不一致 / 密码强度不足等）
 
@@ -31,7 +31,7 @@
 
 ## 二、管理后台
 
-> 所有 `/admin/*` 接口需要管理员权限（`AdminBaseHandler.prepare()` 校验）
+> 所有 `/admin/*` 接口需要后台功能权限（`AdminBaseHandler.prepare()` 校验角色是否关联后台功能，非硬编码角色名）
 
 ### 2.1 仪表盘
 

@@ -75,8 +75,8 @@
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | name | TEXT NOT NULL | 功能名称 |
-| icon | TEXT | Layui 图标类名 |
-| route_path | TEXT | 路由地址 |
+| icon | TEXT DEFAULT '' | Layui 图标类名 |
+| route_path | TEXT DEFAULT '' | 路由地址 |
 | parent_id | INTEGER DEFAULT NULL | 父功能ID(NULL=一级) |
 | sort_order | INTEGER DEFAULT 0 | 排序 |
 | is_enabled | INTEGER DEFAULT 1 | 启用状态 |
@@ -129,7 +129,7 @@
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | name | TEXT NOT NULL | 模型名称 |
-| provider | TEXT | 提供商（openai/deepseek/qwen/...） |
+| provider | TEXT | 提供商（openai/deepseek/zhipu/baidu/custom） |
 | api_base | TEXT | API Base URL |
 | api_key | TEXT | API密钥（Fernet 对称加密存储） |
 | model_name | TEXT | 模型标识 |
