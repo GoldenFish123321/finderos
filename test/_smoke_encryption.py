@@ -1,4 +1,10 @@
 """Smoke test for API Key encryption."""
+import os
+import sys
+
+# 确保项目根目录在 Python 路径中
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from app.utils.security import encrypt_api_key, decrypt_api_key
 
 # Test 1: Basic encrypt/decrypt
