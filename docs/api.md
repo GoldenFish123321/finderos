@@ -176,3 +176,73 @@ data: {"tokens": 42, "mock": false}
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/admin/api/model/list` | JSON 格式模型列表（?page=&limit=&category=） |
+
+---
+
+## 五、接口管理（Issue #26）
+
+### 5.1 接口模板管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/interface` | 接口模板列表（?page=&keyword=） |
+| GET/POST | `/admin/interface/add` | 新增接口模板 |
+| GET/POST | `/admin/interface/edit` | 编辑接口模板（?id=） |
+| POST | `/admin/interface/delete` | 删除接口模板 (id) |
+| POST | `/admin/interface/toggle` | 启用/禁用接口模板 (id) |
+| POST | `/admin/interface/test` | 测试接口模板（支持 id 或表单草稿字段） |
+| GET | `/admin/api/interface/list` | 获取已启用接口模板（供 API 型数字员工联动） |
+
+### 5.2 POST /admin/interface/test
+
+**请求参数（已保存接口）**
+
+```json
+{
+  "id": 1,
+  "message": "成都"
+}
+```
+
+**请求参数（草稿配置）**
+
+```json
+{
+  "name": "天气查询接口",
+  "api_url": "https://wttr.in/{message}?format=j1",
+  "api_method": "GET",
+  "api_headers": "{\"Accept\":\"application/json\"}",
+  "api_params_template": "",
+  "response_render_template": "",
+  "api_secret": "",
+  "message": "成都"
+}
+```
+
+**响应**
+
+```json
+{
+  "code": 0,
+  "msg": "测试成功",
+  "status": 200,
+  "elapsed_ms": 320,
+  "data": {},
+  "raw": "...",
+  "truncated": false
+}
+```
+
+安全约束：仅允许 `http/https`，执行前复用 SSRF 防护；Headers 必须是 JSON 对象且不得包含 CR/LF。接口测试不会自动跟随 30x 重定向，并使用已校验的 DNS 解析 IP 发起请求，避免 DNS Rebinding/重定向绕过。
+
+### 5.3 数字员工联动
+
+API 型数字员工新增/编辑页可通过 `api_interface_id` 选择接口模板。选择后前端自动填充：
+
+- `api_url`
+- `api_method`
+- `api_headers`
+- `api_params_template`
+- `response_render_template`
+
+接口模板中的 `api_secret` 不通过 `/admin/api/interface/list` 回显；保存员工时由服务端复用。`Authorization`、`Cookie`、`X-API-Key` 等敏感 Header 在联动 API/表单中以 `******` 脱敏展示，提交未修改的脱敏值时服务端会保留原始 Header。

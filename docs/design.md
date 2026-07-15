@@ -8,6 +8,7 @@
 - 🔭 **瞭望采集**：可配置的 Web 数据采集引擎（百度/搜狗新闻等）
 - 🗄️ **数据仓库**：采集结果的统一存储与检索
 - 🤖 **模型引擎**：OpenAI 范式 AI 模型的接入管理与流式对话
+- 🔗 **接口管理**：可复用 API 接口模板、接口测试、API 型数字员工联动创建
 
 ## 2. 技术架构
 
@@ -30,7 +31,8 @@
 │  └────────────────────────────────────────────┘ │
 │  ┌────────────────────────────────────────────┐ │
 │  │         Repository Layer (Models)           │ │
-│  │  UserRepo / RoleRepo / FunctionRepo / ...  │ │
+│  │  UserRepo / RoleRepo / FunctionRepo /      │ │
+│  │  ApiInterfaceRepo / DigitalEmployeeRepo    │ │
 │  └────────────────────┬───────────────────────┘ │
 │                       │                         │
 │              ┌────────┴────────┐                │
@@ -59,6 +61,8 @@ users ──┐                    watch_sources ──┐
                                                  ┌──┘
 ai_models    audit_logs                         │
                                             data_warehouse (via mark_saved)
+
+api_interfaces ─────── digital_employees(API型员工联动)
 ```
 
 ## 3. 核心模块设计
@@ -89,6 +93,24 @@ ai_models    audit_logs                         │
     → 写入 audit_logs (CHAT)
 ```
 
+### 3.4 接口管理与 API 型数字员工联动
+
+```
+管理员维护接口模板 (/admin/interface)
+    → 填写 URL / Method / Headers / Params / Response Template / Secret
+    → 可在表单或列表中执行接口测试（SSRF + DNS 固定解析 + 禁止自动重定向 + Header CRLF 校验）
+    → 创建 API 型数字员工时选择接口模板
+    → 前端自动填充接口配置，服务端复用加密密钥
+    → 数字员工调用时按原 API 型流程请求外部接口
+```
+
+关键设计：
+- 接口模板独立存储在 `api_interfaces`，便于多个 API 型员工复用。
+- `api_secret` 复用现有 Fernet 加密能力，列表 API 只返回 `has_secret`。
+- `Authorization` / `Cookie` / `X-API-Key` 等敏感 Header 在联动 API 和编辑表单中脱敏展示，保存未修改的脱敏值时服务端保留原始 Header。
+- `digital_employees.api_interface_id` 记录来源接口模板，便于后续追踪和编辑。
+- 接口测试与 API 型员工调用不绕过安全边界：URL 需通过 `validate_url_safe()`，HTTP 客户端使用已校验 IP 连接且不自动跟随重定向，Header 需通过 CRLF 检测。
+
 ## 4. 安全设计
 
 | 防护项 | 实现方式 |
@@ -97,8 +119,9 @@ ai_models    audit_logs                         │
 | **CSRF** | Tornado `xsrf_cookies=True` 全局开启 |
 | **XSS** | Tornado 模板默认转义 + 采集内容 HTML 清洗 |
 | **SQL 注入** | 全参数化查询 (`?` 占位符) |
-| **SSRF** | URL 协议白名单 + 内网 IP 段拦截 + DNS 解析校验 |
+| **SSRF** | URL 协议白名单 + 内网 IP 段拦截 + DNS 解析校验 + 请求时固定已校验 IP + 禁止自动重定向 |
 | **Header 注入** | CRLF 字符检测 |
+| **接口密钥保护** | Fernet 加密存储，接口列表 API 不回显密钥 |
 | **安全响应头** | CSP / X-Frame-Options / X-Content-Type-Options / HSTS |
 | **登录限速** | IP+用户名维度，5次失败/15分钟锁定 |
 | **审计日志** | 关键操作全量写入 `audit_logs` 表 |

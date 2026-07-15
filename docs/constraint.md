@@ -45,6 +45,9 @@
 - 管理员权限: 继承 `AdminBaseHandler`，prepare() 中校验角色为"系统管理员"
 - 系统角色保护: `is_system=1` 的角色不允许编辑/删除
 - 超级管理员保护: `admin` 用户不允许禁用/删除自身
+- 接口测试与 API 型员工调用: 必须执行 SSRF 校验，使用已校验 DNS 解析 IP 发起请求，不自动跟随 30x 重定向；接口 Headers 必须是 JSON 对象且禁止 CR/LF
+- API 密钥: `ai_models.api_key`、`api_interfaces.api_secret`、`digital_employees.api_secret` 必须加密存储，不在列表 API 中明文回显
+- 敏感 Header: `Authorization`、`Cookie`、`X-API-Key` 等在接口联动 API 和编辑表单中必须脱敏展示，提交未修改的脱敏值时服务端保留原始 Header
 
 ## 5. 数据模型
 
@@ -138,3 +141,25 @@
 | is_enabled | INTEGER DEFAULT 1 | 启用状态 |
 | is_default | INTEGER DEFAULT 0 | 是否默认模型 |
 | created_at | TIMESTAMP | 创建时间 |
+
+### api_interfaces 表（接口管理，Issue #26）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| name | TEXT UNIQUE NOT NULL | 接口模板名称 |
+| description | TEXT | 接口说明 |
+| api_url | TEXT NOT NULL | 接口 URL 模板，支持 `{message}` |
+| api_method | TEXT DEFAULT 'GET' | HTTP 方法（GET/POST/PUT/PATCH/DELETE） |
+| api_headers | TEXT DEFAULT '{}' | 请求头 JSON 对象 |
+| api_params_template | TEXT | 查询串或请求体参数模板 |
+| response_render_template | TEXT | 数字员工响应渲染模板 |
+| api_secret | TEXT | 加密存储的接口密钥 |
+| is_enabled | INTEGER DEFAULT 1 | 启用状态 |
+| sort_order | INTEGER DEFAULT 0 | 排序 |
+| created_at | TIMESTAMP | 创建时间 |
+| updated_at | TIMESTAMP | 更新时间 |
+
+### digital_employees 表补充（接口联动）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| api_interface_id | INTEGER FK→api_interfaces.id | API 型员工来源接口模板，删除接口后置空 |

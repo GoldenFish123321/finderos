@@ -41,6 +41,14 @@
 - **数据来源**: 角色-功能映射表（`roles → role_functions → functions`）
 - **实现**: 选择角色后展示其对应的树形菜单预览 + JSON 结构
 
+### 5. 接口管理 (`/admin/interface`) — Issue #26
+
+- **需求来源**: 团队任务1 — 管理侧接口管理，支持数字员工通过接口库联动创建 API 型数字员工。
+- **功能**: 接口模板列表、搜索、新增、编辑、删除、启用/禁用、接口测试。
+- **字段**: 名称、描述、URL、请求方法、Headers(JSON)、参数模板、响应渲染模板、接口密钥、排序、启用状态。
+- **联动**: 在 `/admin/employee/add` 或 `/admin/employee/edit` 中选择接口模板后，自动填充 API 型员工的 URL/Method/Headers/Params/响应模板。
+- **安全**: 接口测试与 API 型员工调用必须执行 SSRF 防护、固定已校验 DNS 解析结果且不自动跟随重定向；Header 禁止 CR/LF；接口密钥加密存储且不通过列表 API 回显；敏感 Header 脱敏展示。
+
 ## 数据库设计
 
 ```
@@ -71,6 +79,13 @@ functions (树形: parent_id 自引用)
 | `/admin/function/delete` | POST | 删除功能 |
 | `/admin/function/toggle` | POST | 启用/禁用功能 |
 | `/admin/menu` | GET | 菜单管理(按角色预览) |
+| `/admin/interface` | GET | 接口模板列表 |
+| `/admin/interface/add` | GET/POST | 新增接口模板 |
+| `/admin/interface/edit` | GET/POST | 编辑接口模板 |
+| `/admin/interface/delete` | POST | 删除接口模板 |
+| `/admin/interface/toggle` | POST | 启用/禁用接口模板 |
+| `/admin/interface/test` | POST | 测试接口模板 |
+| `/admin/api/interface/list` | GET | 已启用接口模板 JSON API |
 
 ## Bug修复清单 (Day6 任务2.1-2.3)
 
