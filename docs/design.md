@@ -146,7 +146,7 @@ audit_logs (独立审计)
 | **登录限速** | IP+用户名维度，5次失败/15分钟锁定 |
 | **审计日志** | 关键操作全量写入 `audit_logs` 表 |
 | **API Key 加密** | Fernet 对称加密存储 |
-| **Prompt Injection** | System Prompt 内置安全指令约束 |
+| **Prompt Injection** | System Prompt 内置安全指令约束 + `detect_prompt_injection()` / `sanitize_user_input()` 运行时检测 |
 
 ## 5. 端口与配置
 

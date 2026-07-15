@@ -4,7 +4,7 @@
 
 ## 1. 技术约束
 
-- **语言**: Python 3.11 (venv 中的解释器版本)
+- **语言**: Python 3.11+ (venv 中的解释器版本，推荐 3.13+)
 - **Web 框架**: Tornado (`tornado.web` / `tornado.ioloop` / `tornado.httpserver`)
 - **数据库**: SQLite3 (`sqlite3` 内置模块，零外部依赖)，DB 文件 `database/finderos.db`
 - **模板**: Tornado 原生模板 (`{% extends %}` / `{% block %}` / `{% module xsrf_form_html() %}`)
@@ -116,10 +116,10 @@
 | id | INTEGER PK | 自增主键 |
 | source_id | INTEGER FK | 瞭望源ID |
 | keyword | TEXT | 采集关键词 |
-| request_url | TEXT | 实际请求URL（UNIQUE 去重：非空 URL 唯一索引） |
+| request_url | TEXT DEFAULT '' | 实际请求URL（通过 `WHERE request_url != ''` 部分唯一索引去重） |
 | response_status | INTEGER | 响应状态码 |
 | response_size | INTEGER | 响应数据大小（字节） |
-| result_data | TEXT | 响应数据内容（JSON 格式存储结构化采集结果） |
+| result_data | TEXT DEFAULT '' | 响应数据内容（JSON 格式存储结构化采集结果） |
 | created_at | TIMESTAMP | 采集时间 |
 
 > **注意**：本表存储每次采集的原始记录。标记保存后的结构化数据存入独立的 `data_warehouse` 表。
@@ -197,7 +197,7 @@
 | name | TEXT NOT NULL | 员工名称 |
 | employee_type | TEXT | 类型（llm/api） |
 | description | TEXT | 能力描述 |
-| model_id | INTEGER FK | 绑定模型（LLM 型） |
+| model_id | INTEGER FK | 绑定模型（LLM 型），`FOREIGN KEY REFERENCES ai_models(id) ON DELETE SET NULL` |
 | system_prompt | TEXT | 系统提示词（LLM 型） |
 | skills | TEXT | 技能列表 JSON（LLM 型） |
 | crawl4ai_enabled | INTEGER DEFAULT 0 | 启用深度采集（LLM 型） |

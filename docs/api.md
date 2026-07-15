@@ -93,6 +93,8 @@
 }
 ```
 
+> **兼容格式**：同时支持 jQuery 数组语法 `source_ids[]=1&source_ids[]=2`。
+
 #### POST /admin/watch 响应
 
 ```json
@@ -162,7 +164,7 @@
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/api/model/list` | JSON 格式模型列表（?page=&limit=&category=） |
+| GET | `/admin/api/model/list` | JSON 格式模型列表（?page=&limit=&category=）。仅返回已启用模型（`is_enabled=1`） |
 
 ### 4.4 Token 消耗说明
 
