@@ -4,6 +4,20 @@
 
 ---
 
+## v1.0.2-beta (2026-07-15) — 安全加固与种子数据完善
+
+- 🔒 **安全修复 #1 [CRITICAL]**：数据仓库内容拼入 system prompt 前进行 Prompt Injection 脱敏（XML 标签包裹 + 高危模式过滤 + 长度截断）(@GoldenFish123321)
+- 🔒 **安全修复 #2 [HIGH]**：Mock 回复中移除 system prompt 内容泄露，仅保留配置状态 (@GoldenFish123321)
+- 🗄️ **种子数据 #41**：为全部 LLM 型员工配置 mcp_tool_ids，基于名称解析消除 ID 漂移风险 (@GoldenFish123321)
+- 🗄️ **种子数据 #42**：消除硬编码数字 MCP 工具 ID，全部改为名称→ID dict 查找 (@GoldenFish123321)
+- 🗄️ **种子数据 #43**：5 个默认技能补充 mcp_tool_id 绑定对应 MCP 工具 (@GoldenFish123321)
+- 🗄️ **种子数据 #44**：种子技能从 5 个扩展到 14 个，涵盖产业分析/政策解读/文案撰写等 (@GoldenFish123321)
+- 🗄️ **种子数据 #45**：MCP 工具描述统一升级为富描述版本（含 prompt engineering hints） (@GoldenFish123321)
+- 🔄 **迁移修复 #46**：migrate_db.py 新增 crawl4ai_enabled → mcp_tool_ids 迁移步骤 (@GoldenFish123321)
+- 🧪 **测试新增**：24 个安全测试用例 + 种子数据一致性验证测试
+
+---
+
 ## v1.0.1-beta (2026-07-15) — MCP Fallback 工具补齐
 
 - 🐛 **修复 #47**：`ALL_TOOL_DEFINITIONS` fallback 路径缺失 8 个工具定义，现已补齐为 18 个（与 `builtin_tools/` 导出完全一致）
