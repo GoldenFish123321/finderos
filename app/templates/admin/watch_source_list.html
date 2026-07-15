@@ -66,8 +66,8 @@
                             <form action="/admin/watch/source/delete" method="post" style="display:inline;">
                                 {% module xsrf_form_html() %}
                                 <input type="hidden" name="id" value="{{ s['id'] }}">
-                                <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger"
-                                        onclick="return confirm('确定删除瞭望源「{{ s['name'] }}」吗？')">
+                                <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger js-delete-confirm"
+                                        data-confirm-name="{{ s['name'] }}">
                                     <i class="layui-icon layui-icon-delete"></i> 删除
                                 </button>
                             </form>
@@ -117,6 +117,13 @@ layui.use(['laypage', 'jquery', 'form'], function(){
         location.href = '/admin/watch/source' + (kw ? '?keyword=' + encodeURIComponent(kw) : '');
     });
     $('#search-kw').keydown(function(e){ if (e.keyCode === 13) $('#btn-search').click(); });
+    // 删除确认: 使用 data-* 属性替代 inline onclick，防止 XSS（HTML 实体编码在 JS 上下文中可被绕过）
+    $('.js-delete-confirm').on('click', function(e) {
+        var name = this.getAttribute('data-confirm-name') || '(未知)';
+        if (!confirm('确定删除瞭望源「' + name + '」吗？')) {
+            e.preventDefault();
+        }
+    });
 });
 </script>
 {% end %}
