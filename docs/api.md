@@ -1,4 +1,4 @@
-# API 接口文档 v0.2
+# API 接口文档 v0.4
 
 > 基础 URL: `http://localhost:10010`
 > 认证方式: Tornado Secure Cookie（登录后自动携带）
