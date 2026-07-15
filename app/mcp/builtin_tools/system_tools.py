@@ -11,11 +11,10 @@ from typing import Any, Dict
 
 
 def _load_skill(skill_name: str) -> Dict[str, Any]:
-    """加载指定技能的完整执行指令。
+    """加载指定技能的 prompt 模板指令。
 
-    根据技能类型返回不同内容：
-    - prompt 型：返回完整 prompt_template（供 LLM 注入系统指令）
-    - function 型：返回 function_name + function_params（供 LLM 后续调用对应工具）
+    技能统一为 Prompt 模板，LLM 获取后按模板中的指示执行任务。
+    模板中可以直接描述应使用哪些 MCP 工具及用法。
     """
     from app.models.skill import SkillRepository
     skill = SkillRepository.get_by_name(skill_name.strip())
@@ -31,35 +30,13 @@ def _load_skill(skill_name: str) -> Dict[str, Any]:
             "error": f"技能「{skill_name}」已被禁用",
         }
 
-    skill_type = skill.get("skill_type", "prompt")
-    if skill_type == "prompt":
-        return {
-            "success": True,
-            "skill_type": "prompt",
-            "skill_name": skill["name"],
-            "description": skill.get("description", ""),
-            "content": skill.get("prompt_template", ""),
-            "usage": "请将以上 content 作为你的系统指令严格遵循，完成用户的任务。",
-        }
-    else:  # function
-        func_name = skill.get("function_name", "")
-        func_params_str = skill.get("function_params", "{}")
-        try:
-            func_params = _json.loads(func_params_str)
-        except Exception:
-            func_params = {}
-        return {
-            "success": True,
-            "skill_type": "function",
-            "skill_name": skill["name"],
-            "description": skill.get("description", ""),
-            "function_name": func_name,
-            "function_params": func_params,
-            "usage": (
-                f"此技能映射到 MCP 工具「{func_name}」。"
-                f"请根据用户需求调用该工具，默认参数: {func_params_str}。"
-            ),
-        }
+    return {
+        "success": True,
+        "skill_name": skill["name"],
+        "description": skill.get("description", ""),
+        "content": skill.get("prompt_template", ""),
+        "usage": "请将以上 content 作为你的系统指令严格遵循，完成用户的任务。如需使用 MCP 工具，请在 content 中自行描述。",
+    }
 
 
 def _get_system_stats() -> Dict[str, Any]:

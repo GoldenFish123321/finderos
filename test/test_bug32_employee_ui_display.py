@@ -86,14 +86,12 @@ def _seed_test_data():
 
     # 创建技能
     conn.execute(
-        "INSERT INTO skills (name, description, skill_type, function_name, function_params) "
-        "VALUES (?, ?, ?, ?, ?)",
-        ("数据搜索", "在数据仓库中搜索", "function", "search_warehouse", '{"keyword":"test"}'),
+        "INSERT INTO skills (name, description, prompt_template) VALUES (?, ?, ?)",
+        ("数据搜索", "在数据仓库中搜索", "使用 search_warehouse 工具搜索关键词"),
     )
     conn.execute(
-        "INSERT INTO skills (name, description, skill_type, function_name, function_params) "
-        "VALUES (?, ?, ?, ?, ?)",
-        ("深度采集", "深度抓取网页", "function", "deep_collect_url", '{"url":"test"}'),
+        "INSERT INTO skills (name, description, prompt_template) VALUES (?, ?, ?)",
+        ("深度采集", "深度抓取网页", "使用 deep_collect_url 工具采集URL内容"),
     )
 
     # 创建模型（最小字段集）

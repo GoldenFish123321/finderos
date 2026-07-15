@@ -4,12 +4,6 @@
 
 {% block admin_content %}
 <style>
-.skill-type-toggle { display:flex; gap:12px; margin-bottom:20px; }
-.skill-type-toggle label { padding:8px 18px; border-radius:8px; cursor:pointer; background:var(--bg-card); border:2px solid var(--border-subtle); color:var(--text-secondary); transition:all var(--transition-fast); font-size:14px; }
-.skill-type-toggle input[type="radio"] { display:none; }
-.skill-type-toggle input[type="radio"]:checked + label { border-color:var(--accent-blue); color:var(--text-primary); background:rgba(94,163,255,0.1); }
-.prompt-fields, .function-fields { display:none; }
-.prompt-fields.active, .function-fields.active { display:block; }
 </style>
 
 <div class="layui-card">
@@ -23,15 +17,6 @@
             {% if skill %}
             <input type="hidden" name="id" value="{{ skill['id'] }}">
             {% end %}
-
-            <!-- 类型切换 -->
-            <div class="skill-type-toggle">
-                {% for t in skill_types %}
-                <input type="radio" name="skill_type" value="{{ t['value'] }}" id="type-{{ t['value'] }}"
-                       {% if (skill and skill['skill_type'] == t['value']) or (not skill and t['value'] == 'prompt') %}checked{% end %}>
-                <label for="type-{{ t['value'] }}">{{ t['name'] }}</label>
-                {% end %}
-            </div>
 
             <div class="layui-form-item">
                 <label class="layui-form-label">技能名称</label>
@@ -47,53 +32,19 @@
                     <textarea name="description" class="layui-textarea" rows="2"
                               placeholder="一句话描述技能用途（供 LLM 决策是否加载）">{{ skill.get('description','') if skill else '' }}</textarea>
                     <div class="layui-form-mid layui-word-aux" style="float:none;margin-left:0;">
-                        ⚠️ 描述会嵌入 System Prompt，LLM 据此决定何时调用 load_skill 工具。请简洁精炼（20字以内）。
+                        ⚠️ 描述会嵌入 System Prompt，LLM 据此决定何时调用 load_skill 工具。请简洁精炼。
                     </div>
                 </div>
             </div>
 
-            <!-- === Prompt 型字段 === -->
-            <div class="prompt-fields {{ 'active' if not skill or skill['skill_type'] == 'prompt' else '' }}">
-                <div class="layui-form-item">
-                    <label class="layui-form-label">Prompt 模板</label>
-                    <div class="layui-input-block">
-                        <textarea name="prompt_template" class="layui-textarea" rows="8"
-                                  placeholder="输入完整的 prompt 增强指令模板...&#10;支持占位符：{employee_name}（员工名称）、{user_query}（用户问题）、{username}（当前用户）">{{ skill.get('prompt_template','') if skill else '' }}</textarea>
-                        <div class="layui-form-mid layui-word-aux" style="float:none;margin-left:0;">
-                            📝 当 LLM 调用 load_skill 加载此技能时，这段模板内容将作为增强指令返回。<br>
-                            可用占位符：<code>{employee_name}</code> <code>{user_query}</code> <code>{username}</code>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- === Function 型字段 === -->
-            <div class="function-fields {{ 'active' if skill and skill['skill_type'] == 'function' else '' }}">
-                <div class="layui-form-item">
-                    <label class="layui-form-label">关联 MCP 工具</label>
-                    <div class="layui-input-block">
-                        <select name="function_name">
-                            <option value="">-- 选择 MCP 工具 --</option>
-                            {% for tool_name in mcp_tools %}
-                            <option value="{{ tool_name }}"
-                                {% if skill and skill.get('function_name') == tool_name %}selected{% end %}>
-                                {{ tool_name }}
-                            </option>
-                            {% end %}
-                        </select>
-                        <div class="layui-form-mid layui-word-aux" style="float:none;margin-left:0;">
-                            🔧 选择此技能映射到的 MCP 工具。LLM 加载技能后会获知可调用该工具。
-                        </div>
-                    </div>
-                </div>
-                <div class="layui-form-item">
-                    <label class="layui-form-label">默认参数</label>
-                    <div class="layui-input-block">
-                        <textarea name="function_params" class="layui-textarea" rows="3"
-                                  placeholder='{"limit": 10}'>{{ skill.get('function_params','{}') if skill else '{}' }}</textarea>
-                        <div class="layui-form-mid layui-word-aux" style="float:none;margin-left:0;">
-                            📋 JSON 格式的默认调用参数（可选）。LLM 可根据用户问题覆盖这些参数。
-                        </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">Prompt 模板</label>
+                <div class="layui-input-block">
+                    <textarea name="prompt_template" class="layui-textarea" rows="12"
+                              placeholder="输入完整的 prompt 指令模板...&#10;&#10;在模板中直接描述应使用哪些 MCP 工具：&#10;例如：「使用 search_warehouse 工具搜索...」&#10;&#10;支持占位符：{employee_name}（员工名称）、{user_query}（用户问题）、{username}（当前用户）">{{ skill.get('prompt_template','') if skill else '' }}</textarea>
+                    <div class="layui-form-mid layui-word-aux" style="float:none;margin-left:0;">
+                        📝 LLM 调用 load_skill 加载时，这段内容将作为增强指令返回。<br>
+                        如需调用 MCP 工具，直接在文本中写明工具名和用法即可，例如：<code>使用 search_warehouse 工具搜索关键词</code>
                     </div>
                 </div>
             </div>
@@ -116,8 +67,9 @@
 layui.use(['form'], function(){
     var form = layui.form;
     form.render();
-
-    // 类型切换
+});
+</script>
+{% end %}
     document.querySelectorAll('input[name="skill_type"]').forEach(function(radio){
         radio.addEventListener('change', function(){
             document.querySelector('.prompt-fields').classList.toggle('active', this.value === 'prompt');
