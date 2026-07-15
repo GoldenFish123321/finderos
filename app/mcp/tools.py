@@ -536,7 +536,7 @@ ALL_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
 
 
 def register_all_tools(server: Optional[MCPServer] = None) -> MCPServer:
-    """向 MCP Server 注册所有工具 (v0.6.0: 优先从数据库加载)。
+    """向 MCP Server 注册所有工具 (v0.4.2: 优先从数据库加载)。
 
     优先使用 MCPToolRegistry 从数据库加载；
     如果数据库没有工具记录，回退到代码定义的 ALL_TOOL_DEFINITIONS。

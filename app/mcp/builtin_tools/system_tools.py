@@ -3,7 +3,7 @@ system_tools.py — 系统管理类 MCP 工具处理函数
 
 工具:
 - load_skill: 加载技能
-- get_system_stats: 系统概览 (v0.6.0 新增)
+- get_system_stats: 系统概览 (v0.4.2 新增)
 """
 
 import json as _json
@@ -40,7 +40,7 @@ def _load_skill(skill_name: str) -> Dict[str, Any]:
 
 
 def _get_system_stats() -> Dict[str, Any]:
-    """获取系统统计概览（v0.6.0 新增）。"""
+    """获取系统统计概览（v0.4.2 新增）。"""
     from app.models.db import get_db
     with get_db() as conn:
         user_count = conn.execute("SELECT COUNT(*) as cnt FROM users").fetchone()["cnt"]

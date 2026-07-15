@@ -1,5 +1,5 @@
 """
-test_mcp_refactor.py — MCP 重构验证测试 (v0.6.0)
+test_mcp_refactor.py — MCP 重构验证测试 (v0.4.2)
 
 验证：
 1. MCP 工具数据库注册与查询
@@ -233,7 +233,7 @@ def test_tool_test_log():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("MCP 重构验证测试 v0.6.0")
+    print("MCP 重构验证测试 v0.4.2")
     print("=" * 60)
 
     # 初始化数据库和种子数据

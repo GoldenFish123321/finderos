@@ -1,5 +1,5 @@
 """
-mcp_tool.py — MCP 工具 Repository (v0.6.0 新增)
+mcp_tool.py — MCP 工具 Repository (v0.4.2 新增)
 
 管理 mcp_tools 表的 CRUD，以及 mcp_tool_test_logs 表。
 支持按分类、状态筛选，支持工具启用/禁用、测试日志记录。

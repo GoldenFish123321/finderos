@@ -352,7 +352,7 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_username ON audit_logs(username)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at)")
 
-        # ── v0.6.0 MCP 工具注册表 (数据库驱动) ──
+        # ── v0.4.2 MCP 工具注册表 (数据库驱动) ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS mcp_tools (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -377,7 +377,7 @@ def init_db():
             )
         """)
 
-        # ── v0.6.0 MCP 工具测试日志表 ──
+        # ── v0.4.2 MCP 工具测试日志表 ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS mcp_tool_test_logs (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -391,7 +391,7 @@ def init_db():
             )
         """)
 
-        # ── v0.6.0 skills 表新增 mcp_tool_id 列 ──
+        # ── v0.4.2 skills 表新增 mcp_tool_id 列 ──
         try:
             cols = {row[1] for row in conn.execute("PRAGMA table_info(skills)").fetchall()}
             if "mcp_tool_id" not in cols:
@@ -400,7 +400,7 @@ def init_db():
         except Exception as e:
             logger.error(f"Database migration failed (skills.mcp_tool_id): {e}", exc_info=True)
 
-        # ── v0.6.0 digital_employees 表新增 mcp_tool_ids 列 ──
+        # ── v0.4.2 digital_employees 表新增 mcp_tool_ids 列 ──
         try:
             cols = {row[1] for row in conn.execute("PRAGMA table_info(digital_employees)").fetchall()}
             if "mcp_tool_ids" not in cols:
@@ -469,7 +469,7 @@ def seed_default_data():
                 (13, "数字员工", "layui-icon-user", "/admin/employee", None, 8, 1),
                 # 技能管理 (v0.5.0 新增)
                 (14, "技能管理", "layui-icon-util", "/admin/skill", None, 9, 1),
-                # MCP 工具管理 (v0.6.0 新增)
+                # MCP 工具管理 (v0.4.2 新增)
                 (15, "MCP 工具管理", "layui-icon-component", "/admin/mcp/tool", None, 10, 1),
                 # 接口管理 (v0.4.1 新增)
                 (16, "接口管理", "layui-icon-link", "/admin/interface", None, 11, 1),

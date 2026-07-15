@@ -73,7 +73,7 @@ class EmployeeListHandler(AdminBaseHandler):
                 emp["skills_list"] = [s["name"] for s in resolved_names] if resolved_names else raw_skills
                 # 标记为旧格式（模板中可区分显示）
                 emp["skills_legacy"] = True
-            # v0.6.0: 解析 MCP 工具名称
+            # v0.4.2: 解析 MCP 工具名称
             try:
                 raw_tool_ids = _json.loads(emp.get("mcp_tool_ids", "[]"))
             except (_json.JSONDecodeError, TypeError):
@@ -132,7 +132,7 @@ class EmployeeFormHandler(AdminBaseHandler):
         # 获取启用的技能库（供技能选择器使用）
         skills_library = SkillRepository.get_enabled()
 
-        # 获取启用的 MCP 工具（供工具选择器使用，v0.6.0）
+        # 获取启用的 MCP 工具（供工具选择器使用，v0.4.2）
         mcp_tools = MCPToolRepository.get_enabled()
         mcp_categories = MCPToolRepository.get_categories()
 
@@ -170,7 +170,7 @@ class EmployeeFormHandler(AdminBaseHandler):
             skills = []
         skills_json = json.dumps(skills, ensure_ascii=False)
 
-        # 解析 MCP 工具选择（v0.6.0: 从工具库多选，存储工具 ID 数组）
+        # 解析 MCP 工具选择（v0.4.2: 从工具库多选，存储工具 ID 数组）
         tool_ids = self.get_body_arguments("mcp_tool_ids")
         try:
             mcp_ids = [int(tid) for tid in tool_ids if tid.strip()]
