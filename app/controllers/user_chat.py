@@ -1348,7 +1348,14 @@ class UserEmployeeInvokeHandler(BaseHandler):
             return
 
         # DNS 重绑定防护：用已验证的 IP 替换 hostname，防止 TOCTOU 攻击 (Issue #11)
-        pinned_url, host_headers = pin_url_to_ip(api_url, resolved_ip)
+        # 注意：HTTPS 下 IP 直连会导致 SSL 证书校验失败（证书绑定域名），
+        # 而 HTTPS 自身的证书校验已等效防范 DNS 重绑定，故仅对 HTTP 做 IP pinning。
+        is_https = api_url.startswith("https://") or api_url.startswith("HTTPS://")
+        if is_https:
+            pinned_url = api_url
+            host_headers = {}
+        else:
+            pinned_url, host_headers = pin_url_to_ip(api_url, resolved_ip)
         # Host 头优先级低于用户自定义 headers（用户可覆盖）
         for k, v in host_headers.items():
             headers.setdefault(k, v)
