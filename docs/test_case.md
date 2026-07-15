@@ -39,6 +39,10 @@
 | TC-WATCH-03 | 保存到仓库 | 勾选结果→保存 | 数据仓库中出现记录 |
 | TC-WATCH-04 | SSRF防护 | 配置瞭源指向内网地址 | 采集被拦截，返回SSRF错误信息 |
 | TC-WATCH-05 | 空关键词 | 不输入关键词直接采集 | 提示"请输入关键词" |
+| TC-WATCH-06 | SSE 采集进度 | 输入关键词后点击采集 | `/admin/watch/stream` 推送 `collect_progress` 事件 |
+| TC-WATCH-07 | 进度条渲染 | 采集中观察 A 区进度 | 显示百分比、当前 URL、成功/失败数 |
+| TC-WATCH-08 | 采集审计日志 | 完成一次采集 | `audit_logs` 新增 `WATCH_COLLECT` 记录 |
+| TC-WATCH-09 | 采集日志页 | 打开 `/admin/watch/log` 并搜索关键词 | 展示采集相关日志并支持分页 |
 
 ## 5. 模型引擎
 

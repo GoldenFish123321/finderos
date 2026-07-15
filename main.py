@@ -30,14 +30,16 @@ from app.controllers.admin_function import (
     FunctionListHandler, FunctionFormHandler, FunctionDeleteHandler, FunctionToggleHandler,
 )
 from app.controllers.admin_menu import MenuHandler, MenuSortHandler
-from app.controllers.admin_watch import WatchHandler, WatchSaveHandler, WatchDeepCollectHandler
+from app.controllers.admin_watch import (
+    WatchHandler, WatchStreamHandler, WatchSaveHandler, WatchDeepCollectHandler,
+)
 from app.controllers.admin_watch_source import (
     WatchSourceListHandler, WatchSourceFormHandler,
     WatchSourceDeleteHandler, WatchSourceToggleHandler,
 )
 from app.controllers.admin_warehouse import (
     WarehouseHandler, WarehouseDetailHandler, WarehouseDeleteHandler,
-    WarehouseBatchDeleteHandler, WarehouseDeepCollectHandler,
+    WarehouseBatchDeleteHandler, WarehouseDeepCollectHandler, WatchLogHandler,
 )
 from app.controllers.admin_model import (
     ModelListHandler, ModelFormHandler, ModelDeleteHandler,
@@ -126,10 +128,12 @@ def make_app() -> tornado.web.Application:
             # ========== Day6-2 新增模块 ==========
             # 瞭望采集
             (r"/admin/watch", WatchHandler),
+            (r"/admin/watch/stream", WatchStreamHandler),
             (r"/admin/watch/save", WatchSaveHandler),
             (r"/admin/watch/deep-collect", WatchDeepCollectHandler),
 
             # 瞭源管理
+            (r"/admin/watch/log", WatchLogHandler),
             (r"/admin/watch/source", WatchSourceListHandler),
             (r"/admin/watch/source/add", WatchSourceFormHandler),
             (r"/admin/watch/source/edit", WatchSourceFormHandler),
