@@ -31,6 +31,8 @@
 |------|------|---------|
 | `app/controllers/` | Controller 层，一个业务一个文件 | 新增业务需新建文件 |
 | `app/models/` | Model 层，Repository 模式 | 每个表一个文件 |
+| `app/mcp/` | MCP 协议模块（Server/Client/Tools） | MCP 工具变更需同时更新 tools.py |
+| `app/services/` | 业务服务层（采集/深度采集/调度） | 独立可复用组件 |
 | `app/templates/` | Tornado 原生模板 | 按模块分目录 |
 | `app/templates/admin/` | 管理后台模板 | 继承 `base_layout.html` |
 | `app/static/` | 静态资源 (CSS/JS/图片) | 按类型分目录 |
@@ -93,7 +95,7 @@
 - **默认角色**: 系统管理员(可访问后台) / 普通用户(仅前台)
 - **菜单生成**: 角色 → role_functions → functions → 按 parent_id 构建树形菜单
 
-## 7. Day6-2 扩展模块 (v0.4)
+## 7. 扩展模块 (v0.4.0)
 
 ### watch_sources 表（瞭源管理）
 | 字段 | 类型 | 说明 |
@@ -105,6 +107,7 @@
 | request_headers | TEXT | HTTP请求头（JSON格式） |
 | is_enabled | INTEGER DEFAULT 1 | 启用状态 |
 | sort_order | INTEGER DEFAULT 0 | 排序 |
+| schedule_interval | INTEGER DEFAULT 0 | 定时采集间隔（秒，0=不启用） |
 | created_at | TIMESTAMP | 创建时间 |
 
 ### watch_results 表（数据仓库）
@@ -137,4 +140,70 @@
 | context_size | INTEGER | 上下文窗口大小 |
 | is_enabled | INTEGER DEFAULT 1 | 启用状态 |
 | is_default | INTEGER DEFAULT 0 | 是否默认模型 |
+| total_tokens | INTEGER DEFAULT 0 | Token 消耗累计 |
+| created_at | TIMESTAMP | 创建时间 |
+
+### data_warehouse 表（独立数据仓库）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| result_id | INTEGER FK | 关联 watch_results.id |
+| title | TEXT | 标题 |
+| link | TEXT | 链接（UNIQUE 去重） |
+| summary | TEXT | 摘要 |
+| source_name | TEXT | 来源名称 |
+| raw_data | TEXT | 原始数据（JSON） |
+| is_deep_collected | INTEGER DEFAULT 0 | 是否已深度采集 |
+| deep_collected_at | TIMESTAMP | 深度采集时间 |
+| created_at | TIMESTAMP | 入库时间 |
+
+### audit_logs 表（操作审计日志）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| action | TEXT NOT NULL | 操作类型 |
+| username | TEXT | 操作人 |
+| target | TEXT | 操作目标 |
+| detail | TEXT | 详细信息 |
+| client_ip | TEXT | 客户端 IP |
+| created_at | TIMESTAMP | 操作时间 |
+
+### conversations 表（对话管理）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| title | TEXT | 对话标题 |
+| username | TEXT | 所属用户 |
+| model_id | INTEGER FK | 使用的模型 ID |
+| created_at | TIMESTAMP | 创建时间 |
+| updated_at | TIMESTAMP | 最后更新时间 |
+
+### conversation_messages 表（对话消息）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| conversation_id | INTEGER FK | 所属对话（CASCADE 删除） |
+| role | TEXT NOT NULL | 角色（user/assistant/system） |
+| content | TEXT | 消息内容 |
+| token_count | INTEGER DEFAULT 0 | Token 消耗 |
+| created_at | TIMESTAMP | 创建时间 |
+
+### digital_employees 表（数字化员工）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| name | TEXT NOT NULL | 员工名称 |
+| employee_type | TEXT | 类型（llm/api） |
+| description | TEXT | 能力描述 |
+| model_id | INTEGER FK | 绑定模型（LLM 型） |
+| system_prompt | TEXT | 系统提示词（LLM 型） |
+| skills | TEXT | 技能列表 JSON（LLM 型） |
+| crawl4ai_enabled | INTEGER DEFAULT 0 | 启用深度采集（LLM 型） |
+| api_url | TEXT | API 地址（API 型） |
+| api_method | TEXT | HTTP 方法（API 型） |
+| api_headers | TEXT | 请求头 JSON（API 型） |
+| api_params_template | TEXT | 参数模板（API 型） |
+| response_render_template | TEXT | 响应渲染模板（API 型） |
+| api_secret | TEXT | API 密钥（API 型，加密存储） |
+| is_enabled | INTEGER DEFAULT 1 | 启用状态 |
 | created_at | TIMESTAMP | 创建时间 |
