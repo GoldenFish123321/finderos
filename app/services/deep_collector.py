@@ -238,7 +238,7 @@ def deep_fetch(url: str, timeout: int = 30) -> Tuple[int, str, str, str]:
         logger.debug("crawl4ai 已安装但集成代码待实现，使用自研方案")
 
     # SSRF 校验
-    is_safe, reason = validate_url_safe(url)
+    is_safe, reason, _ = validate_url_safe(url)
     if not is_safe:
         logger.warning(f"深度采集 SSRF 拦截: {url} — {reason}")
         return 0, "", "", f"安全校验失败: {reason}"

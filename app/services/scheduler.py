@@ -110,7 +110,7 @@ class CollectionScheduler:
                 encoded_kw = urllib.parse.quote(keyword, encoding="utf-8")
                 request_url = url_template.replace("{keyword}", encoded_kw).replace("{page}", "0")
 
-                safe, reason = validate_url_safe(request_url)
+                safe, reason, _ = validate_url_safe(request_url)
                 if not safe:
                     logger.warning(f"定时采集 SSRF 拦截: {request_url}, reason={reason}")
                     continue

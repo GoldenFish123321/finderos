@@ -548,7 +548,7 @@ class UserChatStreamHandler(BaseHandler):
         """
         # SSRF 校验
         from app.utils.security import validate_url_safe
-        safe, reason = validate_url_safe(api_base)
+        safe, reason, _ = validate_url_safe(api_base)
         if not safe:
             await _sse_write(self, f"API Base URL 不安全: {reason}")
             await _sse_done(self)
@@ -1093,7 +1093,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
 
         if api_key:
             from app.utils.security import validate_url_safe
-            safe, reason = validate_url_safe(api_base)
+            safe, reason, _ = validate_url_safe(api_base)
             if not safe:
                 await _sse_write(self, f"API Base URL 不安全: {reason}")
                 await _sse_done(self)
@@ -1277,14 +1277,20 @@ class UserEmployeeInvokeHandler(BaseHandler):
         if api_secret:
             headers["Authorization"] = f"Bearer {api_secret}"
 
-        from app.utils.security import validate_url_safe
-        safe, reason = validate_url_safe(api_url)
+        from app.utils.security import validate_url_safe, pin_url_to_ip
+        safe, reason, resolved_ip = validate_url_safe(api_url)
         if not safe:
             self.set_header("Content-Type", "text/event-stream")
             self.set_header("Cache-Control", "no-cache")
             await _sse_write(self, f"API URL 不安全: {reason}")
             await _sse_done(self)
             return
+
+        # DNS 重绑定防护：用已验证的 IP 替换 hostname，防止 TOCTOU 攻击 (Issue #11)
+        pinned_url, host_headers = pin_url_to_ip(api_url, resolved_ip)
+        # Host 头优先级低于用户自定义 headers（用户可覆盖）
+        for k, v in host_headers.items():
+            headers.setdefault(k, v)
 
         self.set_header("Content-Type", "text/event-stream")
         self.set_header("Cache-Control", "no-cache")
@@ -1303,11 +1309,11 @@ class UserEmployeeInvokeHandler(BaseHandler):
             try:
                 if api_method.upper() == "POST":
                     data = api_params.encode("utf-8") if api_params else None
-                    req = urllib.request.Request(api_url, data=data, headers=headers, method="POST")
+                    req = urllib.request.Request(pinned_url, data=data, headers=headers, method="POST")
                 else:
-                    full_url = api_url
+                    full_url = pinned_url
                     if api_params:
-                        full_url += ("&" if "?" in api_url else "?") + api_params
+                        full_url += ("&" if "?" in pinned_url else "?") + api_params
                     req = urllib.request.Request(full_url, headers=headers)
                 with urllib.request.urlopen(req, timeout=30) as resp:
                     return resp.read().decode("utf-8", errors="replace"), resp.status, None

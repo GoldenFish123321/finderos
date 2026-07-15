@@ -331,7 +331,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
 
         if api_key:
             from app.utils.security import validate_url_safe
-            safe, reason = validate_url_safe(api_base)
+            safe, reason, _ = validate_url_safe(api_base)
             if not safe:
                 self.write(f"data: {json.dumps({'error': f'API Base URL 不安全: {reason}'})}\n\n")
                 self.write(f"data: [DONE]\n\n")
@@ -564,7 +564,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
                 url = result.get("url", "")
                 if url:
                     from app.utils.security import validate_url_safe
-                    safe, reason = validate_url_safe(url)
+                    safe, reason, _ = validate_url_safe(url)
                     if safe:
                         try:
                             loop = asyncio.get_event_loop()
@@ -627,7 +627,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             headers["Authorization"] = f"Bearer {api_secret}"
 
         from app.utils.security import validate_url_safe
-        safe, reason = validate_url_safe(api_url)
+        safe, reason, _ = validate_url_safe(api_url)
         if not safe:
             self.write({"code": 1, "msg": f"API URL 不安全: {reason}"})
             return

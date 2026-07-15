@@ -335,7 +335,7 @@ def fetch_and_parse(
     """
     # SSRF 防护校验
     from app.utils.security import validate_url_safe
-    is_safe, reason = validate_url_safe(url)
+    is_safe, reason, _ = validate_url_safe(url)
     if not is_safe:
         logger.warning(f"SSRF 拦截: {reason} — {url[:100]}")
         return 0, 0, f"SSRF Blocked: {reason}", []
