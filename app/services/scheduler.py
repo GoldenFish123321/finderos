@@ -93,8 +93,9 @@ class CollectionScheduler:
         if not url_template:
             return
 
-        # 使用默认关键词进行定时采集
-        keywords = ["人工智能", "科技"]  # 默认采集关键词
+        # 使用配置化的关键词（从环境变量或默认值读取）
+        from app.config.settings import settings
+        keywords = settings.SCHEDULED_COLLECT_KEYWORDS
         parser = "baidu_news"
         if "sogou" in url_template.lower():
             parser = "sogou_news"
