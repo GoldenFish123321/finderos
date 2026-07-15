@@ -1446,6 +1446,12 @@ python -m pytest test/test_login_rate_limiter.py::TestLoginRateLimiter::test_rat
 
 ## 更新日志
 
+### v0.4.1 (2026-07-15) — UI 显示修复
+
+- 🐛 **修复员工卡片模型名称显示 "None"**：`model_name` 为 `None` 时模板默认值回退不生效，改用 `or` 运算符确保正确显示"默认模型"
+- 🐛 **修复员工卡片技能标签显示为 dict 字符串**：技能 ID 解析后返回 dict 列表但模板直接渲染为 Python 字面量，改为提取 `name` 字段作为字符串列表
+- 🐛 **修复员工对话中技能名称 join 异常**：`skills_list` 为 int ID 数组时 `"、".join()` 会抛出 TypeError，增加 ID→名称解析逻辑
+
 ### v0.4.1 (2026-07) — TTS 语音合成播报
 
 - 🔊 **Edge TTS 语音播报**：AI 回复消息一键朗读，使用 Microsoft Edge 免费 TTS 服务
