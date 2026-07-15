@@ -49,6 +49,28 @@
                 </div>
             </div>
 
+            <!-- v0.4.2: 绑定 MCP 工具 -->
+            <div class="layui-form-item">
+                <label class="layui-form-label">绑定 MCP 工具</label>
+                <div class="layui-input-block">
+                    <select name="mcp_tool_id">
+                        <option value="">-- 不绑定（纯 prompt 型） --</option>
+                        {% if mcp_tools %}
+                            {% for t in mcp_tools %}
+                            <option value="{{ t['id'] }}"
+                                {% if skill and skill.get('mcp_tool_id') == t['id'] %}selected{% end %}>
+                                {{ t['display_name'] }} ({{ t['name'] }}) — {{ t.get('category','') }}
+                            </option>
+                            {% end %}
+                        {% end %}
+                    </select>
+                    <div class="layui-form-mid layui-word-aux" style="float:none;margin-left:0;">
+                        🔗 可选：将此技能绑定到一个 MCP 工具。绑定后，选择此技能时系统可自动关联该工具。<br>
+                        留空则为纯 Prompt 模板型技能（通过 load_skill 工具按需加载指令）。
+                    </div>
+                </div>
+            </div>
+
             <div class="layui-form-item" style="margin-top:20px;">
                 <div class="layui-input-block">
                     <button type="submit" class="layui-btn layui-btn-normal">

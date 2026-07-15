@@ -1,4 +1,4 @@
-# API 接口文档 v0.4.0
+# API 接口文档 v0.4.2
 
 > 基础 URL: `http://localhost:10010`
 > 认证方式: Tornado Secure Cookie（登录后自动携带）
@@ -361,3 +361,65 @@ data: {"code":1,"msg":"请输入关键词"}
 ### 8.3 数字员工联动
 
 API 型数字员工新增/编辑页可通过 `api_interface_id` 选择接口模板，自动填充 URL / Method / Headers / Params / Response Template。接口密钥不通过列表 API 回显；`Authorization`、`Cookie`、`X-API-Key` 等敏感 Header 以 `******` 脱敏展示，提交未修改的脱敏值时服务端保留原始 Header。
+
+---
+
+## 九、MCP 工具管理（v0.4.2）
+
+### 9.1 管理侧
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/mcp/tool` | MCP 工具列表（分页） |
+| GET/POST | `/admin/mcp/tool/add` | 新增 MCP 工具 |
+| GET/POST | `/admin/mcp/tool/edit` | 编辑 MCP 工具（`?id=`） |
+| POST | `/admin/mcp/tool/delete` | 删除 MCP 工具 |
+| POST | `/admin/mcp/tool/toggle` | 启用/禁用 MCP 工具 |
+| POST | `/admin/mcp/tool/test` | 在线测试 MCP 工具 |
+| GET | `/admin/mcp/tool/test-logs` | 获取工具测试日志（`?id=`） |
+| POST | `/admin/mcp/reload` | 热重载所有 MCP 工具 |
+
+### 9.2 MCP 工具分类
+
+| 分类 | 说明 | 工具数量 |
+|------|------|---------|
+| warehouse | 数据仓库搜索/统计/全文检索 | 4 |
+| collect | 瞭望采集/深度采集/瞭望源列表 | 3 |
+| employee | 数字员工列表/调用 | 2 |
+| model | AI 模型列表/默认模型 | 2 |
+| chat | 对话历史/消息查询 | 2 |
+| entertainment | 随机音乐推荐 | 1 |
+| crawl4ai | Crawl4ai 智能/批量采集 | 2 |
+| system | 技能加载/系统统计 | 2 |
+
+### 9.3 数字员工 MCP 工具权限
+
+- 数字员工新增/编辑页支持多选 MCP 工具（按分类组织）
+- 未配置工具时遵循**最小权限原则**：员工无权调用任何 MCP 工具
+- `crawl4ai_enabled` 字段已废弃，改为通过 MCP 工具 `collect_with_crawl4ai` 控制
+
+---
+
+## 十、技能管理（v0.4.2 更新）
+
+### 10.1 管理侧
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/skill` | 技能列表（分页） |
+| GET/POST | `/admin/skill/add` | 新增技能（支持绑定 MCP 工具） |
+| GET/POST | `/admin/skill/edit` | 编辑技能（`?id=`） |
+| POST | `/admin/skill/delete` | 删除技能 |
+| POST | `/admin/skill/toggle` | 启用/禁用技能 |
+
+### 10.2 技能类型
+
+- **纯 Prompt 型**：不绑定 MCP 工具，仅提供文本指令模板
+- **MCP 工具绑定型**（v0.4.2 新增）：通过 `mcp_tool_id` 关联 MCP 工具
+
+### 10.3 三色徽章体系
+
+员工列表页中技能标签按类型区分颜色：
+- 🔧 **蓝色徽章** (`.mcp-tag`)：MCP 工具
+- ⭐ **绿色徽章** (`.skill-tag`)：新格式 Skill
+- 📋 **橙黄徽章** (`.legacy-tag`)：旧格式 TAG（兼容过渡）

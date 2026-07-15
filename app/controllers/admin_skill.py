@@ -3,10 +3,12 @@ admin_skill.py — 技能管理控制器
 
 管理员管理技能库（新增/编辑/删除/启用禁用/分页）。
 技能统一为 Prompt 模板，在模板中直接描述 MCP 工具用法。
+v0.4.2: 支持绑定 MCP 工具（mcp_tool_id）。
 """
 import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
 from app.models.skill import SkillRepository
+from app.models.mcp_tool import MCPToolRepository
 from app.utils.security import write_audit_log
 
 
@@ -57,6 +59,8 @@ class SkillFormHandler(AdminBaseHandler):
             title="编辑技能" if skill else "新增技能",
             username=self.current_user,
             skill=skill,
+            # v0.4.2: 加载启用的 MCP 工具列表供绑定选择
+            mcp_tools=MCPToolRepository.get_enabled(),
         )
 
     @tornado.web.authenticated
@@ -65,6 +69,9 @@ class SkillFormHandler(AdminBaseHandler):
         name = self.get_body_argument("name", "").strip()
         description = self.get_body_argument("description", "").strip()
         prompt_template = self.get_body_argument("prompt_template", "").strip()
+        # v0.4.2: 读取 mcp_tool_id（允许为空表示纯 prompt 型 Skill）
+        mcp_tool_id_str = self.get_body_argument("mcp_tool_id", "").strip()
+        mcp_tool_id = int(mcp_tool_id_str) if mcp_tool_id_str else None
 
         if not name:
             self.write('<script>alert("技能名称不能为空");window.history.back();</script>')
@@ -72,7 +79,7 @@ class SkillFormHandler(AdminBaseHandler):
 
         if skill_id:
             skill_id = int(skill_id)
-            ok = SkillRepository.update(skill_id, name, description, prompt_template)
+            ok = SkillRepository.update(skill_id, name, description, prompt_template, mcp_tool_id)
             msg = "更新成功" if ok else "更新失败（名称重复？）"
             write_audit_log(
                 action="SKILL_UPDATE",
@@ -82,7 +89,7 @@ class SkillFormHandler(AdminBaseHandler):
                 client_ip=self.request.remote_ip or "",
             )
         else:
-            new_id = SkillRepository.create(name, description, prompt_template)
+            new_id = SkillRepository.create(name, description, prompt_template, mcp_tool_id)
             msg = "创建成功" if new_id > 0 else "创建失败（名称重复？）"
             if new_id > 0:
                 write_audit_log(
