@@ -17,11 +17,13 @@
 
 - **默认角色**: 普通用户 + 系统管理员（`is_system=1` 不可编辑/删除）
 - **功能**: 新增、删除、修改，功能权限树联动（`role_functions` 中间表）
+- **普通用户初始权限**: 默认授予 `/admin/model/config`，允许进入模型 API 快速配置页；其它后台模块需额外授权
 
 ### 3. 功能管理 (`/admin/function`)
 
 - **功能**: 新增/修改/删除/禁用（禁用级联清除角色关联）
 - **层级**: 一级 + 二级（`parent_id` 自引用）
+- **路由级访问控制**: 后台 Handler 必须校验当前请求所需功能路由，拥有任意后台功能不等于拥有全部后台路由
 
 ### 4. 菜单管理 (`/admin/menu`)
 
@@ -60,6 +62,7 @@
 - 6 大分类（text/image/audio/video/multimodal/embedding）
 - SSE 流式对话（真实 API + Mock 回退）
 - Token 消耗累计 + 对话审计日志
+- 完整 `/admin/model` 仍属于管理员级全局模型管理；普通用户默认使用 `/admin/model/config` 进行模型 API 快速配置
 
 ---
 
@@ -122,6 +125,8 @@
   - `deep_collect_url` / `collect_web_data`
   - `list_digital_employees` / `get_random_music`
   - `list_conversations` / `get_conversation_messages`
+- 管理侧 `/admin/mcp/tool` 需说明工具是否可用的判断步骤：启用、热重载、在线测试、数字员工授权
+- HTTP API 型 MCP 工具支持 URL `{参数名}` 占位符、GET query 参数追加和 POST JSON body
 
 ### 15. LLM Function Calling
 

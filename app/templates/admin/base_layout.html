@@ -25,65 +25,108 @@ document.body.classList.add('dark-theme');
     <!-- 侧边栏 - 深色科技风 -->
     <div class="admin-side-dark">
         <div class="side-nav">
+            {% if admin_can('/admin') %}
             <div class="nav-group">
                 <a href="/admin" class="{{ 'active' if handler.request.path == '/admin' else '' }}">
                     <span class="nav-icon">📊</span> <span>控制台</span>
                 </a>
             </div>
+            {% end %}
+            {% if admin_can('/admin/user') or admin_can('/admin/role') or admin_can('/admin/function') or admin_can('/admin/menu') %}
             <div class="nav-group-title">权限管理</div>
             <div class="nav-group">
+                {% if admin_can('/admin/user') %}
                 <a href="/admin/user" class="{{ 'active' if '/admin/user' in handler.request.path else '' }}">
                     <span class="nav-icon">👤</span> <span>用户管理</span>
                 </a>
+                {% end %}
+                {% if admin_can('/admin/role') %}
                 <a href="/admin/role" class="{{ 'active' if '/admin/role' in handler.request.path else '' }}">
                     <span class="nav-icon">👥</span> <span>角色管理</span>
                 </a>
+                {% end %}
+                {% if admin_can('/admin/function') %}
                 <a href="/admin/function" class="{{ 'active' if '/admin/function' in handler.request.path else '' }}">
                     <span class="nav-icon">🔧</span> <span>功能管理</span>
                 </a>
+                {% end %}
+                {% if admin_can('/admin/menu') %}
                 <a href="/admin/menu" class="{{ 'active' if '/admin/menu' in handler.request.path else '' }}">
                     <span class="nav-icon">📋</span> <span>菜单管理</span>
                 </a>
+                {% end %}
             </div>
+            {% end %}
+            {% if admin_can('/admin/watch') or admin_can('/admin/watch/log') or admin_can('/admin/watch/source') or admin_can('/admin/warehouse') %}
             <div class="nav-group-title">数据采集</div>
             <div class="nav-group">
+                {% if admin_can('/admin/watch') %}
                 <a href="/admin/watch" class="{{ 'active' if handler.request.path == '/admin/watch' else '' }}">
                     <span class="nav-icon">🔍</span> <span>瞭望采集</span>
                 </a>
+                {% end %}
+                {% if admin_can('/admin/watch/log') %}
                 <a href="/admin/watch/log" class="{{ 'active' if '/admin/watch/log' in handler.request.path else '' }}">
                     <span class="nav-icon">📜</span> <span>采集日志</span>
                 </a>
+                {% end %}
+                {% if admin_can('/admin/watch/source') %}
                 <a href="/admin/watch/source" class="{{ 'active' if '/admin/watch/source' in handler.request.path else '' }}">
                     <span class="nav-icon">📡</span> <span>瞭源管理</span>
                 </a>
+                {% end %}
+                {% if admin_can('/admin/warehouse') %}
                 <a href="/admin/warehouse" class="{{ 'active' if '/admin/warehouse' in handler.request.path else '' }}">
                     <span class="nav-icon">🗄️</span> <span>数据仓库</span>
                 </a>
+                {% end %}
             </div>
+            {% end %}
+            {% if admin_can('/admin/model') or admin_can('/admin/model/config') or admin_can('/admin/conversation') %}
             <div class="nav-group-title">AI 引擎</div>
             <div class="nav-group">
+                {% if admin_can('/admin/model') %}
                 <a href="/admin/model" class="{{ 'active' if handler.request.path == '/admin/model' else '' }}">
                     <span class="nav-icon">🤖</span> <span>模型引擎</span>
                 </a>
+                {% end %}
+                {% if admin_can('/admin/model/config') %}
+                <a href="/admin/model/config" class="{{ 'active' if '/admin/model/config' in handler.request.path else '' }}">
+                    <span class="nav-icon">🔑</span> <span>模型 API 配置</span>
+                </a>
+                {% end %}
+                {% if admin_can('/admin/conversation') %}
                 <a href="/admin/conversation" class="{{ 'active' if '/admin/conversation' in handler.request.path else '' }}">
                     <span class="nav-icon">💬</span> <span>会话管理</span>
                 </a>
+                {% end %}
             </div>
+            {% end %}
+            {% if admin_can('/admin/interface') or admin_can('/admin/employee') or admin_can('/admin/skill') or admin_can('/admin/mcp/tool') %}
             <div class="nav-group-title">数字员工</div>
             <div class="nav-group">
+                {% if admin_can('/admin/interface') %}
                 <a href="/admin/interface" class="{{ 'active' if '/admin/interface' in handler.request.path else '' }}">
                     <span class="nav-icon">🔗</span> <span>接口管理</span>
                 </a>
+                {% end %}
+                {% if admin_can('/admin/employee') %}
                 <a href="/admin/employee" class="{{ 'active' if '/admin/employee' in handler.request.path else '' }}">
                     <span class="nav-icon">🧑‍💼</span> <span>数字员工</span>
                 </a>
+                {% end %}
+                {% if admin_can('/admin/skill') %}
                 <a href="/admin/skill" class="{{ 'active' if '/admin/skill' in handler.request.path else '' }}">
                     <span class="nav-icon">🎯</span> <span>技能管理</span>
                 </a>
+                {% end %}
+                {% if admin_can('/admin/mcp/tool') %}
                 <a href="/admin/mcp/tool" class="{{ 'active' if '/admin/mcp/tool' in handler.request.path else '' }}">
                     <span class="nav-icon">🔧</span> <span>MCP 工具</span>
                 </a>
+                {% end %}
             </div>
+            {% end %}
             <div class="nav-group-title">快速入口</div>
             <div class="nav-group">
                 <a href="/chat" target="_blank" style="color: var(--accent-blue);">

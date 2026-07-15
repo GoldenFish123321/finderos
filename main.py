@@ -42,7 +42,7 @@ from app.controllers.admin_warehouse import (
     WarehouseBatchDeleteHandler, WarehouseDeepCollectHandler, WatchLogHandler,
 )
 from app.controllers.admin_model import (
-    ModelListHandler, ModelFormHandler, ModelDeleteHandler,
+    ModelListHandler, ModelFormHandler, ModelQuickConfigHandler, ModelDeleteHandler,
     ModelToggleHandler, ModelDefaultHandler, ModelApiListHandler,
 )
 from app.controllers.admin_interface import (
@@ -153,6 +153,7 @@ def make_app() -> tornado.web.Application:
 
             # 模型引擎
             (r"/admin/model", ModelListHandler),
+            (r"/admin/model/config", ModelQuickConfigHandler),
             (r"/admin/model/add", ModelFormHandler),
             (r"/admin/model/edit", ModelFormHandler),
             (r"/admin/model/delete", ModelDeleteHandler),

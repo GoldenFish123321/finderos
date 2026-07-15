@@ -65,9 +65,19 @@
             支持权限管理、瞭望采集、数据仓库和 AI 模型引擎。
         </p>
         <div class="quick-links">
+            {% if admin_can('/admin/watch') %}
             <a href="/admin/watch" class="btn-glass btn-sm btn-primary">🔍 瞭望采集</a>
+            {% end %}
+            {% if admin_can('/admin/model') %}
             <a href="/admin/model" class="btn-glass btn-sm">🤖 模型引擎</a>
+            {% end %}
+            {% if admin_can('/admin/model/config') %}
+            <a href="/admin/model/config" class="btn-glass btn-sm">🔑 模型 API 配置</a>
+            {% end %}
+            {% if admin_can('/admin/warehouse') %}
             <a href="/admin/warehouse" class="btn-glass btn-sm">🗄️ 数据仓库</a>
+            {% end %}
+            <a href="/chat" class="btn-glass btn-sm">💬 前台问数</a>
         </div>
     </div>
 

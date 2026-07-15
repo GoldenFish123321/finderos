@@ -123,6 +123,34 @@ class FunctionRepository:
             ).fetchall()
 
     @staticmethod
+    def get_route_paths(enabled_only: bool = True) -> list[str]:
+        """Get registered non-empty route paths, longest path first.
+
+        Admin route permission checks use longest-prefix matching so that a
+        specific route like ``/admin/watch/log`` is evaluated before the more
+        general ``/admin/watch``.
+
+        Args:
+            enabled_only: True returns only enabled functions. False returns all
+                registered routes, including disabled ones, so disabled child
+                routes cannot fall back to a broader enabled parent route.
+        """
+        with get_db() as conn:
+            where = "WHERE COALESCE(route_path, '') != ''"
+            if enabled_only:
+                where += " AND is_enabled = 1"
+            rows = conn.execute(
+                f"SELECT route_path FROM functions {where} "
+                "ORDER BY LENGTH(route_path) DESC, route_path ASC"
+            ).fetchall()
+        return [r["route_path"] for r in rows]
+
+    @staticmethod
+    def get_enabled_route_paths() -> list[str]:
+        """Backward-compatible wrapper for enabled route paths."""
+        return FunctionRepository.get_route_paths(enabled_only=True)
+
+    @staticmethod
     def create(name: str, icon: str = "", route_path: str = "",
                parent_id: int | None = None, sort_order: int = 0) -> int:
         """Create a new function. Returns new ID."""

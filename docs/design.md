@@ -92,6 +92,8 @@ audit_logs (独立审计)
 - **角色 (roles)** → 通过 `role_functions` 关联多个功能
 - **功能 (functions)** → 两级树形结构（parent_id 自引用）
 - **菜单** → 基于用户角色动态生成侧边栏菜单
+- **路由级校验** → `AdminBaseHandler` 将当前请求解析为所需功能路由，按最长前缀匹配校验；`/admin/model` 可覆盖 `/admin/model/add`，但不会覆盖 `/admin/mcp/tool`
+- **普通用户初始权限** → 种子数据默认给“普通用户”授予 `/admin/model/config`，满足模型 API 快速配置，其它后台能力仍需额外授权
 
 ### 3.2 瞭望采集流程
 
@@ -120,6 +122,22 @@ audit_logs (独立审计)
   → 写入 audit_logs (USER_CHAT)
   → Token 消耗累加到 ai_models.total_tokens
 ```
+
+### 3.3b MCP 工具管理与接入流程
+
+```
+管理员进入 /admin/mcp/tool
+  → 查看工具状态（启用/禁用、是否已加载）
+  → 编辑内置函数路径或 HTTP API 配置
+  → 在线测试：按 Input Schema 提交 JSON 参数
+  → 热重载：数据库配置重新注册到 MCP Server
+  → 数字员工编辑页勾选 MCP 工具权限
+  → 前台 @员工 或 LLM Function Calling 按授权工具执行
+```
+
+- 内置函数工具通过 `handler_module` 动态加载 Python 处理函数。
+- HTTP API 工具通过 `api_url` + `{参数名}` 占位符组装请求；GET 追加 query，POST 发送 JSON body。
+- 员工未勾选任何 MCP 工具时遵循最小权限原则，不允许调用工具。
 
 ### 3.4 前台智能问数
 
