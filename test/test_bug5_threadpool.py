@@ -41,10 +41,11 @@ def test_related_model_repository():
     print(f"  模型总数: {total}")
     assert total > 0, "应有种子模型数据"
 
-    # 获取 DeepSeek 模型（ID=2，已启用，是当前可用的模型）
-    deepseek = AiModelRepository.get_by_id(2)
-    assert deepseek is not None, "DeepSeek-V3 模型应存在"
-    assert deepseek["is_enabled"] == 1, "DeepSeek-V3 应处于启用状态"
+    # 获取默认模型（DeepSeek-V4），用于 Token 累加测试
+    deepseek = AiModelRepository.get_default()
+    assert deepseek is not None, "默认模型应存在"
+    assert deepseek["is_enabled"] == 1, "默认模型应处于启用状态"
+    assert deepseek["is_default"] == 1, "应为默认模型"
     model_id = deepseek["id"]
     print(f"  使用模型: {deepseek['name']} (ID={model_id}, enabled={deepseek['is_enabled']})")
 

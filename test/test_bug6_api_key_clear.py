@@ -17,14 +17,14 @@ def test_api_key_clear():
     """验证 API Key 可以被清除（传空字符串）"""
     print("\n=== Bug #6: API Key 清除修复验证 ===")
 
-    # 使用 DeepSeek 模型（ID=2）做测试
-    model_id = 2
-    model_before = AiModelRepository.get_by_id(model_id)
-    assert model_before is not None, "模型应存在"
+    # 使用默认模型做测试（动态获取，避免硬编码 ID）
+    model_before = AiModelRepository.get_default()
+    assert model_before is not None, "默认模型应存在"
+    model_id = model_before["id"]
 
     # 记录当前的 API Key
     old_key = model_before["api_key"] or ""
-    print(f"  DeepSeek-V3 当前 API Key: {'已设置' if old_key else '未设置'}")
+    print(f"  DeepSeek-V4 当前 API Key: {'已设置' if old_key else '未设置'}")
 
     # 先设一个测试 key
     AiModelRepository.update(

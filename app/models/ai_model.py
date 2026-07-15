@@ -87,7 +87,7 @@ class AiModelRepository:
         return None
 
     @staticmethod
-    def create(name: str, provider: str = "openai", api_base: str = "",
+    def create(name: str, provider: str = "deepseek", api_base: str = "",
                api_key: str = "", model_name: str = "", category: str = "text",
                system_prompt: str = "", temperature: float = 0.7,
                top_p: float = 1.0, top_k: int = 50,
@@ -110,7 +110,7 @@ class AiModelRepository:
             return -1
 
     @staticmethod
-    def update(model_id: int, name: str, provider: str = "openai", api_base: str = "",
+    def update(model_id: int, name: str, provider: str = "deepseek", api_base: str = "",
                api_key: str = "", model_name: str = "", category: str = "text",
                system_prompt: str = "", temperature: float = 0.7,
                top_p: float = 1.0, top_k: int = 50,

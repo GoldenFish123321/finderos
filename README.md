@@ -774,7 +774,7 @@ HTTP API 型 MCP 工具支持在 URL 中使用 `{参数名}` 占位符；GET 请
 
 | 分类 | 标识 | 说明 |
 |------|------|------|
-| 文本 | `text` | 纯文本对话模型（如 GPT-4o、DeepSeek-V3） |
+| 文本 | `text` | 纯文本对话模型（如 GPT-4o、DeepSeek-V4） |
 | 图像 | `image` | 图像生成模型（如 DALL·E） |
 | 音频 | `audio` | 音频处理模型（如 Whisper） |
 | 视频 | `video` | 视频处理模型（如 Sora） |
@@ -791,7 +791,7 @@ HTTP API 型 MCP 工具支持在 URL 中使用 `{参数名}` 占位符；GET 请
 | `provider` | TEXT | `openai` | 提供商标识 |
 | `api_base` | TEXT | — | API 端点 URL（如 `https://api.openai.com/v1`） |
 | `api_key` | TEXT | — | API 密钥 |
-| `model_name` | TEXT | — | 模型标识（如 `gpt-4o`、`deepseek-chat`） |
+| `model_name` | TEXT | — | 模型标识（如 `gpt-4o`、`deepseek-v4-flash`） |
 | `category` | TEXT | `text` | 模型分类 |
 | `system_prompt` | TEXT | — | 系统提示词 |
 | `temperature` | REAL | `0.7` | 温度参数（0~2） |

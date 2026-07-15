@@ -603,13 +603,14 @@ def _seed_default_models():
     with get_db() as conn:
         existing = conn.execute("SELECT COUNT(*) as cnt FROM ai_models").fetchone()
         if existing["cnt"] == 0:
-            # 文本模型
+            # 文本模型 — GPT-4o-mini（非默认，保留作为备选）
             conn.execute(
                 "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (1, "GPT-4o-mini", "openai", "https://api.openai.com/v1", "gpt-4o-mini", "text", 1, 1),
+                (1, "GPT-4o-mini", "openai", "https://api.openai.com/v1", "gpt-4o-mini", "text", 1, 0),
             )
-            # DeepSeek-V3（从环境变量读取 API Key，加密存储）
+            # DeepSeek-V4（默认模型，从环境变量读取 API Key，加密存储）
+            # 模型名: deepseek-v4-flash（deepseek-chat 将于 2026/07/24 弃用）
             deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "")
             if deepseek_key:
                 from app.utils.security import encrypt_api_key
@@ -619,8 +620,8 @@ def _seed_default_models():
             conn.execute(
                 "INSERT INTO ai_models (id, name, provider, api_base, api_key, model_name, category, is_enabled, is_default) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (2, "DeepSeek-V3", "deepseek", "https://api.deepseek.com", deepseek_key,
-                 "deepseek-chat", "text", 1, 0),
+                (2, "DeepSeek-V4", "deepseek", "https://api.deepseek.com", deepseek_key,
+                 "deepseek-v4-flash", "text", 1, 1),
             )
             # 多模态模型（新增）
             conn.execute(
