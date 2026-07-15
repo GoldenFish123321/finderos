@@ -12,6 +12,7 @@ import logging
 import re
 import ssl
 import threading
+import time
 import urllib.parse
 import urllib.request
 import zlib
@@ -26,6 +27,10 @@ logger = logging.getLogger(__name__)
 _global_cookie_jar: Optional[CookieJar] = None
 _global_cookie_lock = threading.Lock()
 _global_ssl_ctx = ssl.create_default_context()
+# 百度服务器不支持 TLS 1.3（返回 TLSV1_ALERT_PROTOCOL_VERSION），
+# 且 Python 3.13 + OpenSSL 3.0 在 TLS 1.3→1.2 降级时有缺陷会导致握手超时，
+# 因此显式限制最高 TLS 版本为 1.2（与 Windows Schannel / curl 行为一致）。
+_global_ssl_ctx.maximum_version = ssl.TLSVersion.TLSv1_2
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -257,6 +262,8 @@ def _ensure_baidu_cookies():
     """确保全局 CookieJar 中有百度的 BAIDUID cookie（绕过验证码）。
 
     使用线程锁保护 _global_cookie_jar 的读写，防止并发竞态。
+    内建重试机制（最多 3 次，指数退避），每次重试使用全新 SSL 上下文，
+    应对间歇性 SSL 握手超时。
     """
     global _global_cookie_jar
     if _global_cookie_jar is not None:
@@ -266,23 +273,37 @@ def _ensure_baidu_cookies():
         # 双重检查锁定：第一个线程获取锁后，第二个线程不再重新初始化
         if _global_cookie_jar is not None:
             return
-        _global_cookie_jar = CookieJar()
-        opener = urllib.request.build_opener(
-            urllib.request.HTTPCookieProcessor(_global_cookie_jar),
-            urllib.request.HTTPSHandler(context=_global_ssl_ctx),
-        )
-        try:
-            req = urllib.request.Request("https://www.baidu.com/", headers=dict(_BASE_HEADERS))
-            resp = opener.open(req, timeout=10)
+
+        max_retries = 3
+        last_error = None
+
+        for attempt in range(max_retries):
+            cj = CookieJar()
+            opener = urllib.request.build_opener(
+                urllib.request.HTTPCookieProcessor(cj),
+                urllib.request.HTTPSHandler(context=_global_ssl_ctx),
+            )
             try:
-                resp.read()
-            finally:
-                resp.close()
-            cookie_count = len(list(_global_cookie_jar))
-            logger.info(f"百度 Cookie 预热成功: {cookie_count} 个")
-        except Exception as e:
-            logger.warning(f"百度 Cookie 预热失败: {e}")
-            _global_cookie_jar = None  # 重置，下次重试
+                req = urllib.request.Request("https://www.baidu.com/", headers=dict(_BASE_HEADERS))
+                resp = opener.open(req, timeout=15)
+                try:
+                    resp.read()
+                finally:
+                    resp.close()
+                cookie_count = len(list(cj))
+                _global_cookie_jar = cj
+                logger.info(f"百度 Cookie 预热成功: {cookie_count} 个")
+                return
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    wait_sec = (attempt + 1) * 2  # 2s, 4s 退避
+                    logger.debug(f"百度 Cookie 预热第 {attempt + 1} 次失败，{wait_sec}s 后重试: {e}")
+                    time.sleep(wait_sec)
+
+        # 所有重试均失败
+        logger.warning(f"百度 Cookie 预热失败（{max_retries} 次重试后）: {last_error}")
+        _global_cookie_jar = None  # 重置，下次重试
 
 
 def _clean_html(html: str) -> str:

@@ -34,6 +34,9 @@ logger = logging.getLogger(__name__)
 
 # 复用 collector 的 SSL 上下文和请求头
 _ssl_ctx = ssl.create_default_context()
+# 百度等国内站点不支持 TLS 1.3，且 Python 3.13 + OpenSSL 3.0 降级有缺陷，
+# 显式限制最高 TLS 版本为 1.2。
+_ssl_ctx.maximum_version = ssl.TLSVersion.TLSv1_2
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
