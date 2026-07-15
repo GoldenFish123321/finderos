@@ -1183,6 +1183,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
         system_prompt = emp.get("system_prompt", "") or model.get("system_prompt", "")
         temperature = model.get("temperature", 0.7)
         max_tokens = model.get("max_tokens", 4096)
+        emp_name = emp.get("name", "数字员工")
 
         # ── 使用 MCP 智能匹配执行工具 ──
         match = _mcp_client.match_tool_by_query(message)
@@ -1219,7 +1220,6 @@ class UserEmployeeInvokeHandler(BaseHandler):
         self.set_header("Connection", "keep-alive")
         self.set_header("X-Accel-Buffering", "no")
 
-        emp_name = emp.get("name", "数字员工")
         self.write(
             f"event: employee\ndata: {json.dumps({'name': emp_name, 'type': emp.get('employee_type', 'llm')}, ensure_ascii=False)}\n\n"
         )
