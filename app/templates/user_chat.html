@@ -791,10 +791,10 @@ function sendMessage() {
     const message = input.value.trim();
     if (!message) return;
 
-    // 检测 @数字员工 调用
-    const empMatch = message.match(/^@(\S+)\s+(.*)/);
+    // 检测 @数字员工 调用（支持 @name 或 @name 消息内容 两种格式）
+    const empMatch = message.match(/^@(\S+)(?:\s+(.*))?$/);
     const employeeName = empMatch ? empMatch[1] : null;
-    const employeeMsg = empMatch ? empMatch[2] : message;
+    const employeeMsg = empMatch ? (empMatch[2] || '') : message;
 
     // 检测是否选中了数字员工
     let employeeId = null;
@@ -807,8 +807,8 @@ function sendMessage() {
     // （包含 @name 上下文），让 AI 通过 MCP 工具尝试处理
     var sendMsg = message;
     if (employeeId) {
-        // 已匹配员工：发送剥离 @name 后的纯消息
-        sendMsg = employeeMsg || message;
+        // 已匹配员工：发送剥离 @name 后的纯消息（空消息也正常发送）
+        sendMsg = empMatch ? (empMatch[2] || '') : message;
     } else if (employeeName) {
         // 未匹配员工但有 @name：保留完整消息（含上下文），让 AI 理解意图
         sendMsg = message;
