@@ -12,7 +12,8 @@ app/mcp/tools.py — MCP 工具定义与注册
 1. 数据仓库类: search_warehouse, get_recent_warehouse_data, get_warehouse_stats
 2. 数据采集类: collect_web_data, deep_collect_url
 3. 数字员工类: list_digital_employees
-4. 对话管理类: list_conversations, get_conversation_messages
+4. 音乐/娱乐类: get_random_music
+5. 对话管理类: list_conversations, get_conversation_messages
 """
 
 import json
@@ -191,6 +192,61 @@ def _list_digital_employees() -> Dict[str, Any]:
     }
 
 
+async def _get_random_music() -> Dict[str, Any]:
+    """随机获取一首歌曲（从网易云音乐热歌榜）。"""
+    import asyncio
+    import random as _random
+    import urllib.request
+    import json as _json
+
+    def _sync_fetch():
+        url = "https://api.injahow.cn/meting/?server=netease&type=playlist&id=3778678"
+        headers = {"User-Agent": "FinderOS/1.0", "Accept": "application/json"}
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                body = resp.read().decode("utf-8", errors="replace")
+                songs = _json.loads(body)
+                if isinstance(songs, list) and len(songs) > 0:
+                    song = _random.choice(songs)
+                    return {
+                        "success": True,
+                        "name": song.get("name", ""),
+                        "artist": song.get("artist", ""),
+                        "cover": song.get("pic", ""),
+                        "url": song.get("url", ""),
+                        "source": "网易云音乐热歌榜",
+                    }
+                return {"success": False, "error": "歌曲列表为空"}
+        except Exception as e:
+            logger.warning(f"get_random_music 调用失败: {e}")
+            # 回退：返回本地 Mock 歌曲
+            mock_songs = [
+                {"name": "晴天", "artist": "周杰伦",
+                 "cover": "https://picsum.photos/seed/music1/160/160",
+                 "url": "https://music.163.com/"},
+                {"name": "夜曲", "artist": "周杰伦",
+                 "cover": "https://picsum.photos/seed/music2/160/160",
+                 "url": "https://music.163.com/"},
+                {"name": "稻香", "artist": "周杰伦",
+                 "cover": "https://picsum.photos/seed/music3/160/160",
+                 "url": "https://music.163.com/"},
+            ]
+            song = _random.choice(mock_songs)
+            return {
+                "success": True,
+                "name": song["name"],
+                "artist": song["artist"],
+                "cover": song["cover"],
+                "url": song["url"],
+                "source": "本地曲库（Mock）",
+                "note": f"API 调用失败: {str(e)[:100]}",
+            }
+
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _sync_fetch)
+
+
 def _list_conversations(username: str = "", limit: int = 20) -> Dict[str, Any]:
     """列出用户的对话历史。"""
     from app.models.conversation import ConversationRepository
@@ -359,6 +415,21 @@ ALL_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
             "properties": {},
         },
         "handler": _list_digital_employees,
+    },
+
+    # ── 音乐/娱乐类 ──
+    {
+        "name": "get_random_music",
+        "description": (
+            "随机推荐一首歌曲。从网易云音乐热歌榜中随机选取一首，返回歌曲名、歌手、封面图和试听链接。"
+            "当用户说「来首歌」「随机音乐」「推荐一首歌」「放首歌」「来点音乐」时使用此工具。"
+            "注意：此工具直接返回歌曲数据，调用后应基于数据向用户展示歌曲信息。"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+        "handler": _get_random_music,
     },
 
     # ── 对话管理类 ──

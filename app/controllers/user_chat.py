@@ -1120,6 +1120,22 @@ class UserEmployeeInvokeHandler(BaseHandler):
                 except Exception as e:
                     logger.error(f"员工工具执行失败: {e}")
 
+        # ── MCP 工具：音乐类结果 → 发送卡片事件 ──
+        music_card = None
+        if tool_ctx and tool_ctx.get("tool_name") == "get_random_music":
+            result_data = tool_ctx.get("result", {})
+            if isinstance(result_data, dict) and result_data.get("success"):
+                music_card = {
+                    "type": "music",
+                    "title": f"{emp_name} · 随机音乐",
+                    "data": {
+                        "name": result_data.get("name", "未知歌曲"),
+                        "artist": result_data.get("artist", "未知歌手"),
+                        "cover": result_data.get("cover", ""),
+                        "url": result_data.get("url", ""),
+                    }
+                }
+
         # ── 构建消息 ──
         self.set_header("Content-Type", "text/event-stream")
         self.set_header("Cache-Control", "no-cache")
@@ -1132,6 +1148,12 @@ class UserEmployeeInvokeHandler(BaseHandler):
         )
         await self.flush()
 
+        if music_card:
+            self.write(
+                f"event: card\ndata: {json.dumps(music_card, ensure_ascii=False)}\n\n"
+            )
+            await self.flush()
+
         total_tokens = 0
         api_success = False
 
@@ -1139,15 +1161,28 @@ class UserEmployeeInvokeHandler(BaseHandler):
         if tool_ctx:
             result_data = tool_ctx.get("result", {})
             if isinstance(result_data, dict):
-                items = result_data.get("items", [])
-                if items:
-                    warehouse_ctx = "\n\n[工具查询结果]\n"
-                    for i, item in enumerate(items[:5], 1):
-                        warehouse_ctx += (
-                            f"{i}. {item.get('title','')[:100]}\n"
-                            f"   摘要: {(item.get('summary','') or '')[:200]}\n"
-                        )
-                    warehouse_ctx += f"共 {len(items)} 条结果。请基于以上真实数据回答。"
+                # 音乐工具：构建人类可读的上下文
+                if tool_ctx.get("tool_name") == "get_random_music" and result_data.get("success"):
+                    source = result_data.get("source", "网易云音乐")
+                    warehouse_ctx = (
+                        f"\n\n[工具查询结果]\n"
+                        f"已从{source}随机选取一首歌曲：\n"
+                        f"- 歌曲名: {result_data.get('name', '')}\n"
+                        f"- 歌手: {result_data.get('artist', '')}\n"
+                        f"- 试听链接: {result_data.get('url', '')}\n"
+                        f"请用轻松愉快的语气向用户介绍这首歌，告知歌曲名和歌手，"
+                        f"并说明下方有音乐卡片可以点击试听。"
+                    )
+                else:
+                    items = result_data.get("items", [])
+                    if items:
+                        warehouse_ctx = "\n\n[工具查询结果]\n"
+                        for i, item in enumerate(items[:5], 1):
+                            warehouse_ctx += (
+                                f"{i}. {item.get('title','')[:100]}\n"
+                                f"   摘要: {(item.get('summary','') or '')[:200]}\n"
+                            )
+                        warehouse_ctx += f"共 {len(items)} 条结果。请基于以上真实数据回答。"
 
         messages = []
         full_system = _build_system_prompt(system_prompt) + warehouse_ctx
@@ -1247,7 +1282,35 @@ class UserEmployeeInvokeHandler(BaseHandler):
             lines.append(f"🔧 已调用 MCP 工具: **{tool_name}**\n")
 
             if isinstance(result, dict):
-                if "items" in result:
+                # 音乐工具特殊处理
+                if tool_name == "get_random_music" and result.get("success"):
+                    # 发送音乐卡片 SSE 事件
+                    music_card = {
+                        "type": "music",
+                        "title": f"{name} · 随机音乐",
+                        "data": {
+                            "name": result.get("name", "未知歌曲"),
+                            "artist": result.get("artist", "未知歌手"),
+                            "cover": result.get("cover", ""),
+                            "url": result.get("url", ""),
+                        }
+                    }
+                    self.write(
+                        f"event: card\ndata: {json.dumps(music_card, ensure_ascii=False)}\n\n"
+                    )
+                    await self.flush()
+
+                    lines.append(
+                        f"\n🎵 **{result.get('name', '未知歌曲')}** — "
+                        f"*{result.get('artist', '未知歌手')}*\n"
+                    )
+                    source = result.get("source", "网易云音乐热歌榜")
+                    note = result.get("note", "")
+                    lines.append(f"> 💿 来自{source}")
+                    if note:
+                        lines.append(f"> ⚠️ {note}")
+                    lines.append("\n💡 下方有音乐卡片，可点击试听。\n")
+                elif "items" in result:
                     items = result["items"]
                     lines.append(f"\n📊 查询结果（共 {len(items)} 条）：\n")
                     for i, item in enumerate(items[:5], 1):
