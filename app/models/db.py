@@ -740,11 +740,12 @@ def _seed_default_skills():
                  "3. 如果数据适合可视化，请使用 [CHART:bar|pie|line] 标记建议图表类型\n"
                  "4. 报告格式清晰，使用 Markdown 标题和列表\n"
                  "5. 最后给出数据利用建议（如：可对Top来源进行深度采集）",
-                 "", "{}"),
-                # Function 型技能 — 数据搜索
+                 "", "{}", None),
+                # Function 型技能 — 数据搜索 (关联 search_warehouse)
                 (2, "数据搜索", "在数据仓库中按关键词搜索采集结果", "function",
                  "", "search_warehouse",
-                 json.dumps({"keyword": "{user_query}", "limit": 10}, ensure_ascii=False)),
+                 json.dumps({"keyword": "{user_query}", "limit": 10}, ensure_ascii=False),
+                 1),
                 # Prompt 型技能 — 新闻摘要
                 (3, "新闻摘要", "聚合多源新闻并生成结构化摘要", "prompt",
                  "你正在执行新闻摘要任务。请遵循以下指令：\n"
@@ -753,11 +754,12 @@ def _seed_default_skills():
                  "3. 每条新闻输出：标题、来源、50字摘要、发布时间\n"
                  "4. 在末尾生成一份「今日要闻速览」（3-5条最重要新闻）\n"
                  "5. 使用 Markdown 格式，标题用 ###，列表用 -",
-                 "", "{}"),
-                # Function 型技能 — 深度采集
+                 "", "{}", None),
+                # Function 型技能 — 深度采集 (关联 deep_collect_url)
                 (4, "深度采集", "对指定 URL 进行正文深度抓取和内容提取", "function",
                  "", "deep_collect_url",
-                 json.dumps({"url": "{user_query}"}, ensure_ascii=False)),
+                 json.dumps({"url": "{user_query}"}, ensure_ascii=False),
+                 6),
                 # Prompt 型技能 — 翻译助手
                 (5, "翻译助手", "高质量中英文双向翻译，保持专业术语准确", "prompt",
                  "你正在执行翻译任务。请遵循以下指令：\n"
@@ -768,12 +770,12 @@ def _seed_default_skills():
                  "   - 长句合理断句，符合目标语言习惯\n"
                  "3. 输出格式：先给出翻译结果，再附加【术语注释】（如有专业术语）\n"
                  "4. 如涉及中文成语/典故，添加简短解释",
-                 "", "{}"),
+                 "", "{}", None),
             ]
             conn.executemany(
                 "INSERT INTO skills (id, name, description, skill_type, "
-                "prompt_template, function_name, function_params) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "prompt_template, function_name, function_params, mcp_tool_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 skills_data,
             )
             print("[种子] 默认技能已创建（5个：数据统计/数据搜索/新闻摘要/深度采集/翻译助手）")
