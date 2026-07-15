@@ -1,4 +1,13 @@
-# 测试用例文档 v1.0.0-beta
+# 测试用例文档 v1.0.3-beta
+
+## v1.0.3-beta security regression
+
+- Mock chat completes without a configured API key or undefined prompt variable.
+- Malicious FTS syntax is treated as a literal phrase.
+- Model list queries expose key presence without decrypted key material.
+- Delete confirmations escape names and interface JSON survives attribute parsing.
+- Stale TTS locks are removed and valid Brotli responses are decompressed.
+- Login, registration, and password-change counters are lock protected.
 
 ## 1. 认证模块
 

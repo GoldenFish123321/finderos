@@ -192,7 +192,9 @@ def _build_tool_from_db_row(row: Dict[str, Any]) -> Optional[MCPTool]:
             # 构建 URL（替换路径参数）
             final_url = api_url
             for key, value in kwargs.items():
-                final_url = final_url.replace(f"{{{key}}}", str(value))
+                final_url = final_url.replace(
+                    f"{{{key}}}", urllib.parse.quote(str(value), safe="")
+                )
 
             # 对于 GET 请求，剩余参数作为 query string
             query_params = {k: v for k, v in kwargs.items() if f"{{{k}}}" not in api_url}

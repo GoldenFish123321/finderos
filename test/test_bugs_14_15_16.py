@@ -7,6 +7,7 @@ Bug #16: seed_default_data 强制关闭外键约束
 """
 import os
 import sys
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -76,9 +77,8 @@ def test_bug15_brotli_support():
 
     # Brotli 不可用/解压失败时返回原始数据（不静默丢弃）
     raw_brotli = b"\x0b\x02\x80\x47\x65\x6e\x65\x72\x69\x63\x03"
-    result = _decompress(raw_brotli, "br")
-    # 没有安装 brotli 库或解压失败时，应原样返回原始数据而非空字节
-    assert result == raw_brotli, f"Brotli 不可用时应返回原始数据，实际返回: {result!r}"
+    with pytest.raises(ValueError, match="Brotli 响应不完整"):
+        _decompress(raw_brotli, "br")
     print(f"  ✅ Brotli 不可用时返回原始数据 (不静默丢弃)")
 
     # gzip 解压

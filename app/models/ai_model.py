@@ -33,7 +33,7 @@ class AiModelRepository:
 
     @staticmethod
     def get_all(page: int = 1, page_size: int = 20, category: str = "",
-                enabled_only: bool = False) -> tuple:
+                enabled_only: bool = False, include_api_key: bool = False) -> tuple:
         """Paginated query of AI models. Returns (rows, total)."""
         with get_db() as conn:
             conditions = []
@@ -56,12 +56,15 @@ class AiModelRepository:
         result = []
         for row in rows:
             row_dict = dict(row)
-            row_dict["api_key"] = decrypt_api_key(row_dict.get("api_key", ""))
+            row_dict["has_api_key"] = bool(row_dict.get("api_key"))
+            row_dict["api_key"] = (
+                decrypt_api_key(row_dict.get("api_key", "")) if include_api_key else ""
+            )
             result.append(row_dict)
         return result, total
 
     @staticmethod
-    def get_by_id(model_id: int):
+    def get_by_id(model_id: int, include_api_key: bool = False):
         """Get AI model by ID."""
         with get_db() as conn:
             row = conn.execute(
@@ -69,12 +72,15 @@ class AiModelRepository:
             ).fetchone()
         if row:
             row_dict = dict(row)
-            row_dict["api_key"] = decrypt_api_key(row_dict.get("api_key", ""))
+            row_dict["has_api_key"] = bool(row_dict.get("api_key"))
+            row_dict["api_key"] = (
+                decrypt_api_key(row_dict.get("api_key", "")) if include_api_key else ""
+            )
             return row_dict
         return None
 
     @staticmethod
-    def get_default():
+    def get_default(include_api_key: bool = False):
         """Get the default model."""
         with get_db() as conn:
             row = conn.execute(
@@ -82,7 +88,10 @@ class AiModelRepository:
             ).fetchone()
         if row:
             row_dict = dict(row)
-            row_dict["api_key"] = decrypt_api_key(row_dict.get("api_key", ""))
+            row_dict["has_api_key"] = bool(row_dict.get("api_key"))
+            row_dict["api_key"] = (
+                decrypt_api_key(row_dict.get("api_key", "")) if include_api_key else ""
+            )
             return row_dict
         return None
 

@@ -253,9 +253,9 @@ class DataWarehouseRepository:
             terms = kw.split()
             if len(terms) > 1:
                 # 多关键词用 OR 连接，每个词加 * 前缀匹配
-                fts_query = " OR ".join(f'"{t}"*' for t in terms)
+                fts_query = " OR ".join(f'"{t.replace(chr(34), chr(34) * 2)}"*' for t in terms)
             else:
-                fts_query = f'"{kw}"*'
+                fts_query = f'"{kw.replace(chr(34), chr(34) * 2)}"*'
             try:
                 rows = conn.execute(
                     "SELECT dw.* FROM data_warehouse_fts fts "

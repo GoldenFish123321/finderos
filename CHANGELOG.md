@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.3-beta (2026-07-16) - Security issue hardening
+
+- Fixed Issues #57-#76 covering Mock runtime errors, URL/FTS injection, DOM XSS,
+  rate-limit races, stale TTS locks, response secret exposure, and Brotli handling.
+- AI model reads no longer decrypt API keys unless explicitly required.
+- Random administrator bootstrap passwords are no longer written to process logs.
+- Added focused regression tests for the new trust-boundary and concurrency fixes.
+
 本文档记录瞭望与问数系统 (DataFinderAgentOS) 所有版本的变更历史。
 
 ---

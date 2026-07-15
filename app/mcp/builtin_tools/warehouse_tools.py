@@ -69,12 +69,13 @@ def _search_warehouse_fulltext(query: str, limit: int = 10) -> Dict[str, Any]:
     try:
         # 尝试 FTS5 搜索
         with get_db() as conn:
+            safe_query = '"' + str(query).replace('"', '""') + '"'
             rows = conn.execute(
                 "SELECT d.* FROM data_warehouse d "
                 "JOIN data_warehouse_fts f ON d.id = f.rowid "
                 "WHERE data_warehouse_fts MATCH ? "
                 "ORDER BY rank LIMIT ?",
-                (query, limit),
+                (safe_query, limit),
             ).fetchall()
         items = [dict(r) for r in rows]
         return {

@@ -137,12 +137,20 @@ def _decompress(data: bytes, encoding: str) -> bytes:
     if "br" in enc:
         try:
             import brotli
-            return brotli.decompress(data)
         except ImportError:
-            logger.error("Brotli 压缩内容无法解压：未安装 brotli 包，将使用原始数据。请执行: pip install brotli")
-            return data
-        except Exception as e:
-            logger.error(f"Brotli 解压失败: {e}，将使用原始数据")
+            raise RuntimeError("Brotli 响应需要安装 brotli 包")
+        decoder = brotli.Decompressor()
+        result = bytearray()
+        try:
+            for offset in range(len(data)):
+                result.extend(decoder.process(data[offset:offset + 1]))
+                if len(result) > 30 * 1024 * 1024:
+                    raise ValueError("解压后响应超过大小限制")
+            if not decoder.is_finished():
+                raise ValueError("Brotli 响应不完整")
+            return bytes(result)
+        except brotli.error as e:
+            logger.warning("Brotli 解压失败: %s", e)
             return data
     return data
 
@@ -269,8 +277,6 @@ def deep_fetch(url: str, timeout: int = 30) -> Tuple[int, str, str, str]:
         encoding = response.headers.get("Content-Encoding", "")
         raw = response.body
 
-        if "br" in encoding.lower():
-            return 0, "", "", "服务端返回不受支持的 Brotli 压缩"
         # 解压
         data = _decompress(raw, encoding)
         if len(data) > 30 * 1024 * 1024:

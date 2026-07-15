@@ -1,5 +1,13 @@
 # DataFinderAgentOS Bug 与安全漏洞 Issue 清单
 
+## 2026-07-16 follow-up (#57-#76)
+
+Version `1.0.3-beta` closes the fourth-round review findings: unsafe URL and
+FTS interpolation, DOM confirmation XSS, unbounded registration attempts,
+race-prone in-memory counters, stale TTS locks, unnecessary API-key
+decryption, raw third-party secret display, and inconsistent Brotli handling.
+Dedicated regression coverage lives in `test/test_issues_57_76.py`.
+
 审计日期：2026-07-15  
 审计版本：v0.4.0 (`8ffd488`)  
 审计方式：静态代码审计、敏感模式检索、现有测试执行。当前环境未提供 MonkeyScan，因此未使用该工具。  

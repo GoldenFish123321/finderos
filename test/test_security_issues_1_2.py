@@ -333,11 +333,8 @@ class TestIssue2MockResponse(unittest.TestCase):
     def test_status_check_present(self):
         """The mock response should use status check instead of content display."""
         content = self._get_source_content()
-        self.assertIn(
-            "'已配置' if system_prompt else '未配置'",
-            content,
-            'Should show status (已配置/未配置) instead of system_prompt content'
-        )
+        self.assertIn("model.get('system_prompt')", content)
+        self.assertNotIn("if system_prompt else", content)
 
     def test_system_prompt_not_in_fstring(self):
         """system_prompt variable should not appear directly in the mock f-string."""

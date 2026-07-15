@@ -109,6 +109,9 @@ class CollectionScheduler:
             for keyword in keywords:
                 encoded_kw = urllib.parse.quote(keyword, encoding="utf-8")
                 request_url = url_template.replace("{keyword}", encoded_kw).replace("{page}", "0")
+                if "{" in request_url or "}" in request_url:
+                    logger.warning("定时采集跳过含未解析占位符的 URL 模板: %s", url_template)
+                    continue
 
                 safe, reason, _ = validate_url_safe(request_url)
                 if not safe:

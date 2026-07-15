@@ -4,6 +4,7 @@ admin_watch_source.py — 瞭源管理控制器
 管理数据采集来源（瞭望源）的 CRUD 操作。
 """
 import tornado.web
+import urllib.parse
 from app.controllers.admin_base import AdminBaseHandler
 from app.models.watch_source import WatchSourceRepository
 
@@ -79,6 +80,11 @@ class WatchSourceFormHandler(AdminBaseHandler):
 
         if not name or not url_template:
             self.write('<script>alert("名称和URL模板不能为空");window.history.back();</script>')
+            return
+        parsed_url = urllib.parse.urlsplit(url_template)
+        if parsed_url.scheme.lower() not in {"http", "https"} or not parsed_url.netloc:
+            self.set_status(400)
+            self.write("仅允许使用 http/https URL 模板")
             return
 
         if source_id:

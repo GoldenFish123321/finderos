@@ -106,7 +106,7 @@ function initListPage(config) {
                 btn.addEventListener('click', function(){
                     var id = this.dataset.id;
                     var name = this.dataset.name || '';
-                    var confirmText = cfg.deleteConfirmText.replace('{name}', name);
+                    var confirmText = cfg.deleteConfirmText.replace('{name}', escapeHtml(name));
                     layer.confirm(confirmText, {
                         icon: 3,
                         title: '删除确认',

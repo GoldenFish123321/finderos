@@ -8,6 +8,7 @@ import asyncio
 import atexit
 import concurrent.futures
 import json
+import re
 import logging
 import time
 import urllib.parse
@@ -369,19 +370,42 @@ def _execute_interface_sync(interface: dict, message: str) -> dict:
         )
         body = resp.body.decode("utf-8", errors="replace")
         elapsed_ms = int((time.time() - start) * 1000)
+        def redact(value):
+            sensitive = ("authorization", "token", "api_key", "apikey", "secret", "password", "credential", "session")
+            if isinstance(value, dict):
+                return {k: ("[REDACTED]" if any(part in str(k).lower() for part in sensitive) else redact(v)) for k, v in value.items()}
+            if isinstance(value, list):
+                return [redact(item) for item in value[:100]]
+            return value
+
+        try:
+            parsed_body = redact(json.loads(body))
+            display_body = json.dumps(parsed_body, ensure_ascii=False)[:5000]
+        except json.JSONDecodeError:
+            parsed_body = None
+            display_body = body[:1000]
+            display_body = re.sub(
+                r"(?i)(access_token|refresh_token|id_token|client_secret|api_key|password)=([^&\s]+)",
+                r"\1=[REDACTED]",
+                display_body,
+            )
+            display_body = re.sub(r"(?i)Bearer\s+[A-Za-z0-9._~+/=-]+", "Bearer [REDACTED]", display_body)
+
+        secret_headers = {"set-cookie", "www-authenticate", "authorization", "proxy-authenticate"}
+        display_headers = {
+            key: ("[REDACTED]" if str(key).lower() in secret_headers else value)
+            for key, value in resp.headers.items()
+        }
         result = {
             "code": 0 if resp.status < 400 else 1,
             "msg": "测试成功" if resp.status < 400 else f"HTTP {resp.status}: {resp.reason}",
             "status": resp.status,
             "elapsed_ms": elapsed_ms,
-            "headers": resp.headers,
-            "raw": body[:5000],
-            "truncated": len(body) > 5000,
+            "headers": display_headers,
+            "raw": display_body,
+            "truncated": len(body) > len(display_body),
         }
-        try:
-            result["data"] = json.loads(body)
-        except json.JSONDecodeError:
-            result["data"] = {"raw": body[:5000]}
+        result["data"] = parsed_body if parsed_body is not None else {"raw": display_body}
         return result
     except SafeHttpError as e:
         return {

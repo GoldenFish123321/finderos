@@ -163,11 +163,11 @@
                             <option value="">-- 手动配置或选择接口模板 --</option>
                             {% for iface in api_interfaces %}
                             <option value="{{ iface['id'] }}"
-                                    data-url="{{ iface.get('api_url','') }}"
-                                    data-method="{{ iface.get('api_method','GET') }}"
-                                    data-headers="{{ iface.get('api_headers','{}') }}"
-                                    data-params="{{ iface.get('api_params_template','') }}"
-                                    data-response="{{ iface.get('response_render_template','') }}"
+                                    data-url='{{ iface.get("api_url","") }}'
+                                    data-method='{{ iface.get("api_method","GET") }}'
+                                    data-headers='{{ iface.get("api_headers","{}") }}'
+                                    data-params='{{ iface.get("api_params_template","") }}'
+                                    data-response='{{ iface.get("response_render_template","") }}'
                                     {% if employee and employee.get('api_interface_id') == iface['id'] %}selected{% end %}>
                                 {{ iface['name'] }} ({{ iface.get('api_method','GET') }}){% if iface.get('is_enabled') != 1 %} — 已禁用{% end %}
                             </option>

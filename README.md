@@ -1,4 +1,4 @@
-# 🔭 瞭望与问数系统 (DataFinderAgentOS) v1.0.0-beta
+# 🔭 瞭望与问数系统 (DataFinderAgentOS) v1.0.3-beta
 
 > 基于 Tornado 异步 Web 框架构建的轻量级智能数据采集与 AI 问数一体化平台。
 > **v0.10 完成**：MCP 重构剩余阶段全部完成 — 18 个工具种子数据迁移、三色徽章系统（蓝/绿/橙黄）、crawl4ai 废弃、Skill 绑定 MCP 工具、旧 TAG → Skill ID 迁移、测试验证通过。
@@ -363,7 +363,7 @@ python main.py
 
 ```
 ==================================================
-  瞭望与问数系统 (DataFinderAgentOS) v1.0.0-beta
+  瞭望与问数系统 (DataFinderAgentOS) v1.0.3-beta
   Server started: http://localhost:10010/
 ==================================================
 ```
@@ -1543,6 +1543,7 @@ python make_admin.py --reset --username admin --password newpassword
 > ⚠️ **首次登录后请立即修改默认密码！** 可使用管理后台的用户编辑功能或 `make_admin.py --reset` 命令。
 > 自助注册用户默认绑定“普通用户”角色，可访问 `/admin/model/config` 来配置模型 API；如需使用 MCP 工具管理、用户管理等页面，请由管理员在角色权限中额外授权。
 > 生产环境必须显式设置至少 12 字符的 `ADMIN_DEFAULT_PASSWORD`。
+> 未设置时，随机初始密码只写入数据库旁权限受限的 `<database>.admin_initial_password`；首次登录并改密后应立即删除该文件。
 
 ---
 

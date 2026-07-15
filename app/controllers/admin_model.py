@@ -64,7 +64,7 @@ class ModelFormHandler(AdminBaseHandler):
         model = None
         if model_id:
             try:
-                model = AiModelRepository.get_by_id(int(model_id))
+                model = AiModelRepository.get_by_id(int(model_id), include_api_key=True)
             except (ValueError, TypeError):
                 self.write('<script>alert("无效的模型ID");window.history.back();</script>')
                 return
@@ -117,7 +117,7 @@ class ModelFormHandler(AdminBaseHandler):
                 api_key = ""  # 明确清除
             elif not api_key:
                 # 编辑时：如果 API Key 未填写且未勾选清除，保留数据库中的旧值
-                existing = AiModelRepository.get_by_id(model_id)
+                existing = AiModelRepository.get_by_id(model_id, include_api_key=True)
                 if existing:
                     api_key = existing["api_key"]
             ok = AiModelRepository.update(
@@ -144,10 +144,10 @@ class ModelQuickConfigHandler(AdminBaseHandler):
     """
 
     def _get_target_model(self):
-        model = AiModelRepository.get_default()
+        model = AiModelRepository.get_default(include_api_key=True)
         if model:
             return model
-        rows, _ = AiModelRepository.get_all(page=1, page_size=1)
+        rows, _ = AiModelRepository.get_all(page=1, page_size=1, include_api_key=True)
         return rows[0] if rows else None
 
     @tornado.web.authenticated
@@ -314,7 +314,7 @@ class ModelApiListHandler(AdminBaseHandler):
                 "category": r["category"],
                 "is_default": r["is_default"],
                 "is_enabled": r["is_enabled"],
-                "has_key": bool(r["api_key"]),
+                "has_key": r.get("has_api_key", False),
             })
         self.write({"code": 0, "total": total, "items": items})
 

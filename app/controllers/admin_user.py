@@ -5,6 +5,8 @@ admin_user.py — 用户管理控制器
 """
 
 import tornado.web
+import threading
+from tornado.escape import xhtml_escape
 from app.controllers.admin_base import AdminBaseHandler
 from app.models.user import UserRepository
 from app.models.role import RoleRepository
@@ -12,8 +14,21 @@ from app.utils.security import write_audit_log
 
 # 密码修改速率限制（用户维度）
 _pwd_change_attempts: dict[str, list[float]] = {}
+_pwd_change_lock = threading.RLock()
 _PWD_CHANGE_MAX = 5
 _PWD_CHANGE_WINDOW = 300  # 5分钟
+
+
+def _reserve_password_attempt(rate_key: str, now: float) -> bool:
+    """Atomically check the password-change limit and reserve this attempt."""
+    with _pwd_change_lock:
+        attempts = [t for t in _pwd_change_attempts.get(rate_key, []) if now - t < _PWD_CHANGE_WINDOW]
+        if len(attempts) >= _PWD_CHANGE_MAX:
+            _pwd_change_attempts[rate_key] = attempts
+            return False
+        attempts.append(now)
+        _pwd_change_attempts[rate_key] = attempts
+        return True
 
 
 class UserListHandler(AdminBaseHandler):
@@ -252,9 +267,7 @@ class ChangePasswordHandler(AdminBaseHandler):
         # 速率限制检查
         rate_key = f"pwd:{self.current_user}"
         now = time.time()
-        attempts = _pwd_change_attempts.get(rate_key, [])
-        attempts = [t for t in attempts if now - t < _PWD_CHANGE_WINDOW]
-        if len(attempts) >= _PWD_CHANGE_MAX:
+        if not _reserve_password_attempt(rate_key, now):
             self.write('<script>alert("操作过于频繁，请5分钟后再试");window.history.back();</script>')
             return
 
@@ -276,7 +289,8 @@ class ChangePasswordHandler(AdminBaseHandler):
         ok, msg = UserRepository.update_password(user["id"], old_password, new_password)
         if ok:
             # 成功后清除速率记录
-            _pwd_change_attempts.pop(rate_key, None)
+            with _pwd_change_lock:
+                _pwd_change_attempts.pop(rate_key, None)
             write_audit_log(
                 action="CHANGE_PASSWORD",
                 username=self.current_user,
@@ -284,11 +298,9 @@ class ChangePasswordHandler(AdminBaseHandler):
                 detail="密码修改成功",
                 client_ip=self.request.remote_ip or "",
             )
-            self.write(f'<script>alert("{msg}，请重新登录");location.href="/logout";</script>')
+            self.write('<p>密码修改成功，请重新登录。</p><p><a href="/logout">前往登录页</a></p>')
         else:
             # 记录失败尝试
-            attempts.append(now)
-            _pwd_change_attempts[rate_key] = attempts
             write_audit_log(
                 action="CHANGE_PASSWORD_FAILED",
                 username=self.current_user,
@@ -296,4 +308,5 @@ class ChangePasswordHandler(AdminBaseHandler):
                 detail=f"失败原因: {msg}",
                 client_ip=self.request.remote_ip or "",
             )
-            self.write(f'<script>alert("{msg}");window.history.back();</script>')
+            self.set_status(400)
+            self.write(f'<p>{xhtml_escape(msg)}</p><p><a href="javascript:history.back()">返回</a></p>')

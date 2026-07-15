@@ -374,11 +374,11 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         # 选择模型：优先员工指定模型 → 默认模型 → 第一个启用模型
         model = None
         if emp.get("model_id"):
-            model = AiModelRepository.get_by_id(emp["model_id"])
+            model = AiModelRepository.get_by_id(emp["model_id"], include_api_key=True)
         if not model or model.get("is_enabled", 0) == 0:
-            model = AiModelRepository.get_default()
+            model = AiModelRepository.get_default(include_api_key=True)
         if not model:
-            models, _ = AiModelRepository.get_all(page=1, page_size=50)
+            models, _ = AiModelRepository.get_all(page=1, page_size=50, include_api_key=True)
             for m in models:
                 if m["is_enabled"] == 1:
                     model = m

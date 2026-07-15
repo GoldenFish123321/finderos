@@ -460,7 +460,13 @@ def seed_default_data():
             if settings.ADMIN_DEFAULT_PASSWORD:
                 print("[种子] 默认管理员 admin 已创建（密码来自 ADMIN_DEFAULT_PASSWORD）")
             else:
-                print(f"[种子] 默认管理员 admin 已创建，一次性随机密码: {initial_password}")
+                credential_path = DB_PATH + ".admin_initial_password"
+                temp_credential_path = credential_path + f".{os.getpid()}.tmp"
+                fd = os.open(temp_credential_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as credential_file:
+                    credential_file.write(initial_password + "\n")
+                os.replace(temp_credential_path, credential_path)
+                print(f"[种子] 默认管理员 admin 已创建（一次性凭据文件: {credential_path}）")
 
         existing_funcs = conn.execute("SELECT COUNT(*) as cnt FROM functions").fetchone()
         if existing_funcs["cnt"] == 0:

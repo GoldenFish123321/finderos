@@ -18,7 +18,7 @@ def test_api_key_clear():
     print("\n=== Bug #6: API Key 清除修复验证 ===")
 
     # 使用默认模型做测试（动态获取，避免硬编码 ID）
-    model_before = AiModelRepository.get_default()
+    model_before = AiModelRepository.get_default(include_api_key=True)
     assert model_before is not None, "默认模型应存在"
     model_id = model_before["id"]
 
@@ -31,7 +31,7 @@ def test_api_key_clear():
         model_id, model_before["name"], model_before["provider"],
         model_before["api_base"], "test_key_123", model_before["model_name"]
     )
-    model_with_key = AiModelRepository.get_by_id(model_id)
+    model_with_key = AiModelRepository.get_by_id(model_id, include_api_key=True)
     assert model_with_key["api_key"] == "test_key_123", \
         f"设置 API Key 失败: {model_with_key['api_key']}"
     print("  ✅ 设置 API Key = 'test_key_123' 成功")
@@ -42,7 +42,7 @@ def test_api_key_clear():
         model_before["api_base"], "", model_before["model_name"]
     )
     assert ok, "更新应成功"
-    model_cleared = AiModelRepository.get_by_id(model_id)
+    model_cleared = AiModelRepository.get_by_id(model_id, include_api_key=True)
     assert model_cleared["api_key"] == "", \
         f"❌ Bug #6 未修复: 传空字符串后 API Key 仍为 '{model_cleared['api_key']}'"
     print("  ✅ 传空字符串成功清除 API Key: '' ")
@@ -52,7 +52,7 @@ def test_api_key_clear():
         model_id, model_before["name"], model_before["provider"],
         model_before["api_base"], old_key, model_before["model_name"]
     )
-    model_restored = AiModelRepository.get_by_id(model_id)
+    model_restored = AiModelRepository.get_by_id(model_id, include_api_key=True)
     assert model_restored["api_key"] == old_key, \
         f"恢复 API Key 失败: {model_restored['api_key']}"
     print(f"  ✅ 恢复 API Key: {'已设置' if old_key else '未设置'}")
@@ -86,7 +86,7 @@ def test_related_model_crud():
     print(f"  ✅ 创建模型成功: ID={new_id}")
 
     # 查询
-    model = AiModelRepository.get_by_id(new_id)
+    model = AiModelRepository.get_by_id(new_id, include_api_key=True)
     assert model is not None
     assert model["name"] == "测试模型-Bug6"
     print(f"  ✅ 查询模型成功: {model['name']}")
@@ -97,7 +97,7 @@ def test_related_model_crud():
         model["api_base"], "sk-updated", model["model_name"]
     )
     assert ok
-    model = AiModelRepository.get_by_id(new_id)
+    model = AiModelRepository.get_by_id(new_id, include_api_key=True)
     assert model["name"] == "测试模型-Bug6-已更新"
     assert model["api_key"] == "sk-updated"
     print(f"  ✅ 更新模型成功: 名称={model['name']}, API Key 正常")
