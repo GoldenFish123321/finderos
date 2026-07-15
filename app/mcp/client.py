@@ -149,17 +149,33 @@ class MCPClient:
 
     # ── 智能意图匹配（无 API Key 时的回退方案）────────────
 
-    def match_tool_by_query(self, user_message: str) -> Optional[Tuple[str, Dict[str, Any]]]:
+    def match_tool_by_query(self, user_message: str, emp_id: int = None) -> Optional[Tuple[str, Dict[str, Any]]]:
         """基于工具描述和用户查询的智能匹配。
 
         不使用硬编码关键词，而是利用工具自身的 name + description
         进行语义级匹配。这比旧的关键词方案更灵活、更可扩展。
 
+        Args:
+            user_message: 用户输入的消息文本。
+            emp_id: 数字员工 ID。提供时仅匹配该员工有权使用的 MCP 工具（最小权限原则）。
+
         Returns:
             (tool_name, arguments) 或 None（无匹配时走通用对话）
         """
         msg_lower = user_message.lower().strip()
-        tools = self._server.list_tools()
+        all_tools = self._server.list_tools()
+
+        # ── v0.6.1: 按员工权限过滤工具 ──
+        allowed_names = None
+        if emp_id:
+            from app.models.mcp_tool import MCPToolRepository
+            emp_tools = MCPToolRepository.get_by_employee(emp_id)
+            if not emp_tools:
+                return None  # 最小权限：未配置工具则无权使用任何工具
+            allowed_names = {t["name"] for t in emp_tools}
+            tools = [t for t in all_tools if t["name"] in allowed_names]
+        else:
+            tools = all_tools
 
         # 第一步：精确 URL 模式匹配
         url_match = re.search(r'https?://[^\s]{5,}', user_message)
@@ -169,7 +185,10 @@ class MCPClient:
             deep_kw = ["深度采集", "抓取", "提取", "采集这个", "帮我看看这个链接",
                        "fetch", "crawl", "scrape"]
             if any(kw in msg_lower for kw in deep_kw):
-                return ("deep_collect_url", {"url": url})
+                tool_name = "deep_collect_url"
+                if emp_id and tool_name not in allowed_names:
+                    return None  # 员工无权使用此工具
+                return (tool_name, {"url": url})
 
         # 第二步：基于工具名称和描述的评分匹配
         best_score = 0
