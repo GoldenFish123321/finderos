@@ -1,7 +1,7 @@
 """
 user_chat.py — 用户前台智能问数 / AI 对话控制器（MCP 架构版）
 
-架构升级 v1.0：
+架构升级 v0.4：
 - 废弃关键词硬匹配意图识别 → 改用 MCP 协议 + LLM Function Calling
 - 工具调用标准化：通过 MCP Server 注册、发现、调用工具
 - 保留向下兼容：无 API Key 时使用 MCP 智能匹配回退
