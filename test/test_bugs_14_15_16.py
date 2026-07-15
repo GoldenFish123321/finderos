@@ -74,10 +74,12 @@ def test_bug15_brotli_support():
     assert result == b"hello"
     print("  ✅ 普通数据正常")
 
-    # Brotli 不可用时静默回退
-    result = _decompress(b"\x0b\x02\x80\x47\x65\x6e\x65\x72\x69\x63\x03", "br")
-    # 没有安装 brotli 库时，应该原样返回
-    print(f"  ✅ Brotli 不可用时静默回退 (返回原始数据)")
+    # Brotli 不可用/解压失败时返回原始数据（不静默丢弃）
+    raw_brotli = b"\x0b\x02\x80\x47\x65\x6e\x65\x72\x69\x63\x03"
+    result = _decompress(raw_brotli, "br")
+    # 没有安装 brotli 库或解压失败时，应原样返回原始数据而非空字节
+    assert result == raw_brotli, f"Brotli 不可用时应返回原始数据，实际返回: {result!r}"
+    print(f"  ✅ Brotli 不可用时返回原始数据 (不静默丢弃)")
 
     # gzip 解压
     import gzip
