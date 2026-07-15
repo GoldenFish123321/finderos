@@ -12,4 +12,7 @@ from app.mcp.server import MCPServer
 from app.mcp.client import MCPClient
 from app.mcp.tools import register_all_tools
 
-__all__ = ["MCPServer", "MCPClient", "register_all_tools"]
+# v0.6.0: 注册中心
+from app.mcp.registry import MCPToolRegistry
+
+__all__ = ["MCPServer", "MCPClient", "register_all_tools", "MCPToolRegistry"]
