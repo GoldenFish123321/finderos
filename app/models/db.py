@@ -433,6 +433,8 @@ def seed_default_data():
                 (13, "数字员工", "layui-icon-user", "/admin/employee", None, 8, 1),
                 # 技能管理 (v0.5.0 新增)
                 (14, "技能管理", "layui-icon-util", "/admin/skill", None, 9, 1),
+                # MCP 工具管理 (v0.6.0 新增)
+                (15, "MCP 工具管理", "layui-icon-component", "/admin/mcp/tool", None, 10, 1),
             ]
             conn.executemany(
                 "INSERT INTO functions (id, name, icon, route_path, parent_id, sort_order, is_enabled) "
