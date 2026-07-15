@@ -6,18 +6,18 @@ migrate_db.py — 数据库迁移脚本
 在项目根目录运行：python migrate_db.py
 
 迁移历史:
-  v0.2.5  — 添加 ai_models.total_tokens (Token 累加统计)
-  v0.2.5  — 添加 audit_logs 表 (操作审计日志)
-  v0.2.5  — 添加安全相关索引
-  v0.2.13 — 添加 data_warehouse 独立表 + URL 去重索引
-  v0.3.0  — 添加 conversations / conversation_messages 表
-  v0.3.0  — 添加 digital_employees 表
-  v0.3.0  — 添加 data_warehouse_fts 虚拟表 + 同步触发器
-  v0.4.0  — 添加 watch_sources.schedule_interval 列
-  v0.4.1  — 添加 api_interfaces 表与 digital_employees.api_interface_id
-  v0.5.0  — 添加 skills 技能库表
-  v0.4.2  — 添加 mcp_tools MCP工具注册表 + mcp_tool_test_logs
-  v0.4.2  — 添加 skills.mcp_tool_id / digital_employees.mcp_tool_ids
+  v0.2  — 添加 ai_models.total_tokens (Token 累加统计)
+  v0.2  — 添加 audit_logs 表 (操作审计日志)
+  v0.2  — 添加安全相关索引
+  v0.2  — 添加 data_warehouse 独立表 + URL 去重索引
+  v0.5  — 添加 conversations / conversation_messages 表
+  v0.4  — 添加 digital_employees 表
+  v0.5  — 添加 data_warehouse_fts 虚拟表 + 同步触发器
+  v0.6  — 添加 watch_sources.schedule_interval 列
+  v0.9  — 添加 api_interfaces 表与 digital_employees.api_interface_id
+  v0.7  — 添加 skills 技能库表
+  v0.10 — 添加 mcp_tools MCP工具注册表 + mcp_tool_test_logs
+  v0.10 — 添加 skills.mcp_tool_id / digital_employees.mcp_tool_ids
 
 Usage:
   python migrate_db.py              # 执行待处理迁移
@@ -55,13 +55,13 @@ def run_migrations():
     conn.row_factory = sqlite3.Row
 
     migrations = [
-        # v0.2.5: ai_models 新增 total_tokens 列
+        # v0.2: ai_models 新增 total_tokens 列
         {
             "name": "add_ai_models_total_tokens",
             "sql": "ALTER TABLE ai_models ADD COLUMN total_tokens INTEGER DEFAULT 0",
             "check": lambda c: _column_exists(c, "ai_models", "total_tokens"),
         },
-        # v0.2.5: 审计日志表
+        # v0.2: 审计日志表
         {
             "name": "create_audit_logs",
             "sql": """
@@ -77,7 +77,7 @@ def run_migrations():
             """,
             "check": lambda c: _table_exists(c, "audit_logs"),
         },
-        # v0.2.5: 审计日志索引
+        # v0.2: 审计日志索引
         {
             "name": "idx_audit_logs_action",
             "sql": "CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action)",
@@ -99,7 +99,7 @@ def run_migrations():
             "sql": "CREATE UNIQUE INDEX IF NOT EXISTS idx_dw_title_source ON data_warehouse(title, source_name) WHERE (link IS NULL OR link = '')",
             "check": lambda c: _index_exists(c, "idx_dw_title_source"),
         },
-        # v0.3.0: 对话管理表
+        # v0.5: 对话管理表
         {
             "name": "create_conversations",
             "sql": """
@@ -135,7 +135,7 @@ def run_migrations():
             "sql": "CREATE INDEX IF NOT EXISTS idx_conv_msgs_conv ON conversation_messages(conversation_id)",
             "check": lambda c: _index_exists(c, "idx_conv_msgs_conv"),
         },
-        # v0.3.0: 数字化员工表
+        # v0.4: 数字化员工表
         {
             "name": "create_digital_employees",
             "sql": """
@@ -161,7 +161,7 @@ def run_migrations():
             """,
             "check": lambda c: _table_exists(c, "digital_employees"),
         },
-        # v0.3.0: FTS5 全文检索虚拟表 + 同步触发器
+        # v0.5: FTS5 全文检索虚拟表 + 同步触发器
         {
             "name": "create_data_warehouse_fts",
             "sql": """
@@ -207,13 +207,13 @@ def run_migrations():
             """,
             "check": lambda c: _trigger_exists(c, "dw_fts_update"),
         },
-        # v0.4.0: 瞭望源定时采集间隔
+        # v0.6: 瞭望源定时采集间隔
         {
             "name": "add_watch_sources_schedule_interval",
             "sql": "ALTER TABLE watch_sources ADD COLUMN schedule_interval INTEGER DEFAULT 0",
             "check": lambda c: _column_exists(c, "watch_sources", "schedule_interval"),
         },
-        # v0.5.0: 技能库表
+        # v0.7: 技能库表
         {
             "name": "create_skills",
             "sql": """
@@ -231,7 +231,7 @@ def run_migrations():
             """,
             "check": lambda c: _table_exists(c, "skills"),
         },
-        # v0.4.1: 接口管理模块
+        # v0.9: 接口管理模块
         {
             "name": "create_api_interfaces",
             "sql": """
@@ -273,7 +273,7 @@ def run_migrations():
             "sql": "CREATE INDEX IF NOT EXISTS idx_digital_employees_api_interface ON digital_employees(api_interface_id)",
             "check": lambda c: _index_exists(c, "idx_digital_employees_api_interface"),
         },
-        # v0.4.2: MCP 工具注册表
+        # v0.10: MCP 工具注册表
         {
             "name": "create_mcp_tools",
             "sql": """
@@ -301,7 +301,7 @@ def run_migrations():
             """,
             "check": lambda c: _table_exists(c, "mcp_tools"),
         },
-        # v0.4.2: MCP 工具测试日志表
+        # v0.10: MCP 工具测试日志表
         {
             "name": "create_mcp_tool_test_logs",
             "sql": """
@@ -318,19 +318,19 @@ def run_migrations():
             """,
             "check": lambda c: _table_exists(c, "mcp_tool_test_logs"),
         },
-        # v0.4.2: skills 新增 mcp_tool_id 列
+        # v0.10: skills 新增 mcp_tool_id 列
         {
             "name": "add_skills_mcp_tool_id",
             "sql": "ALTER TABLE skills ADD COLUMN mcp_tool_id INTEGER DEFAULT NULL REFERENCES mcp_tools(id) ON DELETE SET NULL",
             "check": lambda c: _column_exists(c, "skills", "mcp_tool_id"),
         },
-        # v0.4.2: digital_employees 新增 mcp_tool_ids 列
+        # v0.10: digital_employees 新增 mcp_tool_ids 列
         {
             "name": "add_digital_employees_mcp_tool_ids",
             "sql": "ALTER TABLE digital_employees ADD COLUMN mcp_tool_ids TEXT DEFAULT '[]'",
             "check": lambda c: _column_exists(c, "digital_employees", "mcp_tool_ids"),
         },
-        # v0.4.2: MCP 工具种子数据（18 个内置工具）
+        # v0.10: MCP 工具种子数据（18 个内置工具）
         {
             "name": "seed_mcp_tools_v042",
             "check": lambda c: _table_exists(c, "mcp_tools") and c.execute(
@@ -338,7 +338,7 @@ def run_migrations():
             ).fetchone()["cnt"] >= 18,
             "run": _seed_mcp_tools,
         },
-        # v0.4.2: 旧 TAG 迁移 — 将员工 skills 字符串数组迁移为 Skill ID 数组
+        # v0.10: 旧 TAG 迁移 — 将员工 skills 字符串数组迁移为 Skill ID 数组
         {
             "name": "migrate_legacy_tags_to_skills_v042",
             "check": _check_legacy_tags_migrated,
@@ -406,7 +406,7 @@ def _trigger_exists(conn, trigger_name: str) -> bool:
 
 
 def _seed_mcp_tools(conn):
-    """v0.4.2: 向 mcp_tools 表插入 18 个内置工具种子数据。"""
+    """v0.10: 向 mcp_tools 表插入 18 个内置工具种子数据。"""
     import json as _json
 
     tools = [
@@ -685,7 +685,7 @@ def _check_legacy_tags_migrated(conn) -> bool:
 
 
 def _migrate_legacy_tags_to_skills(conn):
-    """v0.4.2: 将员工旧格式 skills 字符串标签迁移为 Skill ID 数组。
+    """v0.10: 将员工旧格式 skills 字符串标签迁移为 Skill ID 数组。
 
     流程：
     1. 读取所有员工旧格式 skills JSON 字符串数组
@@ -734,7 +734,7 @@ def _migrate_legacy_tags_to_skills(conn):
         "音乐点播": "随机音乐",
     }
 
-    # 员工角色 → 推荐 MCP 工具名称映射（v0.4.2: 使用名称而非硬编码 ID，避免 ID 漂移）
+    # 员工角色 → 推荐 MCP 工具名称映射（v0.10: 使用名称而非硬编码 ID，避免 ID 漂移）
     EMPLOYEE_MCP_TOOL_NAMES = {
         "产业专员": ["search_warehouse", "get_recent_warehouse_data", "get_warehouse_stats",
                     "search_warehouse_fulltext", "collect_web_data", "list_watch_sources"],

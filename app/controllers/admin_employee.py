@@ -57,7 +57,7 @@ class EmployeeListHandler(AdminBaseHandler):
         total_pages = max(1, (total + 12 - 1) // 12)
         stats = DigitalEmployeeRepository.get_stats()
 
-        # 预解析 skills（v0.5.0: 存储技能 ID 数组，需从技能库解析名称；
+        # 预解析 skills（v0.7: 存储技能 ID 数组，需从技能库解析名称；
         # 兼容旧格式：字符串标签数组）
         import json as _json
         for emp in rows:
@@ -73,7 +73,7 @@ class EmployeeListHandler(AdminBaseHandler):
                 emp["skills_list"] = [s["name"] for s in resolved_names] if resolved_names else raw_skills
                 # 标记为旧格式（模板中可区分显示）
                 emp["skills_legacy"] = True
-            # v0.4.2: 解析 MCP 工具名称
+            # v0.10: 解析 MCP 工具名称
             try:
                 raw_tool_ids = _json.loads(emp.get("mcp_tool_ids", "[]"))
             except (_json.JSONDecodeError, TypeError):
@@ -132,7 +132,7 @@ class EmployeeFormHandler(AdminBaseHandler):
         # 获取启用的技能库（供技能选择器使用）
         skills_library = SkillRepository.get_enabled()
 
-        # 获取启用的 MCP 工具（供工具选择器使用，v0.4.2）
+        # 获取启用的 MCP 工具（供工具选择器使用，v0.10）
         mcp_tools = MCPToolRepository.get_enabled()
         mcp_categories = MCPToolRepository.get_categories()
 
@@ -160,10 +160,10 @@ class EmployeeFormHandler(AdminBaseHandler):
         model_id_str = self.get_body_argument("model_id", "").strip()
         model_id = int(model_id_str) if model_id_str else None
         system_prompt = self.get_body_argument("system_prompt", "").strip()
-        # v0.6.1: crawl4ai_enabled 已废弃，crawl4ai 能力通过 mcp_tool_ids 控制
+        # v0.8: crawl4ai_enabled 已废弃，crawl4ai 能力通过 mcp_tool_ids 控制
         crawl4ai_enabled = 0
 
-        # 解析技能选择（v0.5.0: 从技能库多选，存储技能 ID 数组）
+        # 解析技能选择（v0.7: 从技能库多选，存储技能 ID 数组）
         skill_ids = self.get_body_arguments("skill_ids")
         try:
             skills = [int(sid) for sid in skill_ids if sid.strip()]
@@ -171,7 +171,7 @@ class EmployeeFormHandler(AdminBaseHandler):
             skills = []
         skills_json = json.dumps(skills, ensure_ascii=False)
 
-        # 解析 MCP 工具选择（v0.4.2: 从工具库多选，存储工具 ID 数组）
+        # 解析 MCP 工具选择（v0.10: 从工具库多选，存储工具 ID 数组）
         tool_ids = self.get_body_arguments("mcp_tool_ids")
         try:
             mcp_ids = [int(tid) for tid in tool_ids if tid.strip()]
@@ -538,7 +538,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             skills_list = json.loads(emp.get("skills", "[]"))
         except (json.JSONDecodeError, TypeError):
             pass
-        # v0.6.1: crawl4ai_enabled 已废弃，深度采集能力通过 MCP 工具权限控制
+        # v0.8: crawl4ai_enabled 已废弃，深度采集能力通过 MCP 工具权限控制
 
         # 1. 执行工具调用：根据意图自动查询数据仓库 / 触发采集
         if tool_results is None:
@@ -592,7 +592,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
 
         if not tool_results.get("warehouse_data") and not tool_results.get("deep_collect_result") and not tool_results.get("warehouse_stats"):
             lines.append(f"\n您问：「{message}」\n")
-            # v0.5.0: skills 存储的是 ID 数组，需解析为技能名称用于展示
+            # v0.7: skills 存储的是 ID 数组，需解析为技能名称用于展示
             if skills_list and isinstance(skills_list[0], int):
                 try:
                     resolved = SkillRepository.resolve_by_ids(skills_list)
@@ -625,7 +625,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         """根据用户消息意图执行对应的工具调用。返回工具执行结果字典。"""
         result = {"intent": "general"}
         msg_lower = message.lower().strip()
-        # v0.6.1: crawl4ai_enabled 已废弃，深度采集能力通过 MCP 工具权限控制
+        # v0.8: crawl4ai_enabled 已废弃，深度采集能力通过 MCP 工具权限控制
 
         # 意图: 搜索数据仓库
         search_keywords = ["搜索", "查找", "查询", "找", "search", "数据仓库里有", "有没有"]

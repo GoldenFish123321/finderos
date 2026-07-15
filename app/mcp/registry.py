@@ -1,5 +1,5 @@
 """
-app/mcp/registry.py — MCP 工具注册中心 (v0.4.2 新增)
+app/mcp/registry.py — MCP 工具注册中心 (v0.10 新增)
 
 数据库驱动的工具注册中心，替代原来的 tools.py 硬编码注册。
 

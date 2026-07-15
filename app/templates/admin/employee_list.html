@@ -22,7 +22,7 @@
 .emp-card-meta { display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:var(--text-muted); margin-bottom:12px; }
 .emp-card-meta span { background:rgba(255,255,255,0.04); padding:3px 8px; border-radius:4px; }
 .emp-card-badges { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
-/* 三色徽章体系 (v0.4.2 MCP 重构) */
+/* 三色徽章体系 (v0.10 MCP 重构) */
 .emp-card-badges .mcp-tag    { font-size:11px; padding:2px 8px; border-radius:10px; background:rgba(94,163,255,0.12); color:#5EA3FF; border:1px solid rgba(94,163,255,0.2); }
 .emp-card-badges .skill-tag  { font-size:11px; padding:2px 8px; border-radius:10px; background:rgba(95,184,120,0.12); color:#5FB878; border:1px solid rgba(95,184,120,0.2); }
 .emp-card-badges .legacy-tag { font-size:11px; padding:2px 8px; border-radius:10px; background:rgba(255,184,0,0.12); color:#FFB800; border:1px solid rgba(255,184,0,0.2); }
@@ -81,7 +81,7 @@
         <div class="emp-card-meta">
             {% if emp['employee_type'] == 'llm' %}
             <span>🤖 {{ emp.get('model_name') or '默认模型' }}</span>
-            <!-- v0.6.1: crawl4ai_enabled 已废弃，MCP 工具显示在下方 -->
+            <!-- v0.8: crawl4ai_enabled 已废弃，MCP 工具显示在下方 -->
             {% else %}
             <span>📡 {{ emp.get('api_method', 'GET') }}</span>
             {% end %}

@@ -2,8 +2,8 @@
 admin_warehouse.py — 数据仓库控制器
 
 管理和展示瞭望采集的历史结果数据。
-v0.2.13: 支持独立的 data_warehouse 表查询（借鉴郭家琪）。
-v0.2.5: 新增深度采集功能（DeepCollectHandler）。
+v0.2: 支持独立的 data_warehouse 表查询（借鉴郭家琪）。
+v0.2: 新增深度采集功能（DeepCollectHandler）。
 """
 import atexit
 import json
@@ -20,7 +20,7 @@ atexit.register(_deep_collect_executor.shutdown, wait=True)
 
 
 class WarehouseHandler(AdminBaseHandler):
-    """数据仓库列表页（v0.2.13: 使用独立 data_warehouse 表）"""
+    """数据仓库列表页（v0.2: 使用独立 data_warehouse 表）"""
 
     @tornado.web.authenticated
     def get(self):
@@ -121,7 +121,7 @@ class WatchLogHandler(AdminBaseHandler):
 
 
 class WarehouseDetailHandler(AdminBaseHandler):
-    """数据仓库详情页（v0.2.13: 使用独立 data_warehouse 表，v0.2.5: 展示深度采集内容）"""
+    """数据仓库详情页（v0.2: 使用独立 data_warehouse 表，v0.2: 展示深度采集内容）"""
 
     @tornado.web.authenticated
     def get(self):
@@ -158,7 +158,7 @@ class WarehouseDetailHandler(AdminBaseHandler):
 
 
 class WarehouseDeleteHandler(AdminBaseHandler):
-    """删除采集结果（v0.2.13: 从 data_warehouse 表删除）"""
+    """删除采集结果（v0.2: 从 data_warehouse 表删除）"""
 
     @tornado.web.authenticated
     def post(self):
@@ -168,7 +168,7 @@ class WarehouseDeleteHandler(AdminBaseHandler):
 
 
 class WarehouseBatchDeleteHandler(AdminBaseHandler):
-    """批量删除采集结果（v0.2.13: 从 data_warehouse 表批量删除）"""
+    """批量删除采集结果（v0.2: 从 data_warehouse 表批量删除）"""
 
     @tornado.web.authenticated
     def post(self):
@@ -185,7 +185,7 @@ class WarehouseBatchDeleteHandler(AdminBaseHandler):
 
 
 class WarehouseDeepCollectHandler(AdminBaseHandler):
-    """深度采集处理器（v0.2.5 新增）
+    """深度采集处理器（v0.2 新增）
 
     对数据仓库中的链接执行深度内容抓取：
     - GET: 深度采集结果查看（悬浮窗模式数据）

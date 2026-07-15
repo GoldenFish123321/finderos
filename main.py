@@ -170,7 +170,7 @@ def make_app() -> tornado.web.Application:
             (r"/admin/interface/toggle", InterfaceToggleHandler),
             (r"/admin/interface/test", InterfaceTestHandler),
             (r"/admin/api/interface/list", InterfaceApiListHandler),
-            # ========== v0.3.0 新增模块 ==========
+            # ========== v0.4 新增模块 ==========
             # 数字化员工
             (r"/admin/employee", EmployeeListHandler),
             (r"/admin/employee/add", EmployeeFormHandler),
@@ -190,7 +190,7 @@ def make_app() -> tornado.web.Application:
             (r"/admin/skill/delete", SkillDeleteHandler),
             (r"/admin/skill/toggle", SkillToggleHandler),
 
-            # ========== v0.4.2 MCP 工具管理 ==========
+            # ========== v0.10 MCP 工具管理 ==========
             (r"/admin/mcp/tool", MCPToolListHandler),
             (r"/admin/mcp/tool/add", MCPToolFormHandler),
             (r"/admin/mcp/tool/edit", MCPToolFormHandler),
@@ -200,7 +200,7 @@ def make_app() -> tornado.web.Application:
             (r"/admin/mcp/tool/test-logs", MCPToolTestLogsHandler),
             (r"/admin/mcp/reload", MCPToolReloadHandler),
 
-            # ========== v0.3.0 用户前台-智能问数 ==========
+            # ========== v0.4 用户前台-智能问数 ==========
             # 前台对话主页
             (r"/chat", UserChatPageHandler),
             # 前台 SSE 流式 AI 对话
@@ -239,14 +239,14 @@ if __name__ == "__main__":
     # 插入种子数据（默认角色、管理员、功能）
     seed_default_data()
 
-    # v0.4.2: 显式注册 MCP 工具（确保数据库驱动工具在启动时加载）
+    # v0.10: 显式注册 MCP 工具（确保数据库驱动工具在启动时加载）
     from app.mcp.tools import register_all_tools
     register_all_tools()
 
     # 创建应用
     app = make_app()
 
-    # 启动定时采集调度器 (v0.4.0)
+    # 启动定时采集调度器 (v0.6)
     scheduler = CollectionScheduler(app, check_interval_ms=60000)
     scheduler.start()
 

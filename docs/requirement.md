@@ -1,6 +1,6 @@
-# 瞭望与问数系统 (DataFinderAgentOS) — 需求文档 v0.4.0
+# 瞭望与问数系统 (DataFinderAgentOS) — 需求文档 v1.0.0-beta
 
-> 覆盖 v0.1 ~ v0.4.0 全部功能需求
+> 覆盖 v0.1 ~ v1.0.0-beta 全部功能需求
 
 ---
 
@@ -101,7 +101,7 @@
 ### 12. 深度采集引擎
 
 - 正文提取（article/main/body 标签识别）
-- Crawl4ai 通过 MCP 工具权限控制（v0.6.1）
+- Crawl4ai 通过 MCP 工具权限控制（v0.8）
 
 ### 13. 定时采集调度器
 

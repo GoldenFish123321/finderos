@@ -397,7 +397,7 @@ class WatchStreamHandler(AdminBaseHandler):
 
 
 class WatchSaveHandler(AdminBaseHandler):
-    """保存选中的采集结果到数据仓库（含 URL 去重，v0.2.13 同时写入独立 data_warehouse 表）"""
+    """保存选中的采集结果到数据仓库（含 URL 去重，v0.2 同时写入独立 data_warehouse 表）"""
 
     @tornado.web.authenticated
     def post(self):
@@ -442,7 +442,7 @@ class WatchSaveHandler(AdminBaseHandler):
 
         ids = [int(rid) for rid in result_ids if rid]
 
-        # v0.2.13: 先写入独立 data_warehouse 表，成功后再标记 SAVED（避免解析失败导致错误标记）
+        # v0.2: 先写入独立 data_warehouse 表，成功后再标记 SAVED（避免解析失败导致错误标记）
         dw_count = 0
         saved_ids = []
         for rid in ids:
@@ -492,7 +492,7 @@ class WatchSaveHandler(AdminBaseHandler):
 
 
 class WatchDeepCollectHandler(AdminBaseHandler):
-    """瞭望采集页一站式深度采集（v0.2.5 新增）
+    """瞭望采集页一站式深度采集（v0.2 新增）
 
     选中采集结果 → 保存到数据仓库 → 立即深度采集正文内容。
     用户无需先跳转到数据仓库页面再操作。

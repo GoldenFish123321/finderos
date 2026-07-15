@@ -1,5 +1,5 @@
 """
-model_tools.py — AI 模型类 MCP 工具处理函数 (v0.4.2 新增)
+model_tools.py — AI 模型类 MCP 工具处理函数 (v0.10 新增)
 
 工具:
 - list_ai_models: AI 模型列表

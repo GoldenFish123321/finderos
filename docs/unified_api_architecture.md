@@ -3,7 +3,7 @@
 > 文档日期: 2026-07-15  
 > 目标版本: 待定（MRP 完成后确定）  
 > 前置依赖: `docs/mcp_refactor_plan.md`（MRP）全部 Phase 完成后  
-> 基于: DataFinderAgentOS v0.4.2 当前代码  
+> 基于: DataFinderAgentOS v1.0.0-beta 当前代码  
 
 ---
 
@@ -782,7 +782,7 @@ def transform(data_sources):
 
 ### 6.1 新旧对比
 
-| 维度 | 旧架构 (v0.4.2, MRP 保持) | 新增能力 |
+| 维度 | 旧架构 (v0.10, MRP 保持) | 新增能力 |
 |------|--------------------------|-------------------|
 | 工具类型 | `builtin` / `api` / `crawl4ai` | 新增 `script` 型（与三种旧类型**共存**） |
 | builtin 型 | Python 函数指针 (`handler_module`) → importlib 加载 | **保持不动** |

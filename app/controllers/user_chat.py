@@ -389,7 +389,7 @@ class UserEmployeeListHandler(BaseHandler):
                 "employee_type": e.get("employee_type", "llm"),
                 "description": e.get("description", ""),
             }
-            # v0.4.2: 解析技能标签（兼容旧格式字符串和新格式 ID）
+            # v0.10: 解析技能标签（兼容旧格式字符串和新格式 ID）
             try:
                 raw_skills = json.loads(e.get("skills", "[]"))
             except (json.JSONDecodeError, TypeError):
@@ -408,7 +408,7 @@ class UserEmployeeListHandler(BaseHandler):
             else:
                 item["skills_list"] = []
                 item["skills_legacy"] = False
-            # v0.4.2: 解析 MCP 工具
+            # v0.10: 解析 MCP 工具
             try:
                 raw_tool_ids = json.loads(e.get("mcp_tool_ids", "[]"))
             except (json.JSONDecodeError, TypeError):
@@ -1219,7 +1219,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
         max_tokens = model.get("max_tokens", 4096)
         emp_name = emp.get("name", "数字员工")
 
-        # ── v0.6.1: 使用 MCP 智能匹配执行工具（按员工权限过滤）──
+        # ── v0.8: 使用 MCP 智能匹配执行工具（按员工权限过滤）──
         match = _mcp_client.match_tool_by_query(message, emp_id=emp.get("id"))
         tool_ctx = {}
         if match:
@@ -1268,7 +1268,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
         total_tokens = 0
         api_success = False
 
-        # ── v0.5.0: 解析员工技能，构建技能摘要（供 LLM 按需加载）──
+        # ── v0.7: 解析员工技能，构建技能摘要（供 LLM 按需加载）──
         from app.models.skill import SkillRepository
         skills_ctx = ""
         try:
@@ -1396,7 +1396,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
             skills_list = json.loads(emp.get("skills", "[]"))
         except (json.JSONDecodeError, TypeError):
             pass
-        # v0.6.1: crawl4ai_enabled 已废弃，深度采集通过 MCP 工具权限控制
+        # v0.8: crawl4ai_enabled 已废弃，深度采集通过 MCP 工具权限控制
 
         if tool_ctx is None:
             match = _mcp_client.match_tool_by_query(message, emp_id=emp.get("id"))
@@ -1482,7 +1482,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
                         lines.append(f"\n⚠️ 操作失败: {result.get('error', '未知错误')}\n")
         else:
             lines.append(f"\n您问：「{message}」\n")
-            # v0.5.0: skills 存储的是 ID 数组，需解析为技能名称用于展示
+            # v0.7: skills 存储的是 ID 数组，需解析为技能名称用于展示
             if skills_list and isinstance(skills_list[0], int):
                 try:
                     resolved = SkillRepository.resolve_by_ids(skills_list)

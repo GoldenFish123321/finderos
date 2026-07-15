@@ -157,7 +157,7 @@ def init_db():
         except Exception as e:
             logger.error(f"Database migration failed (ai_models.total_tokens): {e}", exc_info=True)
 
-        # 兼容旧表迁移：为已存在的 watch_sources 表添加 schedule_interval 列 (v0.4.0)
+        # 兼容旧表迁移：为已存在的 watch_sources 表添加 schedule_interval 列 (v0.6)
         try:
             cols = {row[1] for row in conn.execute("PRAGMA table_info(watch_sources)").fetchall()}
             if "schedule_interval" not in cols:
@@ -166,7 +166,7 @@ def init_db():
         except Exception as e:
             logger.error(f"Database migration failed (watch_sources.schedule_interval): {e}", exc_info=True)
 
-        # 独立数据仓库表（v0.2.13 新增，借鉴郭家琪项目的独立设计）
+        # 独立数据仓库表（v0.2 新增，借鉴郭家琪项目的独立设计）
         conn.execute("""
             CREATE TABLE IF NOT EXISTS data_warehouse (
                 id                  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -237,7 +237,7 @@ def init_db():
             )
         """)
 
-        # 技能库表 (v0.5.0 新增 — 技能管理模块)
+        # 技能库表 (v0.7 新增 — 技能管理模块)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS skills (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -252,7 +252,7 @@ def init_db():
             )
         """)
 
-        # 接口管理表 (v0.4.1 新增)：可复用 API 接口模板，供 API 型数字员工联动选择
+        # 接口管理表 (v0.9 新增)：可复用 API 接口模板，供 API 型数字员工联动选择
         conn.execute("""
             CREATE TABLE IF NOT EXISTS api_interfaces (
                 id                       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -271,7 +271,7 @@ def init_db():
             )
         """)
 
-        # 数字化员工表 (v0.3.0 新增)
+        # 数字化员工表 (v0.4 新增)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS digital_employees (
                 id                      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -309,9 +309,8 @@ def init_db():
         except Exception as e:
             logger.error(f"Database migration failed (digital_employees.api_interface_id): {e}", exc_info=True)
 
-        # 对话管理表 (v0.5.0 新增 — 多轮对话支持)
+        # 对话管理表 (v0.5 新增 — 多轮对话支持)
 
-        # 对话管理表 (v0.3.0 新增 — 多轮对话支持)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS conversations (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -352,7 +351,7 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_username ON audit_logs(username)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at)")
 
-        # ── v0.4.2 MCP 工具注册表 (数据库驱动) ──
+        # ── v0.10 MCP 工具注册表 (数据库驱动) ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS mcp_tools (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -377,7 +376,7 @@ def init_db():
             )
         """)
 
-        # ── v0.4.2 MCP 工具测试日志表 ──
+        # ── v0.10 MCP 工具测试日志表 ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS mcp_tool_test_logs (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -391,7 +390,7 @@ def init_db():
             )
         """)
 
-        # ── v0.4.2 skills 表新增 mcp_tool_id 列 ──
+        # ── v0.10 skills 表新增 mcp_tool_id 列 ──
         try:
             cols = {row[1] for row in conn.execute("PRAGMA table_info(skills)").fetchall()}
             if "mcp_tool_id" not in cols:
@@ -400,7 +399,7 @@ def init_db():
         except Exception as e:
             logger.error(f"Database migration failed (skills.mcp_tool_id): {e}", exc_info=True)
 
-        # ── v0.4.2 digital_employees 表新增 mcp_tool_ids 列 ──
+        # ── v0.10 digital_employees 表新增 mcp_tool_ids 列 ──
         try:
             cols = {row[1] for row in conn.execute("PRAGMA table_info(digital_employees)").fetchall()}
             if "mcp_tool_ids" not in cols:
@@ -467,13 +466,13 @@ def seed_default_data():
                 (18, "会话管理", "layui-icon-dialogue", "/admin/conversation", None, 8, 1),
                 # 系统设置子项（新增，借鉴陈子墨丰富的种子数据设计）
                 (12, "AI对话", "layui-icon-dialogue", "/chat", 3, 1, 1),
-                # 数字员工 (v0.3.0 新增)
+                # 数字员工 (v0.4 新增)
                 (13, "数字员工", "layui-icon-user", "/admin/employee", None, 9, 1),
-                # 技能管理 (v0.5.0 新增)
+                # 技能管理 (v0.7 新增)
                 (14, "技能管理", "layui-icon-util", "/admin/skill", None, 10, 1),
-                # MCP 工具管理 (v0.4.2 新增)
+                # MCP 工具管理 (v0.10 新增)
                 (15, "MCP 工具管理", "layui-icon-component", "/admin/mcp/tool", None, 11, 1),
-                # 接口管理 (v0.4.1 新增)
+                # 接口管理 (v0.9 新增)
                 (16, "接口管理", "layui-icon-link", "/admin/interface", None, 12, 1),
             ]
             conn.executemany(
@@ -752,7 +751,7 @@ def _seed_default_employees():
                     "4. 生成结构化的数据报告\n"
                     "请高效、准确地完成采集任务，输出清晰的结构化结果。",
                     json.dumps(["数据搜索", "深度采集", "内容提取", "数据整理"], ensure_ascii=False),
-                    0,  # v0.6.1: crawl4ai_enabled 已废弃，改用 mcp_tool_ids
+                    0,  # v0.8: crawl4ai_enabled 已废弃，改用 mcp_tool_ids
                     json.dumps([15, 16], ensure_ascii=False),  # collect_with_crawl4ai + batch_deep_collect
                     1,
                 ),
@@ -837,7 +836,7 @@ def _seed_default_employees():
                     "- 展示格式：先介绍歌曲名和歌手，再引导用户点击试听",
                     json.dumps(["随机音乐", "歌曲推荐", "音乐点播"], ensure_ascii=False),
                     0,
-                    json.dumps([14], ensure_ascii=False),  # v0.6.1: get_random_music 工具
+                    json.dumps([14], ensure_ascii=False),  # v0.8: get_random_music 工具
                     1,
                 ),
             )
