@@ -46,7 +46,7 @@
 |------|--------|------|----------|
 | TC-MODEL-01 | 新增模型 | 填写模型信息→保存 | 列表出现新模型 |
 | TC-MODEL-02 | 设置默认 | 点击"设为默认" | 该模型标记为默认 |
-| TC-MODEL-03 | Mock对话 | 无API Key时发送消息 | 返回Mock流式响应 |
+| TC-MODEL-03 | 无 API Key 对话 | 无 API Key 时发送消息 | 走 MCP 语义匹配路径，匹配最佳工具并返回结果 |
 | TC-MODEL-04 | 真实API对话 | 配置有效API Key后发送 | SSE流式返回AI回复 |
 | TC-MODEL-05 | Token统计 | 多次对话 | total_tokens累计增长 |
 | TC-MODEL-06 | 审计日志 | 发送对话消息 | audit_logs表新增CHAT记录 |
@@ -94,6 +94,16 @@
 | TC-MCP-01 | LLM Function Calling | 有 API Key 时问"搜索仓库中AI相关数据" | LLM 自动调用 search_warehouse 工具 |
 | TC-MCP-02 | MCP 语义匹配回退 | 无 API Key 时问同样问题 | 语义匹配到 search_warehouse 并执行 |
 | TC-MCP-03 | 工具结果格式化 | 工具返回 JSON | 转为自然语言 Markdown 回复 |
-| TC-MCP-04 | 深度采集工具 | 要求"采集 https://..." | deep_collect_url 工具执行并返回正文 |
+| TC-MCP-04 | 深度采集工具 | 通过对话要求采集指定 URL | LLM 判断后调用 deep_collect_url 工具，返回正文摘要 |
 | TC-MCP-05 | 多轮工具调用 | 复杂问题需多工具配合 | LLM 最多 3 轮 tool_calls 完成闭环 |
 | TC-MCP-06 | 工具列表指令 | 输入 `/tools` | 展示 8 个 MCP 工具的名称和描述 |
+
+## 10. 用户注册（v0.1.0）
+
+| 编号 | 测试项 | 步骤 | 预期结果 |
+|------|--------|------|----------|
+| TC-REG-01 | 正常注册 | 填写新用户名+密码+确认密码 | 注册成功，自动登录跳转 |
+| TC-REG-02 | 重复用户名 | 使用已存在的用户名注册 | 提示"用户名已存在" |
+| TC-REG-03 | 密码不一致 | 密码与确认密码不同 | 提示"两次输入的密码不一致" |
+| TC-REG-04 | 弱密码 | 输入短密码（如"123"） | 提示密码强度不足 |
+| TC-REG-05 | 空表单 | 不填任何字段直接注册 | 提示"用户名和密码不能为空" |

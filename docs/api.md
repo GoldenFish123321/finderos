@@ -15,6 +15,12 @@
 - **失败**: 渲染登录页 + 错误提示
 - **限速**: 同 IP+用户名 5次/15分钟
 
+### POST /register — 用户注册
+- **Content-Type**: `application/x-www-form-urlencoded`
+- **参数**: `username`, `password`, `confirm_password`
+- **成功**: 自动登录并 302 跳转（管理员→/admin，普通用户→/chat）
+- **失败**: 渲染注册页 + 错误提示（用户名已存在 / 密码不一致 / 密码强度不足等）
+
 ### GET /logout — 登出
 - 清除 Cookie，302 跳转到 `/`
 
@@ -147,29 +153,10 @@
 | POST | `/admin/model/toggle` | 启用/禁用 |
 | POST | `/admin/model/default` | 设为默认模型 |
 
-### 4.2 模型对话 (SSE)
+### 4.2 模型对话 (SSE) — ⚠️ 已废弃
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/admin/model/chat?model_id=` | 对话页面 |
-| POST | `/admin/model/chat/stream` | **SSE 流式对话** |
-
-#### POST /admin/model/chat/stream
-
-**请求**: `model_id`, `message`
-
-**SSE 事件**:
-```
-data: {"content": "你"}
-data: {"content": "好"}
-...
-data: [DONE]
-event: stats
-data: {"tokens": 42, "mock": false}
-```
-
-- `mock: true` 表示使用本地 Mock 模式（API Key 未配置）
-- Token 消耗会自动累加到 `ai_models.total_tokens`
+> **v0.4.0 起已废弃**：后台模型对话功能已统一迁移至前台 `/chat/stream`（MCP 架构）。
+> 请使用 [七、用户前台-智能问数](#七用户前台-智能问数v030) 中的 `/chat/stream` 端点。
 
 ### 4.3 模型 API
 
@@ -177,11 +164,10 @@ data: {"tokens": 42, "mock": false}
 |------|------|------|
 | GET | `/admin/api/model/list` | JSON 格式模型列表（?page=&limit=&category=） |
 
-### 4.4 其他模型操作
+### 4.4 Token 消耗说明
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/admin/model/clear-tokens` | Token 消耗清零 |
+- Token 消耗通过 `/chat/stream` 对话自动累加到 `ai_models.total_tokens`
+- 数据迁移脚本 `migrate_db.py` 支持旧表 Token 数据迁移
 
 ---
 
@@ -259,12 +245,3 @@ data: {"tokens": 42, "mock": false}
 | POST | `/api/chat/conversation/create` | 创建新对话 |
 | POST | `/api/chat/conversation/delete` | 删除对话（?id=） |
 | GET | `/api/chat/conversation/messages` | 获取对话消息（?id=） |
-
-### 7.4 后台对话管理 API
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/admin/api/conversation/list` | 对话列表 |
-| POST | `/admin/api/conversation/create` | 创建对话 |
-| POST | `/admin/api/conversation/delete` | 删除对话 |
-| GET | `/admin/api/conversation/messages` | 获取对话消息 |
