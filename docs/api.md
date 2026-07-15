@@ -263,3 +263,42 @@
 | POST | `/api/chat/conversation/create` | 创建新对话 |
 | POST | `/api/chat/conversation/delete` | 删除对话（body 参数 `id`） |
 | GET | `/api/chat/conversation/messages` | 获取对话消息（?id=） |
+
+### 7.4 TTS 语音合成 API（v0.4.1）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/chat/tts` | **Edge TTS 语音合成**，返回 MP3 音频流 |
+
+#### POST /api/chat/tts 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `text` | string | 是 | 待合成文本（1-4000 字符） |
+| `voice` | string | 否 | 语音名称，默认 `zh-CN-XiaoxiaoNeural`（晓晓） |
+
+#### 可用语音
+
+| 语音 ID | 名称 | 风格 |
+|---------|------|------|
+| `zh-CN-XiaoxiaoNeural` | 晓晓 | 女声，活泼（默认） |
+| `zh-CN-YunxiNeural` | 云希 | 男声，青年 |
+| `zh-CN-YunjianNeural` | 云健 | 男声，中年 |
+| `zh-CN-XiaoyiNeural` | 晓伊 | 女声，温柔 |
+| `zh-CN-YunyangNeural` | 云扬 | 男声，新闻播报 |
+| `zh-CN-XiaochenNeural` | 晓晨 | 女声，自然 |
+
+#### 响应
+
+- **成功**：`Content-Type: audio/mpeg`，返回 MP3 二进制音频流
+  - 响应头 `X-TTS-Voice`: 使用的语音名称
+  - 响应头 `X-TTS-Cached`: 是否命中缓存（`true`/`false`）
+- **失败**：HTTP 400/500，返回 JSON `{"code": 1, "msg": "错误描述"}`
+
+#### 缓存机制
+
+- 基于 `MD5(text + voice)` 的本地文件缓存
+- 缓存目录：系统临时目录 `/finderos_tts/`
+- 相同文本 + 语音不重复生成，永久缓存
+- 生成失败自动清理损坏的缓存文件
+
