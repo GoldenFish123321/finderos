@@ -56,10 +56,12 @@ class EmployeeListHandler(AdminBaseHandler):
                 raw_skills = _json.loads(emp.get("skills", "[]"))
             except (_json.JSONDecodeError, TypeError):
                 raw_skills = []
-            emp["skills_list"] = SkillRepository.resolve_by_ids(raw_skills) if raw_skills and isinstance(raw_skills[0], int) else []
+            resolved = SkillRepository.resolve_by_ids(raw_skills) if raw_skills and isinstance(raw_skills[0], int) else []
+            emp["skills_list"] = [s["name"] for s in resolved] if resolved else []
             # 兼容旧格式（字符串标签）
             if not emp["skills_list"] and raw_skills and isinstance(raw_skills[0], str):
-                emp["skills_list"] = SkillRepository.resolve_by_names(raw_skills)
+                resolved_names = SkillRepository.resolve_by_names(raw_skills)
+                emp["skills_list"] = [s["name"] for s in resolved_names] if resolved_names else raw_skills
                 # 标记为旧格式（模板中可区分显示）
                 emp["skills_legacy"] = True
             # JS 安全转义员工名称（用于 confirm 对话框）
@@ -490,7 +492,16 @@ class EmployeeInvokeHandler(AdminBaseHandler):
 
         if not tool_results.get("warehouse_data") and not tool_results.get("deep_collect_result") and not tool_results.get("warehouse_stats"):
             lines.append(f"\n您问：「{message}」\n")
-            skills_text = "、".join(skills_list) if skills_list else "通用助手"
+            # v0.5.0: skills 存储的是 ID 数组，需解析为技能名称用于展示
+            if skills_list and isinstance(skills_list[0], int):
+                try:
+                    resolved = SkillRepository.resolve_by_ids(skills_list)
+                    skill_names = [s["name"] for s in resolved]
+                except Exception:
+                    skill_names = [str(s) for s in skills_list]
+            else:
+                skill_names = [str(s) for s in skills_list] if skills_list else []
+            skills_text = "、".join(skill_names) if skill_names else "通用助手"
             lines.append(f"🔧 我的技能: {skills_text}")
             if crawl4ai_on:
                 lines.append(f"🕷️ Crawl4ai 网页采集: 已启用")

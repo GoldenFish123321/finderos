@@ -77,7 +77,7 @@
         {% end %}
         <div class="emp-card-meta">
             {% if emp['employee_type'] == 'llm' %}
-            <span>🤖 {{ emp.get('model_name', '默认模型') }}</span>
+            <span>🤖 {{ emp.get('model_name') or '默认模型' }}</span>
             {% if emp.get('crawl4ai_enabled') == 1 %}<span>🕷️ Crawl4ai</span>{% end %}
             {% else %}
             <span>📡 {{ emp.get('api_method', 'GET') }}</span>
