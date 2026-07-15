@@ -283,6 +283,7 @@ def init_db():
                 system_prompt           TEXT DEFAULT '',
                 skills                  TEXT DEFAULT '[]',
                 crawl4ai_enabled        INTEGER DEFAULT 0,
+                mcp_tool_ids            TEXT DEFAULT '[]',
                 -- API 型字段
                 api_url                 TEXT DEFAULT '',
                 api_method              TEXT DEFAULT 'GET',
@@ -351,6 +352,63 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_username ON audit_logs(username)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at)")
 
+        # ── v0.6.0 MCP 工具注册表 (数据库驱动) ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS mcp_tools (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                name            TEXT UNIQUE NOT NULL,
+                display_name    TEXT NOT NULL,
+                description     TEXT DEFAULT '',
+                category        TEXT DEFAULT 'general',
+                tool_type       TEXT DEFAULT 'builtin',
+                handler_module  TEXT DEFAULT '',
+                api_url         TEXT DEFAULT '',
+                api_method      TEXT DEFAULT 'GET',
+                api_headers     TEXT DEFAULT '{}',
+                api_params_template TEXT DEFAULT '',
+                input_schema    TEXT DEFAULT '{}',
+                output_schema   TEXT DEFAULT '{}',
+                is_enabled      INTEGER DEFAULT 1,
+                is_system       INTEGER DEFAULT 0,
+                sort_order      INTEGER DEFAULT 0,
+                config          TEXT DEFAULT '{}',
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # ── v0.6.0 MCP 工具测试日志表 ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS mcp_tool_test_logs (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                tool_id         INTEGER NOT NULL,
+                test_params     TEXT DEFAULT '{}',
+                test_result     TEXT DEFAULT '',
+                is_success      INTEGER DEFAULT 0,
+                duration_ms     INTEGER DEFAULT 0,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (tool_id) REFERENCES mcp_tools(id) ON DELETE CASCADE
+            )
+        """)
+
+        # ── v0.6.0 skills 表新增 mcp_tool_id 列 ──
+        try:
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(skills)").fetchall()}
+            if "mcp_tool_id" not in cols:
+                conn.execute("ALTER TABLE skills ADD COLUMN mcp_tool_id INTEGER DEFAULT NULL REFERENCES mcp_tools(id) ON DELETE SET NULL")
+                logger.info("Database migration: added mcp_tool_id column to skills")
+        except Exception as e:
+            logger.error(f"Database migration failed (skills.mcp_tool_id): {e}", exc_info=True)
+
+        # ── v0.6.0 digital_employees 表新增 mcp_tool_ids 列 ──
+        try:
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(digital_employees)").fetchall()}
+            if "mcp_tool_ids" not in cols:
+                conn.execute("ALTER TABLE digital_employees ADD COLUMN mcp_tool_ids TEXT DEFAULT '[]'")
+                logger.info("Database migration: added mcp_tool_ids column to digital_employees")
+        except Exception as e:
+            logger.error(f"Database migration failed (digital_employees.mcp_tool_ids): {e}", exc_info=True)
+
         conn.commit()
         logger.info(f"Database initialized: {DB_PATH}")
 
@@ -411,8 +469,10 @@ def seed_default_data():
                 (13, "数字员工", "layui-icon-user", "/admin/employee", None, 8, 1),
                 # 技能管理 (v0.5.0 新增)
                 (14, "技能管理", "layui-icon-util", "/admin/skill", None, 9, 1),
+                # MCP 工具管理 (v0.6.0 新增)
+                (15, "MCP 工具管理", "layui-icon-component", "/admin/mcp/tool", None, 10, 1),
                 # 接口管理 (v0.4.1 新增)
-                (15, "接口管理", "layui-icon-link", "/admin/interface", None, 10, 1),
+                (16, "接口管理", "layui-icon-link", "/admin/interface", None, 11, 1),
             ]
             conn.executemany(
                 "INSERT INTO functions (id, name, icon, route_path, parent_id, sort_order, is_enabled) "
@@ -421,20 +481,26 @@ def seed_default_data():
             )
             print("[种子] 默认功能模块已创建")
 
-        # 兼容旧数据库：补齐接口管理功能节点并授权给系统管理员
-        interface_func = conn.execute(
-            "SELECT id FROM functions WHERE route_path = ?", ("/admin/interface",)
-        ).fetchone()
-        if not interface_func:
-            cur = conn.execute(
-                "INSERT INTO functions (name, icon, route_path, parent_id, sort_order, is_enabled) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                ("接口管理", "layui-icon-link", "/admin/interface", None, 9, 1),
-            )
-            interface_func_id = cur.lastrowid
-            print("[种子] 接口管理功能模块已补齐")
-        else:
-            interface_func_id = interface_func["id"]
+        # 兼容旧数据库：补齐后续版本新增的功能节点并授权给系统管理员
+        managed_func_ids = []
+        for name, icon, route_path, sort_order in (
+            ("MCP 工具管理", "layui-icon-component", "/admin/mcp/tool", 10),
+            ("接口管理", "layui-icon-link", "/admin/interface", 11),
+        ):
+            func = conn.execute(
+                "SELECT id FROM functions WHERE route_path = ?", (route_path,)
+            ).fetchone()
+            if not func:
+                cur = conn.execute(
+                    "INSERT INTO functions (name, icon, route_path, parent_id, sort_order, is_enabled) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (name, icon, route_path, None, sort_order, 1),
+                )
+                func_id = cur.lastrowid
+                print(f"[种子] {name}功能模块已补齐")
+            else:
+                func_id = func["id"]
+            managed_func_ids.append(func_id)
 
         existing_rf = conn.execute("SELECT COUNT(*) as cnt FROM role_functions").fetchone()
         if existing_rf["cnt"] == 0:
@@ -444,11 +510,12 @@ def seed_default_data():
                 [(1, row["id"]) for row in func_ids],
             )
             print("[种子] 管理员角色功能关联已创建")
-        elif interface_func_id:
-            conn.execute(
-                "INSERT OR IGNORE INTO role_functions (role_id, function_id) VALUES (?, ?)",
-                (1, interface_func_id),
-            )
+        else:
+            for func_id in managed_func_ids:
+                conn.execute(
+                    "INSERT OR IGNORE INTO role_functions (role_id, function_id) VALUES (?, ?)",
+                    (1, func_id),
+                )
 
         conn.commit()
 
@@ -457,6 +524,7 @@ def seed_default_data():
     _seed_default_skills()
     _seed_default_interfaces()
     _seed_default_employees()
+    _seed_default_mcp_tools()
 
 
 def _seed_default_sources():
@@ -778,40 +846,45 @@ def _seed_default_employees():
             )
 
 def _seed_default_skills():
-    """种子：默认技能（5个，涵盖 prompt 增强 和 function 调用两种类型）。"""
+    """种子：默认技能（5个，纯 Prompt 模板，模板中直接描述 MCP 工具用法）。"""
     import json
     with get_db() as conn:
         existing = conn.execute("SELECT COUNT(*) as cnt FROM skills").fetchone()
         if existing["cnt"] == 0:
             skills_data = [
-                # Prompt 型技能 — 数据统计报告
-                (1, "数据统计", "生成数据仓库统计报告，含图表标记", "prompt",
+                # 数据统计报告
+                (1, "数据统计", "生成数据仓库统计报告，含图表标记",
                  "你正在进行数据统计分析任务。请遵循以下指令：\n"
                  "1. 首先调用 get_warehouse_stats 工具获取数据仓库概况\n"
                  "2. 根据统计结果生成自然语言报告，包含：总记录数、已深度采集数、来源分布\n"
                  "3. 如果数据适合可视化，请使用 [CHART:bar|pie|line] 标记建议图表类型\n"
                  "4. 报告格式清晰，使用 Markdown 标题和列表\n"
-                 "5. 最后给出数据利用建议（如：可对Top来源进行深度采集）",
-                 "", "{}"),
-                # Function 型技能 — 数据搜索
-                (2, "数据搜索", "在数据仓库中按关键词搜索采集结果", "function",
-                 "", "search_warehouse",
-                 json.dumps({"keyword": "{user_query}", "limit": 10}, ensure_ascii=False)),
-                # Prompt 型技能 — 新闻摘要
-                (3, "新闻摘要", "聚合多源新闻并生成结构化摘要", "prompt",
+                 "5. 最后给出数据利用建议（如：可对Top来源进行深度采集）"),
+                # 数据搜索（原 function 型，现改为在模板中说明用哪个 MCP 工具）
+                (2, "数据搜索", "在数据仓库中按关键词搜索采集结果",
+                 "你正在执行数据搜索任务。请遵循以下指令：\n"
+                 "1. 使用 search_warehouse 工具搜索数据仓库，参数 keyword 填写用户搜索的关键词，limit 默认 10\n"
+                 "2. 将搜索结果整理为清晰的列表格式\n"
+                 "3. 每条结果输出：标题、来源、50字摘要\n"
+                 "4. 如果结果较多，按相关性排序，优先展示最匹配的内容"),
+                # 新闻摘要
+                (3, "新闻摘要", "聚合多源新闻并生成结构化摘要",
                  "你正在执行新闻摘要任务。请遵循以下指令：\n"
                  "1. 调用 search_warehouse 或 get_recent_warehouse_data 获取新闻数据\n"
                  "2. 按主题分类整理新闻（如：科技/财经/政策/社会）\n"
                  "3. 每条新闻输出：标题、来源、50字摘要、发布时间\n"
                  "4. 在末尾生成一份「今日要闻速览」（3-5条最重要新闻）\n"
-                 "5. 使用 Markdown 格式，标题用 ###，列表用 -",
-                 "", "{}"),
-                # Function 型技能 — 深度采集
-                (4, "深度采集", "对指定 URL 进行正文深度抓取和内容提取", "function",
-                 "", "deep_collect_url",
-                 json.dumps({"url": "{user_query}"}, ensure_ascii=False)),
-                # Prompt 型技能 — 翻译助手
-                (5, "翻译助手", "高质量中英文双向翻译，保持专业术语准确", "prompt",
+                 "5. 使用 Markdown 格式，标题用 ###，列表用 -"),
+                # 深度采集（原 function 型，现改为在模板中说明 URL 采集流程）
+                (4, "深度采集", "对指定 URL 进行正文深度抓取和内容提取",
+                 "你正在执行深度采集任务。请遵循以下指令：\n"
+                 "1. 使用 deep_collect_url 工具对用户提供的 URL 进行深度采集\n"
+                 "2. 如果 URL 内容复杂，可额外使用 collect_with_crawl4ai 工具获取更完整内容\n"
+                 "3. 提取文章正文、标题、关键信息\n"
+                 "4. 输出结构化内容：标题 → 正文摘要 → 关键数据 → 来源链接\n"
+                 "5. 用 Markdown 格式组织输出"),
+                # 翻译助手
+                (5, "翻译助手", "高质量中英文双向翻译，保持专业术语准确",
                  "你正在执行翻译任务。请遵循以下指令：\n"
                  "1. 识别用户输入的源语言和目标语言\n"
                  "2. 执行高质量翻译，注意：\n"
@@ -819,13 +892,119 @@ def _seed_default_skills():
                  "   - 专业术语使用行业标准译法\n"
                  "   - 长句合理断句，符合目标语言习惯\n"
                  "3. 输出格式：先给出翻译结果，再附加【术语注释】（如有专业术语）\n"
-                 "4. 如涉及中文成语/典故，添加简短解释",
-                 "", "{}"),
+                 "4. 如涉及中文成语/典故，添加简短解释"),
             ]
             conn.executemany(
-                "INSERT INTO skills (id, name, description, skill_type, "
-                "prompt_template, function_name, function_params) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO skills (id, name, description, prompt_template) "
+                "VALUES (?, ?, ?, ?)",
                 skills_data,
             )
             print("[种子] 默认技能已创建（5个：数据统计/数据搜索/新闻摘要/深度采集/翻译助手）")
+
+
+def _seed_default_mcp_tools():
+    """种子：MCP 工具注册表（20+ 工具）。"""
+    import json
+    with get_db() as conn:
+        existing = conn.execute("SELECT COUNT(*) as cnt FROM mcp_tools").fetchone()
+        if existing["cnt"] > 0:
+            return
+
+        tools_data = [
+            # ── 数据仓库类 (warehouse) ──
+            (1, "search_warehouse", "数据仓库搜索", "在数据仓库中搜索关键词相关内容", "warehouse", "builtin",
+             "app.mcp.builtin_tools.warehouse_tools._search_warehouse", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{"keyword":{"type":"string","description":"搜索关键词"},"limit":{"type":"integer","description":"返回结果数量上限，默认10","default":10}},"required":["keyword"]}, ensure_ascii=False),
+             "{}", 1, 1, 1, "{}"),
+            (2, "get_recent_warehouse_data", "最新数据", "获取数据仓库中最新入库的数据记录", "warehouse", "builtin",
+             "app.mcp.builtin_tools.warehouse_tools._get_recent_warehouse_data", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{"limit":{"type":"integer","description":"返回记录数，默认10","default":10}}}, ensure_ascii=False),
+             "{}", 1, 1, 2, "{}"),
+            (3, "get_warehouse_stats", "数据统计", "获取数据仓库的统计概况", "warehouse", "builtin",
+             "app.mcp.builtin_tools.warehouse_tools._get_warehouse_stats", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
+             "{}", 1, 1, 3, "{}"),
+            (4, "search_warehouse_fulltext", "全文检索", "使用FTS5对数据仓库进行全文检索", "warehouse", "builtin",
+             "app.mcp.builtin_tools.warehouse_tools._search_warehouse_fulltext", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{"query":{"type":"string","description":"全文检索关键词"},"limit":{"type":"integer","description":"返回数量","default":10}},"required":["query"]}, ensure_ascii=False),
+             "{}", 1, 1, 4, "{}"),
+
+            # ── 数据采集类 (collect) ──
+            (5, "collect_web_data", "全网采集", "从瞭望源采集指定关键词的新闻数据", "collect", "builtin",
+             "app.mcp.builtin_tools.collect_tools._collect_web_data", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{"keyword":{"type":"string","description":"采集关键词"},"source_ids":{"type":"array","items":{"type":"integer"},"description":"瞭望源ID列表"}},"required":["keyword"]}, ensure_ascii=False),
+             "{}", 1, 1, 1, "{}"),
+            (6, "deep_collect_url", "深度采集", "对指定URL进行正文深度抓取", "collect", "builtin",
+             "app.mcp.builtin_tools.collect_tools._deep_collect_url", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{"url":{"type":"string","description":"目标网页URL"}},"required":["url"]}, ensure_ascii=False),
+             "{}", 1, 1, 2, "{}"),
+            (7, "list_watch_sources", "瞭望源列表", "列出所有启用的瞭望采集源", "collect", "builtin",
+             "app.mcp.builtin_tools.collect_tools._list_watch_sources", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
+             "{}", 1, 1, 3, "{}"),
+
+            # ── 数字员工类 (employee) ──
+            (8, "list_digital_employees", "员工列表", "列出系统中所有可用的数字员工", "employee", "builtin",
+             "app.mcp.builtin_tools.employee_tools._list_digital_employees", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
+             "{}", 1, 1, 1, "{}"),
+            (9, "invoke_digital_employee", "调用数字员工", "调用指定数字员工执行任务", "employee", "builtin",
+             "app.mcp.builtin_tools.employee_tools._invoke_digital_employee", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{"employee_name":{"type":"string","description":"员工名称或ID"},"message":{"type":"string","description":"发送给员工的消息"}},"required":["employee_name","message"]}, ensure_ascii=False),
+             "{}", 1, 1, 2, "{}"),
+
+            # ── AI模型类 (model) ──
+            (10, "list_ai_models", "AI模型列表", "列出所有可用的AI模型", "model", "builtin",
+             "app.mcp.builtin_tools.model_tools._list_ai_models", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
+             "{}", 1, 1, 1, "{}"),
+            (11, "get_default_model", "默认模型", "获取当前默认AI模型信息", "model", "builtin",
+             "app.mcp.builtin_tools.model_tools._get_default_model", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
+             "{}", 1, 1, 2, "{}"),
+
+            # ── 对话管理类 (chat) ──
+            (12, "list_conversations", "对话历史", "列出用户的对话历史记录", "chat", "builtin",
+             "app.mcp.builtin_tools.chat_tools._list_conversations", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{"username":{"type":"string","description":"用户名"},"limit":{"type":"integer","description":"返回数量上限","default":20}}}, ensure_ascii=False),
+             "{}", 1, 1, 1, "{}"),
+            (13, "get_conversation_messages", "对话消息", "获取指定对话的消息历史", "chat", "builtin",
+             "app.mcp.builtin_tools.chat_tools._get_conversation_messages", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{"conversation_id":{"type":"integer","description":"对话ID"},"limit":{"type":"integer","description":"消息数量上限","default":20},"username":{"type":"string","description":"当前用户名"}},"required":["conversation_id"]}, ensure_ascii=False),
+             "{}", 1, 1, 2, "{}"),
+
+            # ── 娱乐类 (entertainment) ──
+            (14, "get_random_music", "随机音乐", "从网易云音乐热歌榜随机推荐歌曲", "entertainment", "builtin",
+             "app.mcp.builtin_tools.entertainment_tools._get_random_music", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
+             "{}", 1, 1, 1, "{}"),
+
+            # ── 爬虫增强类 (crawl4ai) ──
+            (15, "collect_with_crawl4ai", "Crawl4ai智能采集", "使用Crawl4ai对URL进行智能深度采集", "crawl4ai", "builtin",
+             "app.mcp.builtin_tools.crawl4ai_tools._collect_with_crawl4ai", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{"url":{"type":"string","description":"目标URL"},"extract_mode":{"type":"string","enum":["auto","article","full"],"default":"auto"}},"required":["url"]}, ensure_ascii=False),
+             "{}", 1, 1, 1, "{}"),
+            (16, "batch_deep_collect", "批量深度采集", "批量对多个URL进行深度采集", "crawl4ai", "builtin",
+             "app.mcp.builtin_tools.crawl4ai_tools._batch_deep_collect", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{"urls":{"type":"array","items":{"type":"string"},"description":"目标URL列表"},"extract_mode":{"type":"string","enum":["auto","article","full"],"default":"auto"}},"required":["urls"]}, ensure_ascii=False),
+             "{}", 1, 1, 2, "{}"),
+
+            # ── 系统管理类 (system) ──
+            (17, "load_skill", "加载技能", "加载指定技能的完整执行指令", "system", "builtin",
+             "app.mcp.builtin_tools.system_tools._load_skill", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{"skill_name":{"type":"string","description":"技能名称"}},"required":["skill_name"]}, ensure_ascii=False),
+             "{}", 1, 1, 1, "{}"),
+            (18, "get_system_stats", "系统概览", "获取系统统计概览（用户数/数据量/员工数等）", "system", "builtin",
+             "app.mcp.builtin_tools.system_tools._get_system_stats", "", "GET", "{}", "",
+             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
+             "{}", 1, 1, 2, "{}"),
+        ]
+
+        conn.executemany(
+            "INSERT INTO mcp_tools (id, name, display_name, description, category, tool_type, "
+            "handler_module, api_url, api_method, api_headers, api_params_template, "
+            "input_schema, output_schema, is_enabled, is_system, sort_order, config) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            tools_data,
+        )
+        print("[种子] 默认 MCP 工具已创建（18个工具，覆盖7个分类）")

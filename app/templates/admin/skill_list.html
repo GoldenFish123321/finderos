@@ -8,12 +8,6 @@
 .skill-stat-card { flex:1; min-width:120px; background:var(--bg-card); border-radius:var(--radius-md); padding:16px 14px; text-align:center; border:1px solid var(--border-subtle); }
 .skill-stat-card .num { font-size:28px; font-weight:700; background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
 .skill-stat-card .label { font-size:12px; color:var(--text-muted); margin-top:4px; }
-.skill-tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
-.skill-tabs a { padding:6px 16px; border-radius:20px; font-size:13px; color:var(--text-muted); background:var(--bg-card); border:1px solid var(--border-subtle); text-decoration:none; transition:all var(--transition-fast); }
-.skill-tabs a.active, .skill-tabs a:hover { color:#fff; background:var(--accent-blue); border-color:var(--accent-blue); }
-.type-badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; }
-.type-badge.prompt { background:rgba(94,163,255,0.15); color:var(--accent-blue); }
-.type-badge.function { background:rgba(95,184,120,0.15); color:var(--accent-green); }
 </style>
 
 <div class="layui-card">
@@ -26,22 +20,10 @@
         <div class="skill-stats">
             <div class="skill-stat-card"><div class="num">{{ stats['total'] }}</div><div class="label">技能总数</div></div>
             <div class="skill-stat-card"><div class="num">{{ stats['enabled'] }}</div><div class="label">已启用</div></div>
-            <div class="skill-stat-card"><div class="num">{{ stats['prompt_count'] }}</div><div class="label">Prompt 型</div></div>
-            <div class="skill-stat-card"><div class="num">{{ stats['function_count'] }}</div><div class="label">Function 型</div></div>
-        </div>
-
-        <!-- 类型筛选 -->
-        <div class="skill-tabs">
-            <a href="/admin/skill" class="{{ 'active' if not skill_type else '' }}">全部</a>
-            {% for t in skill_types %}
-            <a href="/admin/skill?type={{ t['value'] }}" class="{{ 'active' if skill_type == t['value'] else '' }}">
-                {{ t['name'] }}
-            </a>
-            {% end %}
         </div>
 
         <div class="search-bar">
-            <div style="flex:1;">管理技能库，定义 Prompt 增强模板和 Function 调用映射。创建数字员工时可从技能库中选择组合。</div>
+            <div style="flex:1;">管理技能库，定义 Prompt 模板指令。在模板中直接描述应使用哪些 MCP 工具及用法。创建数字员工时可从技能库中选择组合。</div>
             <a href="/admin/skill/add" class="layui-btn layui-btn-sm"><i class="layui-icon layui-icon-add-1"></i> 新增技能</a>
         </div>
 
@@ -51,8 +33,7 @@
                     <th style="width:60px;">ID</th>
                     <th>技能名称</th>
                     <th>描述</th>
-                    <th style="width:90px;">类型</th>
-                    <th>关联模板/函数</th>
+                    <th>Prompt 模板</th>
                     <th style="width:70px;">状态</th>
                     <th style="width:150px;">操作</th>
                 </tr>
@@ -67,15 +48,8 @@
                     <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ s.get('description','') }}">
                         {{ s.get("description", "—") }}
                     </td>
-                    <td>
-                        <span class="type-badge {{ s['skill_type'] }}">{{ 'Prompt' if s['skill_type'] == 'prompt' else 'Function' }}</span>
-                    </td>
-                    <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ s.get('prompt_template','') or s.get('function_name','') }}">
-                        {% if s['skill_type'] == 'prompt' %}
-                        <code style="padding:2px 6px;border-radius:3px;font-size:11px;">{{ (s.get('prompt_template','') or '—')[:50] }}</code>
-                        {% else %}
-                        <code style="padding:2px 6px;border-radius:3px;font-size:11px;">{{ s.get('function_name','') or '—' }}</code>
-                        {% end %}
+                    <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ s.get('prompt_template','') }}">
+                        <code style="padding:2px 6px;border-radius:3px;font-size:11px;">{{ (s.get('prompt_template','') or '—')[:60] }}</code>
                     </td>
                     <td>
                         {% if s["is_enabled"] %}
@@ -98,7 +72,7 @@
                 </tr>
                 {% end %}
                 {% if not skills %}
-                <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:30px;">暂无技能数据，点击右上角「新增技能」添加</td></tr>
+                <tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:30px;">暂无技能数据，点击右上角「新增技能」添加</td></tr>
                 {% end %}
             </tbody>
         </table>

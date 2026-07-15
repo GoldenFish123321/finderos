@@ -22,7 +22,16 @@ TEST_DB_PATH = _temp_db.name
 _temp_db.close()
 
 import app.config.settings as settings
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+_ORIGINAL_SETTINGS_DB_PATH = settings.settings.DB_PATH
+_ORIGINAL_MODULE_DB_PATH = getattr(settings, "DB_PATH", None)
+_ORIGINAL_DB_MODULE_DB_PATH = (
+    _ORIGINAL_SETTINGS_DB_PATH
+    if os.path.isabs(_ORIGINAL_SETTINGS_DB_PATH)
+    else os.path.join(_PROJECT_ROOT, "database", os.path.basename(_ORIGINAL_SETTINGS_DB_PATH))
+)
 settings.DB_PATH = TEST_DB_PATH
+settings.settings.DB_PATH = TEST_DB_PATH
 
 import app.models.db as db_module
 db_module.DB_PATH = TEST_DB_PATH
@@ -33,6 +42,19 @@ def _reset_db_path():
     settings.DB_PATH = TEST_DB_PATH
     settings.settings.DB_PATH = TEST_DB_PATH
     db_module.DB_PATH = TEST_DB_PATH
+
+
+def _restore_db_path():
+    """测试结束后恢复全局 DB 路径，避免污染后续测试模块。"""
+    if _ORIGINAL_MODULE_DB_PATH is None:
+        try:
+            delattr(settings, "DB_PATH")
+        except AttributeError:
+            pass
+    else:
+        settings.DB_PATH = _ORIGINAL_MODULE_DB_PATH
+    settings.settings.DB_PATH = _ORIGINAL_SETTINGS_DB_PATH
+    db_module.DB_PATH = _ORIGINAL_DB_MODULE_DB_PATH
 
 
 def _setup_test_db():
@@ -93,14 +115,12 @@ def _seed_test_data():
 
     # 创建技能
     conn.execute(
-        "INSERT INTO skills (name, description, skill_type, function_name, function_params) "
-        "VALUES (?, ?, ?, ?, ?)",
-        ("数据搜索", "在数据仓库中搜索", "function", "search_warehouse", '{"keyword":"test"}'),
+        "INSERT INTO skills (name, description, prompt_template) VALUES (?, ?, ?)",
+        ("数据搜索", "在数据仓库中搜索", "使用 search_warehouse 工具搜索关键词"),
     )
     conn.execute(
-        "INSERT INTO skills (name, description, skill_type, function_name, function_params) "
-        "VALUES (?, ?, ?, ?, ?)",
-        ("深度采集", "深度抓取网页", "function", "deep_collect_url", '{"url":"test"}'),
+        "INSERT INTO skills (name, description, prompt_template) VALUES (?, ?, ?)",
+        ("深度采集", "深度抓取网页", "使用 deep_collect_url 工具采集URL内容"),
     )
 
     # 创建模型（最小字段集）
@@ -153,6 +173,7 @@ class TestEmployeeUISkillsDisplay(unittest.TestCase):
     def tearDownClass(cls):
         if os.path.exists(TEST_DB_PATH):
             os.remove(TEST_DB_PATH)
+        _restore_db_path()
 
     def test_skills_list_are_strings_not_dicts(self):
         """Bug #32: 验证 skills_list 中的元素是字符串（技能名称），而非 dict。"""
@@ -261,6 +282,7 @@ class TestEmployeeUIResolutionEdgeCases(unittest.TestCase):
     def tearDownClass(cls):
         if os.path.exists(TEST_DB_PATH):
             os.remove(TEST_DB_PATH)
+        _restore_db_path()
 
     def test_empty_skills(self):
         """空技能列表返回空数组。"""
