@@ -1215,7 +1215,8 @@ erDiagram
         int model_id
         string system_prompt
         string skills
-        int crawl4ai_enabled
+        int crawl4ai_enabled      // [v0.6.1 废弃] 改用 mcp_tool_ids
+        string mcp_tool_ids        // [v0.6.1] MCP 工具权限 JSON 数组 "[1,2,3]"
         string api_url
         string api_method
         string api_headers
