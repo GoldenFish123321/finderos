@@ -158,6 +158,9 @@
 
     function initDashboardCharts() {
         var isDark = document.body.classList.contains('dark-theme');
+        // 从后端注入 JSON 数据（{% raw %} 避免 HTML 转义）
+        var collectTrend = {% raw collect_trend or '{"dates":[],"counts":[]}' %};
+        var sourceDist = {% raw source_distribution or '[]' %};
 
         // 采集趋势柱状图
         var trendDom = document.getElementById('chart-collect-trend');
@@ -166,11 +169,11 @@
             trendChart.setOption({
                 tooltip: { trigger: 'axis' },
                 grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-                xAxis: { type: 'category', data: {{ collect_trend['dates'] if collect_trend else '[]' }}.map(function(d){ return d.slice(5); }) },
+                xAxis: { type: 'category', data: collectTrend.dates.map(function(d){ return d.slice(5); }) },
                 yAxis: { type: 'value', minInterval: 1 },
                 series: [{
                     name: '采集量', type: 'bar',
-                    data: {{ collect_trend['counts'] if collect_trend else '[]' }},
+                    data: collectTrend.counts,
                     itemStyle: {
                         borderRadius: [4, 4, 0, 0],
                         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
@@ -201,7 +204,7 @@
                     emphasis: {
                         label: { show: true, fontSize: 14, fontWeight: 'bold' }
                     },
-                    data: {{ source_distribution if source_distribution else '[]' }}
+                    data: sourceDist
                 }]
             });
             new ResizeObserver(function(){ pieChart.resize(); }).observe(pieDom);
