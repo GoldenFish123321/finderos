@@ -1321,6 +1321,10 @@ function renderInfoCard(container, card) {
     const typingEl = container.querySelector('.typing-indicator');
     if (typingEl) typingEl.remove();
 
+    // 将卡片添加到消息气泡外层，避免被后续流式文本 innerHTML 覆盖
+    const bubble = container.closest('.chat-msg');
+    const targetEl = bubble || container;
+
     const cardDiv = document.createElement('div');
     cardDiv.className = 'info-card';
 
@@ -1391,7 +1395,7 @@ function renderInfoCard(container, card) {
 
     cardHtml += '</div>';
     cardDiv.innerHTML = cardHtml;
-    container.appendChild(cardDiv);
+    targetEl.appendChild(cardDiv);
     scrollToBottom();
 }
 
