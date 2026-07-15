@@ -9,6 +9,7 @@ migrate_db.py — 数据库迁移脚本
   v0.2.5 — 添加 ai_models.total_tokens (Token 累加统计)
   v0.2.5 — 添加 audit_logs 表 (操作审计日志)
   v0.2.5 — 添加安全相关索引
+  v0.4.1 — 添加 api_interfaces 表与 digital_employees.api_interface_id
 
 Usage:
   python migrate_db.py              # 执行待处理迁移
@@ -89,6 +90,48 @@ def run_migrations():
             "name": "idx_dw_title_source",
             "sql": "CREATE UNIQUE INDEX IF NOT EXISTS idx_dw_title_source ON data_warehouse(title, source_name) WHERE (link IS NULL OR link = '')",
             "check": lambda c: _index_exists(c, "idx_dw_title_source"),
+        },
+        # v0.4.1: 接口管理模块
+        {
+            "name": "create_api_interfaces",
+            "sql": """
+                CREATE TABLE IF NOT EXISTS api_interfaces (
+                    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name                     TEXT UNIQUE NOT NULL,
+                    description              TEXT DEFAULT '',
+                    api_url                  TEXT NOT NULL,
+                    api_method               TEXT DEFAULT 'GET',
+                    api_headers              TEXT DEFAULT '{}',
+                    api_params_template      TEXT DEFAULT '',
+                    response_render_template TEXT DEFAULT '',
+                    api_secret               TEXT DEFAULT '',
+                    is_enabled               INTEGER DEFAULT 1,
+                    sort_order               INTEGER DEFAULT 0,
+                    created_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """,
+            "check": lambda c: _table_exists(c, "api_interfaces"),
+        },
+        {
+            "name": "add_digital_employees_api_interface_id",
+            "sql": "ALTER TABLE digital_employees ADD COLUMN api_interface_id INTEGER DEFAULT NULL",
+            "check": lambda c: _column_exists(c, "digital_employees", "api_interface_id"),
+        },
+        {
+            "name": "idx_api_interfaces_enabled",
+            "sql": "CREATE INDEX IF NOT EXISTS idx_api_interfaces_enabled ON api_interfaces(is_enabled)",
+            "check": lambda c: _index_exists(c, "idx_api_interfaces_enabled"),
+        },
+        {
+            "name": "idx_api_interfaces_name",
+            "sql": "CREATE INDEX IF NOT EXISTS idx_api_interfaces_name ON api_interfaces(name)",
+            "check": lambda c: _index_exists(c, "idx_api_interfaces_name"),
+        },
+        {
+            "name": "idx_digital_employees_api_interface",
+            "sql": "CREATE INDEX IF NOT EXISTS idx_digital_employees_api_interface ON digital_employees(api_interface_id)",
+            "check": lambda c: _index_exists(c, "idx_digital_employees_api_interface"),
         },
     ]
 

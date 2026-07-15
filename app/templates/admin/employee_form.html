@@ -106,6 +106,28 @@
             <!-- === API 型字段 === -->
             <div class="api-fields {{ 'active' if employee and employee['employee_type'] == 'api' else '' }}">
                 <div class="layui-form-item">
+                    <label class="layui-form-label">接口模板</label>
+                    <div class="layui-input-block">
+                        <select name="api_interface_id" id="api-interface-select" lay-filter="apiInterface">
+                            <option value="">-- 手动配置或选择接口模板 --</option>
+                            {% for iface in api_interfaces %}
+                            <option value="{{ iface['id'] }}"
+                                    data-url="{{ iface.get('api_url','') }}"
+                                    data-method="{{ iface.get('api_method','GET') }}"
+                                    data-headers="{{ iface.get('api_headers','{}') }}"
+                                    data-params="{{ iface.get('api_params_template','') }}"
+                                    data-response="{{ iface.get('response_render_template','') }}"
+                                    {% if employee and employee.get('api_interface_id') == iface['id'] %}selected{% end %}>
+                                {{ iface['name'] }} ({{ iface.get('api_method','GET') }}){% if iface.get('is_enabled') != 1 %} — 已禁用{% end %}
+                            </option>
+                            {% end %}
+                        </select>
+                        <div class="layui-form-mid layui-word-aux">
+                            选择后自动填充 URL、Method、Headers、参数模板和响应模板；接口密钥在服务端复用，不会回显。
+                        </div>
+                    </div>
+                </div>
+                <div class="layui-form-item">
                     <label class="layui-form-label">API URL</label>
                     <div class="layui-input-block">
                         <input type="text" name="api_url" class="layui-input"
@@ -119,6 +141,9 @@
                         <select name="api_method">
                             <option value="GET" {% if employee and employee.get('api_method')=='GET' %}selected{% end %}>GET</option>
                             <option value="POST" {% if employee and employee.get('api_method')=='POST' %}selected{% end %}>POST</option>
+                            <option value="PUT" {% if employee and employee.get('api_method')=='PUT' %}selected{% end %}>PUT</option>
+                            <option value="PATCH" {% if employee and employee.get('api_method')=='PATCH' %}selected{% end %}>PATCH</option>
+                            <option value="DELETE" {% if employee and employee.get('api_method')=='DELETE' %}selected{% end %}>DELETE</option>
                         </select>
                     </div>
                 </div>
@@ -148,6 +173,7 @@
                     <div class="layui-input-block">
                         <input type="password" name="api_secret" class="layui-input"
                                value="" placeholder="{{ '留空则不修改' if employee else 'API 认证密钥' }}">
+                        <div class="layui-form-mid layui-word-aux">若已选择含密钥的接口模板且此处留空，将复用接口模板密钥。</div>
                     </div>
                 </div>
             </div>
@@ -226,6 +252,34 @@ layui.use(['form'], function(){
     if (checkedType){
         document.querySelector('.llm-fields').classList.toggle('active', checkedType.value === 'llm');
         document.querySelector('.api-fields').classList.toggle('active', checkedType.value === 'api');
+    }
+
+    // 接口模板联动：选择接口后自动填充 API 型员工配置
+    function fillApiFromSelectedInterface(){
+        var sel = document.getElementById('api-interface-select');
+        if (!sel || !sel.value) return;
+        var opt = sel.options[sel.selectedIndex];
+        var fields = {
+            api_url: opt.getAttribute('data-url') || '',
+            api_headers: opt.getAttribute('data-headers') || '{}',
+            api_params_template: opt.getAttribute('data-params') || '',
+            response_render_template: opt.getAttribute('data-response') || ''
+        };
+        Object.keys(fields).forEach(function(name){
+            var el = document.querySelector('[name="' + name + '"]');
+            if (el) el.value = fields[name];
+        });
+        var method = opt.getAttribute('data-method') || 'GET';
+        var methodSelect = document.querySelector('[name="api_method"]');
+        if (methodSelect) {
+            methodSelect.value = method;
+            form.render('select');
+        }
+    }
+    var interfaceSelect = document.getElementById('api-interface-select');
+    if (interfaceSelect) {
+        interfaceSelect.addEventListener('change', fillApiFromSelectedInterface);
+        form.on('select(apiInterface)', fillApiFromSelectedInterface);
     }
 });
 </script>

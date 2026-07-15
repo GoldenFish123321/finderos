@@ -15,8 +15,16 @@ from app.models.digital_employee import (
     DigitalEmployeeRepository, EMPLOYEE_TYPES,
 )
 from app.models.ai_model import AiModelRepository
+from app.models.api_interface import (
+    ApiInterfaceRepository,
+    normalize_api_method,
+    normalize_headers,
+    redact_sensitive_headers,
+    restore_redacted_headers,
+)
 from app.models.data_warehouse import DataWarehouseRepository
-from app.utils.security import write_audit_log
+from app.utils.security import has_crlf, write_audit_log
+from app.utils.safe_http import SafeHttpError, safe_http_request
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +100,13 @@ class EmployeeFormHandler(AdminBaseHandler):
         # 获取启用的模型列表（供 LLM 型选择模型）
         models, _ = AiModelRepository.get_all(page=1, page_size=50)
         enabled_models = [m for m in models if m.get("is_enabled") == 1]
+        current_interface_id = emp.get("api_interface_id") if emp else None
+        if emp and emp.get("api_headers"):
+            # 不在员工编辑页回显 Authorization / Cookie / X-API-Key 等敏感 Header；
+            # 若用户不改动脱敏值，POST 时恢复为原始 headers，避免误保存 ******。
+            emp = dict(emp)
+            emp["api_headers"] = redact_sensitive_headers(emp.get("api_headers", "{}"))
+        api_interfaces = ApiInterfaceRepository.get_for_employee_form(current_interface_id)
 
         self.render(
             "admin/employee_form.html",
@@ -100,6 +115,7 @@ class EmployeeFormHandler(AdminBaseHandler):
             employee=emp,
             employee_types=EMPLOYEE_TYPES,
             models=enabled_models,
+            api_interfaces=api_interfaces,
         )
 
     @tornado.web.authenticated
@@ -127,18 +143,74 @@ class EmployeeFormHandler(AdminBaseHandler):
 
         # API 型字段
         api_url = self.get_body_argument("api_url", "").strip()
-        api_method = self.get_body_argument("api_method", "GET").strip().upper()
-        api_headers_raw = self.get_body_argument("api_headers", "{}").strip()
+        api_method_raw = self.get_body_argument("api_method", "").strip()
+        api_method = normalize_api_method(api_method_raw or "GET")
+        api_headers_raw = self.get_body_argument("api_headers", "").strip()
         api_params_template = self.get_body_argument("api_params_template", "").strip()
         response_render_template = self.get_body_argument("response_render_template", "").strip()
         api_secret = self.get_body_argument("api_secret", "").strip()
-
-        # 验证 API Headers JSON 格式
+        api_interface_id_str = self.get_body_argument("api_interface_id", "").strip()
         try:
-            api_headers_parsed = json.loads(api_headers_raw) if api_headers_raw else {}
-            api_headers = json.dumps(api_headers_parsed, ensure_ascii=False)
-        except (json.JSONDecodeError, TypeError):
-            api_headers = "{}"
+            api_interface_id = int(api_interface_id_str) if api_interface_id_str else None
+        except (ValueError, TypeError):
+            self.write('<script>alert("接口模板ID格式不正确");window.history.back();</script>')
+            return
+
+        existing_emp = None
+        if emp_id:
+            try:
+                existing_emp = DigitalEmployeeRepository.get_by_id(int(emp_id))
+            except (ValueError, TypeError):
+                existing_emp = None
+
+        current_bound_interface = False
+        if employee_type == "api" and api_interface_id:
+            interface = ApiInterfaceRepository.get_by_id(api_interface_id)
+            current_bound_interface = bool(existing_emp and existing_emp.get("api_interface_id") == api_interface_id)
+            if not interface or (interface.get("is_enabled") != 1 and not current_bound_interface):
+                self.write('<script>alert("所选接口模板不存在或已禁用");window.history.back();</script>')
+                return
+            # 创建时支持无 JS/未填字段的服务端兜底；编辑时尊重显式清空/覆盖。
+            is_create = not bool(emp_id)
+            if is_create and not api_url:
+                api_url = interface.get("api_url", "")
+            if is_create and not api_method_raw:
+                api_method = interface.get("api_method", "GET")
+            if (
+                is_create and (not api_headers_raw or api_headers_raw == "{}")
+            ) and interface.get("api_headers"):
+                api_headers_raw = interface.get("api_headers", "{}")
+            elif interface.get("api_headers") and not current_bound_interface:
+                restored_headers = restore_redacted_headers(api_headers_raw or "{}", interface.get("api_headers", "{}"))
+                if restored_headers is not None:
+                    api_headers_raw = restored_headers
+            if is_create and not api_params_template:
+                api_params_template = interface.get("api_params_template", "")
+            if is_create and not response_render_template:
+                response_render_template = interface.get("response_render_template", "")
+            # 仅创建时复制接口密钥；编辑留空仍按 Repository 语义保留员工原密钥。
+            if is_create and not api_secret:
+                api_secret = interface.get("api_secret", "")
+        elif employee_type != "api":
+            api_interface_id = None
+
+        if (
+            employee_type == "api"
+            and existing_emp
+            and (not api_interface_id or current_bound_interface)
+        ):
+            restored_headers = restore_redacted_headers(api_headers_raw or "{}", existing_emp.get("api_headers", "{}"))
+            if restored_headers is not None:
+                api_headers_raw = restored_headers
+
+        api_method = normalize_api_method(api_method)
+        api_headers = normalize_headers(api_headers_raw or "{}")
+        if api_headers is None:
+            self.write('<script>alert("API Headers 必须是 JSON 对象，且不能包含换行字符");window.history.back();</script>')
+            return
+        if api_secret and has_crlf(api_secret):
+            self.write('<script>alert("API 密钥包含非法换行字符");window.history.back();</script>')
+            return
 
         if not name:
             self.write('<script>alert("员工名称不能为空");window.history.back();</script>')
@@ -155,7 +227,7 @@ class EmployeeFormHandler(AdminBaseHandler):
                 emp_id, name, employee_type, description,
                 model_id, system_prompt, skills_json, crawl4ai_enabled,
                 api_url, api_method, api_headers, api_params_template,
-                response_render_template, api_secret,
+                response_render_template, api_secret, api_interface_id,
             )
             msg = "更新成功" if ok else "更新失败"
             write_audit_log(
@@ -170,7 +242,7 @@ class EmployeeFormHandler(AdminBaseHandler):
                 name, employee_type, description,
                 model_id, system_prompt, skills_json, crawl4ai_enabled,
                 api_url, api_method, api_headers, api_params_template,
-                response_render_template, api_secret,
+                response_render_template, api_secret, api_interface_id,
             )
             msg = "创建成功" if new_id > 0 else "创建失败"
             if new_id > 0:
@@ -592,7 +664,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
     async def _invoke_api_employee(self, emp: dict, message: str):
         """API 型员工调用：HTTP 代理 → JSON 响应。"""
         api_url = emp.get("api_url", "")
-        api_method = emp.get("api_method", "GET")
+        api_method = normalize_api_method(emp.get("api_method", "GET"))
         api_headers_raw = emp.get("api_headers", "{}")
         api_params = emp.get("api_params_template", "")
         api_secret = emp.get("api_secret", "")
@@ -605,8 +677,8 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         try:
             import urllib.parse
             encoded_msg = urllib.parse.quote(message, safe="", encoding="utf-8")
-            api_url = api_url.replace("{message}", encoded_msg)
-            api_params = api_params.replace("{message}", encoded_msg)
+            api_url = api_url.replace("{message}", encoded_msg).replace("{message_raw}", encoded_msg)
+            api_params = api_params.replace("{message}", encoded_msg).replace("{message_raw}", message)
         except Exception as e:
             logger.warning(f"URL 模板替换失败: {e}，使用原始 URL")
 
@@ -617,14 +689,18 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         except Exception:
             pass
 
-        # 解析 headers
-        try:
-            headers = json.loads(api_headers_raw) if api_headers_raw else {}
-        except (json.JSONDecodeError, TypeError):
-            headers = {}
+        normalized_headers = normalize_headers(api_headers_raw or "{}")
+        if normalized_headers is None:
+            self.write({"code": 1, "msg": "API Headers 配置非法"})
+            return
+        headers = json.loads(normalized_headers)
 
         if api_secret:
-            headers["Authorization"] = f"Bearer {api_secret}"
+            if has_crlf(api_secret):
+                self.write({"code": 1, "msg": "API 密钥配置非法"})
+                return
+            if not any(str(k).lower() == "authorization" for k in headers):
+                headers["Authorization"] = f"Bearer {api_secret}"
 
         from app.utils.security import validate_url_safe
         safe, reason, _ = validate_url_safe(api_url)
@@ -632,26 +708,35 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             self.write({"code": 1, "msg": f"API URL 不安全: {reason}"})
             return
 
-        import urllib.request
-        import urllib.error
-
         def _sync_api_call():
             try:
+                request_url = api_url
+                data = None
                 if api_method == "POST":
                     data = api_params.encode('utf-8') if api_params else None
-                    req = urllib.request.Request(api_url, data=data, headers=headers, method="POST")
                 elif api_method == "GET":
-                    full_url = api_url
                     if api_params:
-                        full_url += ("&" if "?" in api_url else "?") + api_params
-                    req = urllib.request.Request(full_url, headers=headers, method="GET")
+                        request_url += ("&" if "?" in api_url else "?") + api_params
                 else:
                     # PUT, DELETE, PATCH 等方法
                     data = api_params.encode('utf-8') if api_params else None
-                    req = urllib.request.Request(api_url, data=data, headers=headers, method=api_method)
-                with urllib.request.urlopen(req, timeout=30) as resp:
-                    body = resp.read().decode("utf-8", errors="replace")
-                    return resp.status, body, None
+                request_url = urllib.parse.quote(
+                    request_url, safe=":/?#[]@!$&'()*+,;=%-", encoding="utf-8"
+                )
+                resp = safe_http_request(
+                    request_url,
+                    method=api_method,
+                    headers=headers,
+                    body=data,
+                    timeout=30,
+                    max_bytes=256 * 1024,
+                )
+                body = resp.body.decode("utf-8", errors="replace")
+                if resp.status >= 400:
+                    return resp.status, body, f"HTTP {resp.status}: {body[:500]}"
+                return resp.status, body, None
+            except SafeHttpError as e:
+                return 0, "", str(e)
             except Exception as e:
                 return 0, "", str(e)
 

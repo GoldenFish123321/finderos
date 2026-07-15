@@ -1,0 +1,190 @@
+{% extends "base_layout.html" %}
+
+{% block admin_content %}
+<style>
+.iface-stat { display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+.iface-stat .stat-pill { padding:8px 12px; border:1px solid var(--border-subtle); border-radius:8px; background:var(--bg-card); color:var(--text-secondary); font-size:13px; }
+.iface-url { max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.test-result-box { background:#0b1020; color:#d6e2ff; border-radius:8px; padding:12px; max-height:360px; overflow:auto; font-size:12px; white-space:pre-wrap; word-break:break-all; }
+</style>
+
+<div class="layui-card">
+    <div class="layui-card-header"><i class="layui-icon layui-icon-link"></i> 接口管理</div>
+    <div class="layui-card-body">
+        <div class="iface-stat">
+            <span class="stat-pill">接口总数：<b>{{ stats['total'] }}</b></span>
+            <span class="stat-pill">已启用：<b>{{ stats['enabled'] }}</b></span>
+            <span class="stat-pill">用途：API 型数字员工接口复用与联动填充</span>
+        </div>
+
+        <div class="search-bar">
+            <input type="text" class="layui-input" id="search-kw" placeholder="搜索接口名称/描述/URL..." value="{{ keyword }}">
+            <button class="layui-btn layui-btn-normal" id="btn-search">
+                <i class="layui-icon layui-icon-search"></i> 搜索
+            </button>
+            <a href="/admin/interface/add" class="layui-btn">
+                <i class="layui-icon layui-icon-add-1"></i> 新增接口
+            </a>
+            {% if msg %}
+            <span class="msg-tip">{{ msg }}</span>
+            {% end %}
+        </div>
+
+        <table class="layui-table" lay-size="sm">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>名称</th>
+                    <th>方法</th>
+                    <th>URL</th>
+                    <th>状态</th>
+                    <th>排序</th>
+                    <th>更新时间</th>
+                    <th style="min-width:220px;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if interfaces %}
+                {% for iface in interfaces %}
+                <tr>
+                    <td>{{ iface['id'] }}</td>
+                    <td>
+                        <b>{{ iface['name'] }}</b>
+                        {% if iface.get('description') %}
+                        <div style="color:var(--text-muted);font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                             title="{{ iface.get('description','') }}">{{ iface.get('description','') }}</div>
+                        {% end %}
+                    </td>
+                    <td><span class="layui-badge layui-bg-blue">{{ iface.get('api_method','GET') }}</span></td>
+                    <td class="iface-url" title="{{ iface.get('api_url','') }}"><code>{{ iface.get('api_url','') }}</code></td>
+                    <td>
+                        {% if iface['is_enabled'] == 1 %}
+                        <span class="layui-badge layui-bg-green">启用</span>
+                        {% else %}
+                        <span class="layui-badge">禁用</span>
+                        {% end %}
+                    </td>
+                    <td>{{ iface.get('sort_order', 0) }}</td>
+                    <td>{{ (iface.get('updated_at') or iface.get('created_at') or '')[:19] }}</td>
+                    <td>
+                        <div class="layui-btn-group">
+                            <button type="button" class="layui-btn layui-btn-xs js-test-interface"
+                                    data-id="{{ iface['id'] }}" data-name="{{ iface['name'] }}">
+                                <i class="layui-icon layui-icon-play"></i> 测试
+                            </button>
+                            <a href="/admin/interface/edit?id={{ iface['id'] }}" class="layui-btn layui-btn-xs layui-btn-normal">
+                                <i class="layui-icon layui-icon-edit"></i> 编辑
+                            </a>
+                            <form action="/admin/interface/toggle" method="post" style="display:inline;">
+                                {% module xsrf_form_html() %}
+                                <input type="hidden" name="id" value="{{ iface['id'] }}">
+                                <button type="submit" class="layui-btn layui-btn-xs layui-btn-warm">
+                                    {{ '禁用' if iface['is_enabled'] == 1 else '启用' }}
+                                </button>
+                            </form>
+                            <form action="/admin/interface/delete" method="post" style="display:inline;">
+                                {% module xsrf_form_html() %}
+                                <input type="hidden" name="id" value="{{ iface['id'] }}">
+                                <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger js-delete-confirm"
+                                        data-confirm-name="{{ iface['name'] }}">
+                                    删除
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% end %}
+                {% else %}
+                <tr><td colspan="8" class="empty-state">
+                    <i class="layui-icon layui-icon-face-surprised"></i><p>暂无接口模板</p>
+                </td></tr>
+                {% end %}
+            </tbody>
+        </table>
+
+        {% if total_pages > 1 %}
+        <div style="text-align:center;">
+            <div id="iface-pagination"></div>
+        </div>
+        {% end %}
+    </div>
+</div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+layui.use(['laypage', 'jquery', 'form', 'layer'], function(){
+    var laypage = layui.laypage, $ = layui.$, form = layui.form, layer = layui.layer;
+    var xsrf = "{{ xsrf_token }}";
+    form.render();
+
+    {% if total_pages > 1 %}
+    laypage.render({
+        elem: 'iface-pagination', count: {{ total }}, limit: 20, curr: {{ page }},
+        layout: ['prev', 'page', 'next', 'skip', 'count'],
+        jump: function(obj, first){
+            if (!first) {
+                var url = '/admin/interface?page=' + obj.curr;
+                var kw = $('#search-kw').val();
+                if (kw) url += '&keyword=' + encodeURIComponent(kw);
+                location.href = url;
+            }
+        }
+    });
+    {% end %}
+
+    $('#btn-search').click(function(){
+        var kw = $('#search-kw').val();
+        location.href = '/admin/interface' + (kw ? '?keyword=' + encodeURIComponent(kw) : '');
+    });
+    $('#search-kw').keydown(function(e){ if (e.keyCode === 13) $('#btn-search').click(); });
+
+    $('.js-delete-confirm').on('click', function(e) {
+        var name = this.getAttribute('data-confirm-name') || '(未知)';
+        if (!confirm('确定删除接口模板「' + name + '」吗？')) {
+            e.preventDefault();
+        }
+    });
+
+    $('.js-test-interface').on('click', function(){
+        var id = this.getAttribute('data-id');
+        var name = this.getAttribute('data-name') || '接口';
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"']/g, function(ch) {
+                return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch];
+            });
+        }
+        var body = '<div style="padding:16px;">'
+            + '<div class="layui-form-item"><label class="layui-form-label">测试消息</label>'
+            + '<div class="layui-input-block"><input id="iface-test-msg" class="layui-input" value="成都" placeholder="用于替换 {message} 占位符"></div></div>'
+            + '<pre id="iface-test-result" class="test-result-box">点击“开始测试”后显示响应...</pre>'
+            + '</div>';
+        layer.open({
+            type: 1,
+            title: '测试接口：' + escapeHtml(name),
+            area: ['720px', '520px'],
+            content: body,
+            btn: ['开始测试', '关闭'],
+            yes: function(index, layero){
+                var msg = layero.find('#iface-test-msg').val() || 'test';
+                var resultBox = layero.find('#iface-test-result');
+                resultBox.text('请求中...');
+                $.ajax({
+                    url: '/admin/interface/test',
+                    method: 'POST',
+                    dataType: 'json',
+                    data: {_xsrf: xsrf, id: id, message: msg},
+                    success: function(resp){
+                        resultBox.text(JSON.stringify(resp, null, 2));
+                    },
+                    error: function(xhr){
+                        resultBox.text('请求失败：' + xhr.status + '\\n' + xhr.responseText);
+                    }
+                });
+                return false;
+            }
+        });
+    });
+});
+</script>
+{% end %}

@@ -53,6 +53,7 @@
 ```
 � 智能问数 — 用户前台 AI 对话         — A/B/C/D/E 五区布局 + SSE 流式 + 多轮对话
 🤖 数字员工 — @ 触发智能 Agent         — 天气/采集专员/文案编写/新闻聚合/科普助手等 7 个
+🔗 接口管理 — API 模板复用与测试       — 数字员工 API 型配置一键联动填充
 📊 报表呈现 — ECharts 交互图表         — 柱状图/折线图/饼图/散点图 + 数据表格
 �🔐 用户认证与 RBAC 权限管理          — 安全的密码存储、登录限速、审计日志
 🔭 瞭望采集 — 可配置的 Web 采集引擎    — 百度/搜狗新闻等多源采集 + SSRF 防护
@@ -185,6 +186,7 @@ DataFinderAgentOS/
 │   │   ├── admin_watch_source.py # 瞭望源管理 CRUD + 启用/禁用
 │   │   ├── admin_warehouse.py    # 数据仓库列表/详情/单删/批量删除 + 深度采集
 │   │   ├── admin_model.py        # 模型引擎 CRUD + SSE 流式对话 + 多轮对话 API
+│   │   ├── admin_interface.py    # 接口管理 CRUD + 接口测试 + 员工联动
 │   │   └── admin_employee.py     # 数字化员工 CRUD + SSE 调用 + 测试页
 │   │
 │   ├── models/                   # 数据模型层（Repository 模式）
@@ -197,6 +199,7 @@ DataFinderAgentOS/
 │   │   ├── watch_result.py       # WatchResultRepository — 采集结果仓储
 │   │   ├── data_warehouse.py     # DataWarehouseRepository — 数据仓库仓储
 │   │   ├── ai_model.py           # AiModelRepository — AI 模型仓储
+│   │   ├── api_interface.py      # ApiInterfaceRepository — API 接口模板仓储
 │   │   ├── conversation.py       # ConversationRepository — 对话管理仓储（v0.3）
 │   │   └── digital_employee.py   # DigitalEmployeeRepository — 数字员工仓储（v0.3）
 │   │
@@ -240,6 +243,8 @@ DataFinderAgentOS/
 │   │       ├── model_list.html        # 模型引擎列表
 │   │       ├── model_form.html        # 模型表单
 │   │       ├── model_chat.html        # AI 流式对话界面
+│   │       ├── interface_list.html    # 接口模板列表 + 测试弹窗
+│   │       ├── interface_form.html    # 接口模板新增/编辑 + 草稿测试
 │   │       ├── employee_list.html     # 数字员工列表（v0.3）
 │   │       ├── employee_form.html     # 数字员工表单（v0.3）
 │   │       ├── employee_test.html     # 数字员工测试页（v0.3）
@@ -386,6 +391,7 @@ python migrate_db.py --status
 | v0.2.5 | 添加 `ai_models.total_tokens`（Token 累加统计） |
 | v0.2.5 | 添加 `audit_logs` 表（操作审计日志） |
 | v0.2.5 | 添加安全相关索引 |
+| v0.4.1 | 添加 `api_interfaces` 表与 `digital_employees.api_interface_id`（接口管理联动） |
 
 > 迁移脚本具有**幂等性**：重复执行不会破坏已有数据。
 
@@ -852,7 +858,16 @@ data: {"tokens": 42, "mock": false}
 | **LLM 型** | 绑定 AI 模型 + 系统提示词 + 技能列表 + 可选 Crawl4ai | 复杂推理、数据分析、文案撰写、深度采集 |
 | **API 型** | HTTP/HTTPS API + 参数模板 + 响应渲染模板 | 天气查询、新闻获取等外部服务调用 |
 
-#### 9.2 默认数字员工（7个）
+#### 9.2 接口管理联动（Issue #26）
+
+管理侧新增 `/admin/interface` **接口管理模块**，用于维护可复用 API 接口模板：
+
+- 接口模板字段：名称、描述、URL、请求方法、Headers、参数模板、响应渲染模板、接口密钥、启用状态、排序。
+- 支持在接口列表或表单页发起**接口测试**，测试与员工调用统一执行 URL 协议校验、SSRF 防护、DNS 固定解析、禁止自动重定向和 Header CRLF 检测。
+- 创建/编辑 **API 型数字员工** 时可选择接口模板，前端自动填充 URL / Method / Headers / Params / Response Template。
+- 接口密钥使用现有 Fernet 加密能力存储；联动创建员工时在服务端复用，不通过接口列表 API 回显；`Authorization` / `Cookie` / `X-API-Key` 等敏感 Header 在联动 API 与表单中脱敏展示。
+
+#### 9.3 默认数字员工（7个）
 
 | 员工 | 类型 | 核心能力 |
 |------|------|---------|
@@ -864,14 +879,14 @@ data: {"tokens": 42, "mock": false}
 | 📰 **新闻聚合** | LLM | 新闻检索、热点追踪、每日简报 |
 | 📚 **科普助手** | LLM | 百科问答、知识科普、概念解释 |
 
-#### 9.3 调用方式
+#### 9.4 调用方式
 
 - **后台测试**：`/admin/employee/test` 对话测试页面
 - **后台调用**：`POST /admin/employee/invoke` SSE 流式 API
 - **前台 @ 触发**：用户在输入框中输入 `@天气 成都` 自动匹配并调用
 - **数据仓库注入**：LLM 型员工自动注数据仓库查询结果作为上下文
 
-#### 9.4 LLM 型员工特性
+#### 9.5 LLM 型员工特性
 
 - **模型回退**：员工绑定模型 → 系统默认模型 → 第一个启用模型
 - **工具调用**：自动识别意图（数据仓库查询/统计/深度采集）并执行
@@ -987,6 +1002,19 @@ data: {"tokens": 42, "mock": false}
 | POST | `/admin/model/chat/stream` | **SSE 流式对话**（需设置 `Accept: text/event-stream`） |
 | GET | `/admin/api/model/list` | 模型 JSON API（返回已启用模型列表） |
 
+#### 接口管理（Issue #26）
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/interface` | 接口模板列表（`?page=&keyword=`） |
+| GET | `/admin/interface/add` | 新增接口模板页面 |
+| POST | `/admin/interface/add` | 提交新增接口模板 |
+| GET | `/admin/interface/edit` | 编辑接口模板页面（`?id=`） |
+| POST | `/admin/interface/edit` | 提交编辑接口模板 |
+| POST | `/admin/interface/delete` | 删除接口模板 |
+| POST | `/admin/interface/toggle` | 启用/禁用接口模板 |
+| POST | `/admin/interface/test` | 测试接口模板（支持已保存接口或表单草稿配置） |
+| GET | `/admin/api/interface/list` | 已启用接口模板 JSON API（供 API 型数字员工联动） |
+
 #### 数字化员工（v0.3）
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -1036,6 +1064,7 @@ erDiagram
     functions ||--o| functions : "parent_id"
     watch_sources ||--o{ watch_results : "source_id"
     watch_results ||--o| data_warehouse : "result_id"
+    api_interfaces ||--o{ digital_employees : "api_interface_id"
     audit_logs {
         int id PK
         string action
@@ -1076,6 +1105,21 @@ erDiagram
         timestamp deep_collected_at
         timestamp created_at
     }
+    api_interfaces {
+        int id PK
+        string name
+        string description
+        string api_url
+        string api_method
+        string api_headers
+        string api_params_template
+        string response_render_template
+        string api_secret
+        int is_enabled
+        int sort_order
+        timestamp created_at
+        timestamp updated_at
+    }
     conversations {
         int id PK
         string username
@@ -1107,6 +1151,7 @@ erDiagram
         string api_params_template
         string response_render_template
         string api_secret
+        int api_interface_id
         int is_enabled
         timestamp created_at
     }
@@ -1124,6 +1169,7 @@ erDiagram
 | `watch_results` | 原始采集结果 | 100 ~ 100000 | `source_id` |
 | `data_warehouse` | 独立数据仓库 | 100 ~ 100000 | `link`(UNIQUE) |
 | `ai_models` | AI 模型配置 | 3 ~ 50 | `is_default` |
+| `api_interfaces` | API 接口模板 | 3 ~ 100 | `name`(UNIQUE), `is_enabled` |
 | `audit_logs` | 操作审计日志 | 自动增长 | `action`, `username`, `created_at` |
 | `conversations` | 对话元信息表 | 10 ~ 10000 | `username` |
 | `conversation_messages` | 对话消息表 | 100 ~ 100000 | `conversation_id` (CASCADE) |
@@ -1257,6 +1303,7 @@ python migrate_db.py --status
 | v0.2.5 | 添加 `audit_logs` 表（操作审计日志，含 3 个索引） |
 | v0.2.5 | 添加安全相关索引（`audit_logs.action`、`audit_logs.username`、`audit_logs.created_at`） |
 | v0.2.13 | 添加 `data_warehouse` 独立表（标题/链接/摘要/来源 + URL 去重索引） |
+| v0.4.1 | 添加 `api_interfaces` 表与 `digital_employees.api_interface_id`（接口模板联动 API 型员工） |
 
 > 迁移脚本具有**幂等性**：重复执行不会破坏已有数据。使用 `ALTER TABLE ADD COLUMN`（列不存在时静默跳过）和 `CREATE TABLE IF NOT EXISTS` 确保安全。
 
@@ -1349,7 +1396,7 @@ python make_admin.py --reset --username admin --password newpassword
 
 ## 测试用例
 
-系统已覆盖 6 大模块共 27 项测试用例，详见 `docs/test_case.md`：
+系统已覆盖 7 大模块共 30+ 项测试用例，详见 `docs/test_case.md`：
 
 | 模块 | 测试项数 | 覆盖要点 |
 |------|---------|---------|
@@ -1358,6 +1405,7 @@ python make_admin.py --reset --username admin --password newpassword
 | **角色管理** | 3 | 新增角色+功能授权、系统角色编辑保护（is_system）、系统角色删除保护 |
 | **瞭望采集** | 5 | 关键词采集、瞭望源选择、保存到数据仓库、SSRF 防护（内网地址拦截）、空关键词 |
 | **模型引擎** | 6 | 新增模型、设为默认、Mock 对话（无 API Key）、真实 API 流式对话、Token 统计、审计日志记录 |
+| **接口管理** | 6 | 接口模板 CRUD、安全校验、敏感 Header 脱敏、接口测试、安全 HTTP 调用、API 型数字员工联动创建 |
 | **安全测试** | 5 | XSS 注入（采集内容）、SQL 注入（参数化查询验证）、CSRF Token 校验、密码哈希强度、安全响应头存在性 |
 
 ### 运行测试
@@ -1369,6 +1417,9 @@ python -m pytest test/ -v
 # 运行单个测试文件
 python -m pytest test/test_user_models.py -v
 
+# 运行 Issue #26 接口管理测试
+python -m pytest test/test_issue26_api_interface.py -v
+
 # 运行单个测试方法
 python -m pytest test/test_login_rate_limiter.py::TestLoginRateLimiter::test_rate_limit -v
 ```
@@ -1376,6 +1427,14 @@ python -m pytest test/test_login_rate_limiter.py::TestLoginRateLimiter::test_rat
 ---
 
 ## 更新日志
+
+### v0.4.1 (2026-07) — 管理侧接口管理（Issue #26）
+
+- 🔗 **接口管理模块**：新增 `/admin/interface` 接口模板 CRUD、启用/禁用、列表搜索与接口测试。
+- 🧩 **数字员工联动**：API 型员工表单可选择接口模板，自动填充 URL / Method / Headers / Params / Response Template。
+- 🔐 **密钥安全**：接口密钥加密入库，联动创建员工时服务端复用，不通过接口列表 API 回显。
+- 🛡️ **请求防护**：接口测试与 API 型员工调用共用安全 HTTP 工具，固定已校验 DNS 解析结果、拒绝内网地址、禁止自动重定向并校验 Header CRLF。
+- 🧪 **测试补充**：新增 `test/test_issue26_api_interface.py` 覆盖接口模板、校验、敏感 Header 脱敏和员工关联。
 
 ### v0.4 (2026-07) — MCP 协议架构重构
 

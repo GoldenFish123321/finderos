@@ -51,7 +51,20 @@
 | TC-MODEL-05 | Token统计 | 多次对话 | total_tokens累计增长 |
 | TC-MODEL-06 | 审计日志 | 发送对话消息 | audit_logs表新增CHAT记录 |
 
-## 6. 安全测试
+## 6. 接口管理（Issue #26）
+
+| 编号 | 测试项 | 步骤 | 预期结果 |
+|------|--------|------|----------|
+| TC-IFACE-01 | 接口模板 CRUD | 新增接口模板并按关键词搜索 | `api_interfaces` 表出现记录，列表/API 可查询 |
+| TC-IFACE-02 | 接口安全校验 | 输入非 http(s) URL 或含 CRLF 的 Header | 创建/测试被拒绝并提示原因 |
+| TC-IFACE-03 | 员工联动创建 | API 型员工选择接口模板后保存 | 自动填充 URL/Method/Headers/Params/响应模板并保存 `api_interface_id` |
+| TC-IFACE-04 | 接口测试 | 在接口列表或表单点击测试 | 返回 HTTP 状态、耗时、JSON/raw 响应，写入审计日志 |
+| TC-IFACE-05 | 密钥不回显 | 配置接口密钥后调用 `/admin/api/interface/list` | 仅返回 `has_secret=true`，不返回明文密钥 |
+| TC-IFACE-06 | 安全 HTTP 调用 | 接口测试或 API 型员工调用内网/重定向目标 | 内网地址被拒绝；请求不自动跟随 30x 重定向，DNS 解析结果固定 |
+
+自动化覆盖：`test/test_issue26_api_interface.py`，包含接口模板 CRUD/校验、敏感 Header 脱敏与恢复、安全 HTTP 拒绝内网、API 员工 4xx/5xx 错误语义、员工关联与删除清引用。
+
+## 7. 安全测试
 
 | 编号 | 测试项 | 步骤 | 预期结果 |
 |------|--------|------|----------|
