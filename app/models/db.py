@@ -464,16 +464,17 @@ def seed_default_data():
                 (10, "数据仓库", "layui-icon-component", "/admin/warehouse", None, 6, 1),
                 (17, "采集日志", "layui-icon-list", "/admin/watch/log", None, 7, 1),
                 (11, "模型引擎", "layui-icon-util", "/admin/model", None, 7, 1),
+                (18, "会话管理", "layui-icon-dialogue", "/admin/conversation", None, 8, 1),
                 # 系统设置子项（新增，借鉴陈子墨丰富的种子数据设计）
                 (12, "AI对话", "layui-icon-dialogue", "/chat", 3, 1, 1),
                 # 数字员工 (v0.3.0 新增)
-                (13, "数字员工", "layui-icon-user", "/admin/employee", None, 8, 1),
+                (13, "数字员工", "layui-icon-user", "/admin/employee", None, 9, 1),
                 # 技能管理 (v0.5.0 新增)
-                (14, "技能管理", "layui-icon-util", "/admin/skill", None, 9, 1),
+                (14, "技能管理", "layui-icon-util", "/admin/skill", None, 10, 1),
                 # MCP 工具管理 (v0.4.2 新增)
-                (15, "MCP 工具管理", "layui-icon-component", "/admin/mcp/tool", None, 10, 1),
+                (15, "MCP 工具管理", "layui-icon-component", "/admin/mcp/tool", None, 11, 1),
                 # 接口管理 (v0.4.1 新增)
-                (16, "接口管理", "layui-icon-link", "/admin/interface", None, 11, 1),
+                (16, "接口管理", "layui-icon-link", "/admin/interface", None, 12, 1),
             ]
             conn.executemany(
                 "INSERT INTO functions (id, name, icon, route_path, parent_id, sort_order, is_enabled) "
@@ -488,6 +489,7 @@ def seed_default_data():
             ("MCP 工具管理", "layui-icon-component", "/admin/mcp/tool", 10),
             ("接口管理", "layui-icon-link", "/admin/interface", 11),
             ("采集日志", "layui-icon-list", "/admin/watch/log", 7),
+            ("会话管理", "layui-icon-dialogue", "/admin/conversation", 8),
         ):
             func = conn.execute(
                 "SELECT id FROM functions WHERE route_path = ?", (route_path,)

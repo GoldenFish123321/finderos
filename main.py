@@ -54,6 +54,9 @@ from app.controllers.admin_employee import (
     EmployeeToggleHandler, EmployeeInvokeHandler, EmployeeApiListHandler,
     EmployeeTestPageHandler,
 )
+from app.controllers.admin_conversation import (
+    AdminConversationListHandler, AdminConversationDeleteHandler,
+)
 from app.controllers.admin_skill import (
     SkillListHandler, SkillFormHandler, SkillDeleteHandler, SkillToggleHandler,
 )
@@ -156,6 +159,9 @@ def make_app() -> tornado.web.Application:
             (r"/admin/model/toggle", ModelToggleHandler),
             (r"/admin/model/default", ModelDefaultHandler),
             (r"/admin/api/model/list", ModelApiListHandler),
+            # 会话管理：管理员查看/筛选/删除所有用户会话
+            (r"/admin/conversation", AdminConversationListHandler),
+            (r"/admin/conversation/delete", AdminConversationDeleteHandler),
             # 接口管理：API 接口模板 CRUD / 测试 / 数字员工联动
             (r"/admin/interface", InterfaceListHandler),
             (r"/admin/interface/add", InterfaceFormHandler),

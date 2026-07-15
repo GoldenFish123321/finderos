@@ -65,6 +65,9 @@ document.body.classList.add('dark-theme');
                 <a href="/admin/model" class="{{ 'active' if handler.request.path == '/admin/model' else '' }}">
                     <span class="nav-icon">🤖</span> <span>模型引擎</span>
                 </a>
+                <a href="/admin/conversation" class="{{ 'active' if '/admin/conversation' in handler.request.path else '' }}">
+                    <span class="nav-icon">💬</span> <span>会话管理</span>
+                </a>
             </div>
             <div class="nav-group-title">数字员工</div>
             <div class="nav-group">
