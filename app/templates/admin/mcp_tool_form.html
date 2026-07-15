@@ -1,0 +1,166 @@
+{% extends "admin/base_layout.html" %}
+
+{% block title %}{{ title }}{% end %}
+
+{% block admin_content %}
+<style>
+.form-section { margin-bottom:20px; }
+.form-section h4 { font-size:14px; color:var(--accent-blue); margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid var(--border-subtle); }
+.json-editor { font-family:'Consolas','Courier New',monospace; font-size:12px; min-height:120px; }
+</style>
+
+<div class="layui-card">
+    <div class="layui-card-header">
+        <i class="layui-icon layui-icon-util"></i> {{ title }}
+        <a href="/admin/mcp/tool" style="float:right;font-size:12px;">← 返回列表</a>
+    </div>
+    <div class="layui-card-body">
+        <form class="layui-form" method="post" action="/admin/mcp/tool/{{ 'edit' if tool else 'add' }}">
+            {% module xsrf_form_html() %}
+            {% if tool %}
+            <input type="hidden" name="id" value="{{ tool['id'] }}">
+            {% end %}
+
+            <div class="form-section">
+                <h4>📋 基本信息</h4>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">工具名称 *</label>
+                    <div class="layui-input-block">
+                        <input type="text" name="name" class="layui-input" value="{{ tool['name'] if tool else '' }}" placeholder="唯一标识符，如 search_warehouse" required>
+                        <div class="layui-form-mid layui-word-aux">英文下划线命名，全局唯一</div>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">显示名称 *</label>
+                    <div class="layui-input-block">
+                        <input type="text" name="display_name" class="layui-input" value="{{ tool['display_name'] if tool else '' }}" placeholder="如：数据仓库搜索" required>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">描述</label>
+                    <div class="layui-input-block">
+                        <textarea name="description" class="layui-textarea" rows="3" placeholder="工具描述（供LLM理解用途）">{{ tool['description'] if tool else '' }}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h4>🏷️ 分类与类型</h4>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">分类</label>
+                    <div class="layui-input-block">
+                        <select name="category">
+                            {% for c in categories %}
+                            <option value="{{ c['value'] }}" {{ 'selected' if tool and tool['category'] == c['value'] else '' }}>{{ c['name'] }}</option>
+                            {% end %}
+                        </select>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">类型</label>
+                    <div class="layui-input-block">
+                        <select name="tool_type" id="toolType" onchange="toggleTypeFields()">
+                            {% for t in tool_types %}
+                            <option value="{{ t['value'] }}" {{ 'selected' if tool and tool['tool_type'] == t['value'] else '' }}>{{ t['name'] }}</option>
+                            {% end %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section" id="builtinFields">
+                <h4>⚙️ 内置函数配置</h4>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">处理模块</label>
+                    <div class="layui-input-block">
+                        <input type="text" name="handler_module" class="layui-input" value="{{ tool['handler_module'] if tool else '' }}" placeholder="如: app.mcp.builtin_tools.warehouse_tools._search_warehouse">
+                        <div class="layui-form-mid layui-word-aux">Python 模块路径，指向处理函数</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section" id="apiFields" style="display:none;">
+                <h4>🌐 API 配置</h4>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">API URL</label>
+                    <div class="layui-input-block">
+                        <input type="text" name="api_url" class="layui-input" value="{{ tool['api_url'] if tool else '' }}" placeholder="https://api.example.com/{param}">
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">请求方法</label>
+                    <div class="layui-input-block">
+                        <select name="api_method">
+                            <option value="GET" {{ 'selected' if tool and tool['api_method'] == 'GET' else '' }}>GET</option>
+                            <option value="POST" {{ 'selected' if tool and tool['api_method'] == 'POST' else '' }}>POST</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">Headers</label>
+                    <div class="layui-input-block">
+                        <textarea name="api_headers" class="layui-textarea json-editor" rows="4" placeholder='{"Accept":"application/json"}'>{{ tool['api_headers'] if tool else '{}' }}</textarea>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">参数模板</label>
+                    <div class="layui-input-block">
+                        <textarea name="api_params_template" class="layui-textarea" rows="2">{{ tool['api_params_template'] if tool else '' }}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h4>📐 Schema 定义</h4>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">Input Schema</label>
+                    <div class="layui-input-block">
+                        <textarea name="input_schema" class="layui-textarea json-editor" rows="8" placeholder='{"type":"object","properties":{},"required":[]}'>{{ tool['input_schema'] if tool else '{}' }}</textarea>
+                        <div class="layui-form-mid layui-word-aux">JSON Schema 格式参数定义</div>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">Output Schema</label>
+                    <div class="layui-input-block">
+                        <textarea name="output_schema" class="layui-textarea json-editor" rows="4" placeholder='{}'>{{ tool['output_schema'] if tool else '{}' }}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h4>🔧 配置</h4>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">启用状态</label>
+                    <div class="layui-input-block">
+                        <input type="checkbox" name="is_enabled" value="1" lay-skin="switch" lay-text="启用|禁用" {{ 'checked' if not tool or tool['is_enabled'] == 1 else '' }}>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">排序</label>
+                    <div class="layui-input-block">
+                        <input type="number" name="sort_order" class="layui-input" value="{{ tool['sort_order'] if tool else '0' }}" style="width:100px;">
+                    </div>
+                </div>
+            </div>
+
+            <div style="text-align:center;padding:16px 0;">
+                <button type="submit" class="layui-btn layui-btn-lg">
+                    <i class="layui-icon layui-icon-ok"></i> {{ '保存修改' if tool else '创建工具' }}
+                </button>
+                <a href="/admin/mcp/tool" class="layui-btn layui-btn-lg layui-btn-primary">取消</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+function toggleTypeFields() {
+    var type = document.getElementById('toolType').value;
+    document.getElementById('builtinFields').style.display = type === 'builtin' ? '' : 'none';
+    document.getElementById('apiFields').style.display = type === 'api' ? '' : 'none';
+}
+toggleTypeFields();
+</script>
+{% end %}
