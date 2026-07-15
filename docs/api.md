@@ -281,6 +281,13 @@ data: {"code":1,"msg":"请输入关键词"}
 | POST | `/api/chat/conversation/delete` | 删除对话（body 参数 `id`） |
 | GET | `/api/chat/conversation/messages` | 获取对话消息（?id=） |
 
+### 7.3b 管理侧会话管理 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/conversation` | 管理员查看所有用户会话，支持 `username`、`keyword`、`page`、`id` 查询 |
+| POST | `/admin/conversation/delete` | 管理员删除任意会话及其消息（body 参数 `id`，需 `_xsrf`） |
+
 ### 7.4 TTS 语音合成 API（v0.4.1）
 
 | 方法 | 路径 | 说明 |

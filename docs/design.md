@@ -127,6 +127,16 @@ audit_logs (独立审计)
 - **@数字员工**：输入 `@` 触发下拉菜单，自动匹配并调用
 - **ECharts 图表**：`[CHART:...]` / `[TABLE:...]` 标记自动渲染
 
+### 3.4b 管理侧会话管理
+
+```
+管理员访问 /admin/conversation
+  → ConversationRepository.get_all_admin() 跨用户分页查询
+  → 可按 username / keyword 筛选
+  → 点击详情读取 conversation_messages
+  → 管理员删除会话时级联删除消息并写入 ADMIN_CONVERSATION_DELETE 审计日志
+```
+
 ### 3.5 数字化员工
 
 - **LLM 型**：绑定 AI 模型 + system_prompt + skills + crawl4ai 可选

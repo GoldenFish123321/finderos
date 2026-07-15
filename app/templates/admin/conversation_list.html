@@ -1,0 +1,181 @@
+{% extends "base_layout.html" %}
+
+{% block admin_content %}
+<style>
+.conv-stat { text-align:center; padding:18px 14px; background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:var(--radius-md); }
+.conv-stat .num { font-size:30px; font-weight:700; }
+.conv-stat .lbl { font-size:12px; color:var(--text-muted); margin-top:4px; }
+.conv-search { display:flex; gap:10px; align-items:center; margin:16px 0; flex-wrap:wrap; }
+.conv-table-wrap { background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:var(--radius-md); overflow:hidden; }
+.conv-table-wrap table { width:100%; border-collapse:collapse; }
+.conv-table-wrap th { background:rgba(255,255,255,0.03); color:var(--text-muted); font-size:12px; font-weight:500; padding:10px 12px; text-align:left; border-bottom:1px solid var(--border-subtle); }
+.conv-table-wrap td { padding:10px 12px; font-size:13px; color:var(--text-secondary); border-bottom:1px solid var(--border-subtle); vertical-align:middle; }
+.conv-table-wrap tr:hover td { background:rgba(94,163,255,0.04); }
+.conv-user { display:inline-block; padding:2px 8px; border-radius:12px; background:rgba(94,163,255,0.12); color:var(--accent-blue); font-size:11px; font-weight:600; }
+.conv-title { max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-primary); font-weight:600; }
+.msg-panel { margin-top:18px; background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:var(--radius-md); overflow:hidden; }
+.msg-panel-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:16px; border-bottom:1px solid var(--border-subtle); }
+.msg-list { padding:16px; display:flex; flex-direction:column; gap:12px; max-height:520px; overflow:auto; }
+.msg-item { border:1px solid var(--border-subtle); border-radius:var(--radius-sm); padding:12px; background:rgba(255,255,255,0.02); }
+.msg-meta { display:flex; justify-content:space-between; gap:12px; color:var(--text-muted); font-size:11px; margin-bottom:8px; }
+.msg-role { font-weight:700; }
+.msg-role-user { color:var(--accent-blue); }
+.msg-role-assistant { color:var(--accent-green); }
+.msg-role-system { color:var(--accent-orange); }
+.msg-content { color:var(--text-secondary); line-height:1.6; white-space:pre-wrap; word-break:break-word; }
+.empty-conv { text-align:center; padding:48px 20px; color:var(--text-muted); }
+</style>
+
+<div class="glass-panel" style="padding:20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h3 style="margin:0;font-size:17px;color:var(--text-primary);">💬 会话管理</h3>
+        <span style="color:var(--accent-green);font-size:13px;">{{ handler.get_query_argument('msg', '') }}</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px;">
+        <div class="conv-stat"><div class="num" style="color:var(--accent-blue);">{{ stats['total'] }}</div><div class="lbl">会话总数</div></div>
+        <div class="conv-stat"><div class="num" style="color:var(--accent-green);">{{ stats['user_count'] }}</div><div class="lbl">用户数</div></div>
+        <div class="conv-stat"><div class="num" style="color:var(--accent-orange);">{{ stats['message_count'] }}</div><div class="lbl">消息数</div></div>
+        <div class="conv-stat"><div class="num" style="color:var(--accent-purple);">{{ stats['token_total'] }}</div><div class="lbl">Token 合计</div></div>
+    </div>
+
+    <div class="conv-search">
+        <select id="filter-user" class="input-dark" style="width:180px;">
+            <option value="">全部用户</option>
+            {% for u in users %}
+            <option value="{{ u }}" {% if username_filter == u %}selected{% end %}>{{ u }}</option>
+            {% end %}
+        </select>
+        <input type="text" id="search-kw" class="input-dark" placeholder="搜索标题/用户..." value="{{ keyword }}" style="width:260px;">
+        <button class="btn-glass btn-sm" id="btn-search">🔍 筛选</button>
+        {% if username_filter or keyword %}
+        <a class="btn-glass btn-sm" href="/admin/conversation">清空筛选</a>
+        {% end %}
+    </div>
+
+    <div class="conv-table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th width="70">ID</th>
+                    <th width="140">用户</th>
+                    <th>会话标题</th>
+                    <th width="90">消息数</th>
+                    <th width="100">Token</th>
+                    <th width="160">创建时间</th>
+                    <th width="160">更新时间</th>
+                    <th width="170">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if conversations %}
+                {% for c in conversations %}
+                <tr>
+                    <td>#{{ c['id'] }}</td>
+                    <td><span class="conv-user">{{ c.get('username') or '匿名' }}</span></td>
+                    <td><div class="conv-title" title="{{ c.get('title') or '新对话' }}">{{ c.get('title') or '新对话' }}</div></td>
+                    <td>{{ c.get('msg_count', 0) }}</td>
+                    <td>{{ c.get('token_total', 0) }}</td>
+                    <td>{{ c.get('created_at') or '—' }}</td>
+                    <td>{{ c.get('updated_at') or '—' }}</td>
+                    <td>
+                        <a class="btn-glass btn-sm" href="/admin/conversation?id={{ c['id'] }}">查看</a>
+                        <form action="/admin/conversation/delete" method="post" style="display:inline;" class="form-conv-delete">
+                            {% module xsrf_form_html() %}
+                            <input type="hidden" name="id" value="{{ c['id'] }}">
+                            <button type="button" class="btn-glass btn-sm btn-danger btn-conv-delete">删除</button>
+                        </form>
+                    </td>
+                </tr>
+                {% end %}
+                {% else %}
+                <tr><td colspan="8" class="empty-conv">
+                    <div style="font-size:42px;margin-bottom:8px;">💬</div>
+                    <p>暂无会话</p>
+                </td></tr>
+                {% end %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if total_pages > 1 %}
+    <div style="text-align:center;margin-top:16px;"><div id="conv-pagination"></div></div>
+    {% end %}
+
+    {% if selected_conv %}
+    <div class="msg-panel">
+        <div class="msg-panel-head">
+            <div>
+                <div style="font-size:16px;color:var(--text-primary);font-weight:700;">
+                    #{{ selected_conv['id'] }} {{ selected_conv.get('title') or '新对话' }}
+                </div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:6px;">
+                    用户：{{ selected_conv.get('username') or '匿名' }} · 创建：{{ selected_conv.get('created_at') or '—' }} · 更新：{{ selected_conv.get('updated_at') or '—' }}
+                </div>
+            </div>
+            <form action="/admin/conversation/delete" method="post" class="form-conv-delete">
+                {% module xsrf_form_html() %}
+                <input type="hidden" name="id" value="{{ selected_conv['id'] }}">
+                <button type="button" class="btn-glass btn-sm btn-danger btn-conv-delete">删除该会话</button>
+            </form>
+        </div>
+        <div class="msg-list">
+            {% if messages %}
+            {% for m in messages %}
+            <div class="msg-item">
+                <div class="msg-meta">
+                    <span class="msg-role msg-role-{{ m.get('role') or 'user' }}">{{ m.get('role') or 'user' }}</span>
+                    <span>{{ m.get('created_at') or '' }} · token={{ m.get('token_count', 0) }}</span>
+                </div>
+                <div class="msg-content">{{ m.get('content') or '' }}</div>
+            </div>
+            {% end %}
+            {% else %}
+            <div class="empty-conv">该会话暂无消息</div>
+            {% end %}
+        </div>
+    </div>
+    {% end %}
+</div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+layui.use(['laypage', 'jquery', 'layer'], function(){
+    var laypage = layui.laypage, $ = layui.$, layer = layui.layer;
+
+    function buildUrl(page) {
+        var user = $('#filter-user').val();
+        var kw = $('#search-kw').val().trim();
+        var url = '/admin/conversation?page=' + (page || 1);
+        if (user) url += '&username=' + encodeURIComponent(user);
+        if (kw) url += '&keyword=' + encodeURIComponent(kw);
+        return url;
+    }
+
+    $('#btn-search').on('click', function(){ location.href = buildUrl(1); });
+    $('#search-kw').on('keydown', function(e){ if (e.key === 'Enter') $('#btn-search').click(); });
+    $('#filter-user').on('change', function(){ location.href = buildUrl(1); });
+
+    $('.btn-conv-delete').on('click', function(){
+        var form = $(this).closest('form');
+        layer.confirm('确认删除该会话？删除后消息记录也会一并移除。', {icon: 3, title: '删除会话'}, function(){
+            form.submit();
+        });
+    });
+
+    {% if total_pages > 1 %}
+    laypage.render({
+        elem: 'conv-pagination',
+        count: {{ total }},
+        limit: 20,
+        curr: {{ page }},
+        layout: ['prev', 'page', 'next', 'skip', 'count'],
+        jump: function(obj, first){
+            if (!first) location.href = buildUrl(obj.curr);
+        }
+    });
+    {% end %}
+});
+</script>
+{% end %}

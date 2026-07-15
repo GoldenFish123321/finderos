@@ -74,7 +74,15 @@
 - ECharts 图表自动注入（`[CHART:...]` / `[TABLE:...]` 标记）
 - 快捷指令（`/clear` `/summary` `/trans` `/tools`）
 
-### 11. 数字化员工 (`/admin/employee`)
+### 11. 管理侧会话管理 (`/admin/conversation`)
+
+- 管理员跨用户查看所有前台会话
+- 列表展示：用户、会话标题、消息数、Token 合计、创建/更新时间
+- 支持按用户筛选、按标题/用户关键词搜索
+- 支持查看会话消息详情
+- 支持管理员删除任意会话及其消息，并写入审计日志
+
+### 12. 数字化员工 (`/admin/employee`)
 
 - **LLM 型**：模型绑定 + system_prompt + skills + crawl4ai 可选
 - **API 型**：HTTP 调用 + 参数模板 + 响应渲染模板
