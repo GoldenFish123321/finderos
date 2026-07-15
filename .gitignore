@@ -11,9 +11,12 @@ venv/
 *.db
 *.db-journal
 *.db-wal
+database/
 
-# Environment files
+# Environment & secret files
 .env
+.secret_key
+*.key
 
 # OS files
 .DS_Store
