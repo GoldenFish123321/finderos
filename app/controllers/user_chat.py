@@ -1362,7 +1362,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
             skills_list = json.loads(emp.get("skills", "[]"))
         except (json.JSONDecodeError, TypeError):
             pass
-        crawl4ai_on = emp.get("crawl4ai_enabled", 0) == 1
+        # v0.6.1: crawl4ai_enabled 已废弃，深度采集通过 MCP 工具权限控制
 
         if tool_ctx is None:
             match = _mcp_client.match_tool_by_query(message, emp_id=emp.get("id"))
@@ -1459,13 +1459,9 @@ class UserEmployeeInvokeHandler(BaseHandler):
                 skill_names = [str(s) for s in skills_list] if skills_list else []
             skills_text = "、".join(skill_names) if skill_names else "通用助手"
             lines.append(f"🔧 我的技能: {skills_text}")
-            if crawl4ai_on:
-                lines.append("🕷️ Crawl4ai 网页采集: 已启用")
             lines.append("\n💡 试试这些指令:")
             lines.append("  • 「查看数据仓库」— 列出最新采集数据")
             lines.append("  • 「搜索 AI」— 在数据仓库中搜索关键词")
-            if crawl4ai_on:
-                lines.append("  • 「深度采集 https://...」— 抓取网页正文")
             lines.append("\n⚠️ 当前为本地智能模式（MCP 工具已集成）。")
 
         full_reply = "\n".join(lines)

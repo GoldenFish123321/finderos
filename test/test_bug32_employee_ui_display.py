@@ -95,6 +95,7 @@ def _setup_test_db():
         system_prompt   TEXT DEFAULT '',
         skills          TEXT DEFAULT '[]',
         crawl4ai_enabled INTEGER DEFAULT 0,
+        mcp_tool_ids    TEXT DEFAULT '[]',
         api_url         TEXT DEFAULT '',
         api_method      TEXT DEFAULT 'GET',
         api_headers     TEXT DEFAULT '{}',
@@ -133,15 +134,15 @@ def _seed_test_data():
     # 创建 LLM 型员工（有 model_id）
     conn.execute(
         "INSERT INTO digital_employees (name, employee_type, description, "
-        "model_id, skills, crawl4ai_enabled) VALUES (?, ?, ?, ?, ?, ?)",
-        ("采集专员LLM", "llm", "专注于数据采集", 1, json.dumps([1, 2]), 1),
+        "model_id, skills, crawl4ai_enabled, mcp_tool_ids) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("采集专员LLM", "llm", "专注于数据采集", 1, json.dumps([1, 2]), 0, json.dumps([15, 16])),
     )
 
     # 创建 LLM 型员工（无 model_id，model_name 应为 None）
     conn.execute(
         "INSERT INTO digital_employees (name, employee_type, description, "
-        "model_id, skills, crawl4ai_enabled) VALUES (?, ?, ?, ?, ?, ?)",
-        ("无模型员工", "llm", "没有关联模型", None, json.dumps([1]), 0),
+        "model_id, skills, crawl4ai_enabled, mcp_tool_ids) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("无模型员工", "llm", "没有关联模型", None, json.dumps([1]), 0, json.dumps([])),
     )
 
     conn.commit()
