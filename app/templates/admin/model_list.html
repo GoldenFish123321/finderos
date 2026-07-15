@@ -249,8 +249,8 @@
                 <form action="/admin/model/delete" method="post" style="display:inline;">
                     {% module xsrf_form_html() %}
                     <input type="hidden" name="id" value="{{ m['id'] }}">
-                    <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger"
-                            onclick="return confirm('确定删除模型「{{ m['name'] }}」吗？')">
+                    <button type="submit" class="layui-btn layui-btn-xs layui-btn-danger js-delete-confirm"
+                            data-confirm-name="{{ m['name'] }}">
                         <i class="layui-icon layui-icon-delete"></i>
                     </button>
                 </form>
@@ -293,6 +293,13 @@ layui.use(['laypage', 'jquery'], function(){
         }
     });
     {% end %}
+    // 删除确认: 使用 data-* 属性替代 inline onclick，防止 XSS（HTML 实体编码在 JS 上下文中可被绕过）
+    $('.js-delete-confirm').on('click', function(e) {
+        var name = this.getAttribute('data-confirm-name') || '(未知)';
+        if (!confirm('确定删除模型「' + name + '」吗？')) {
+            e.preventDefault();
+        }
+    });
 });
 </script>
 {% end %}
