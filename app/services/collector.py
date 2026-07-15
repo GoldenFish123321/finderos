@@ -67,7 +67,7 @@ def _decompress(data: bytes, encoding: str) -> bytes:
     """解压 HTTP 响应体（gzip / deflate / br raw）。
 
     注意: Brotli (br) 需要安装 brotli 或 brotlipy 包；
-    未安装时静默回退，不解压。
+    未安装或解压失败时返回原始数据（与 gzip/deflate 行为一致），避免数据静默丢失。
     """
     if not data:
         return data
@@ -90,11 +90,11 @@ def _decompress(data: bytes, encoding: str) -> bytes:
             import brotli
             return brotli.decompress(data)
         except ImportError:
-            logger.error("响应使用 Brotli 压缩，但 brotli 包未安装，无法解压，数据将丢失。请执行: pip install brotli")
-            return b""
+            logger.error("响应使用 Brotli 压缩，但 brotli 包未安装，无法解压，将使用原始数据。请执行: pip install brotli")
+            return data
         except Exception as e:
-            logger.error(f"Brotli 解压失败: {e}，数据将丢失")
-            return b""
+            logger.error(f"Brotli 解压失败: {e}，将使用原始数据")
+            return data
     return data
 
 

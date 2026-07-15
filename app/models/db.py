@@ -157,7 +157,7 @@ def init_db():
         except Exception as e:
             logger.error(f"Database migration failed (ai_models.total_tokens): {e}", exc_info=True)
 
-        # 兼容旧表迁移：为已存在的 watch_sources 表添加 schedule_interval 列 (v0.6.0)
+        # 兼容旧表迁移：为已存在的 watch_sources 表添加 schedule_interval 列 (v0.4.0)
         try:
             cols = {row[1] for row in conn.execute("PRAGMA table_info(watch_sources)").fetchall()}
             if "schedule_interval" not in cols:
@@ -237,6 +237,21 @@ def init_db():
             )
         """)
 
+        # 技能库表 (v0.5.0 新增 — 技能管理模块)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS skills (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                name            TEXT UNIQUE NOT NULL,
+                description     TEXT DEFAULT '',
+                skill_type      TEXT NOT NULL DEFAULT 'prompt',
+                prompt_template TEXT DEFAULT '',
+                function_name   TEXT DEFAULT '',
+                function_params TEXT DEFAULT '{}',
+                is_enabled      INTEGER DEFAULT 1,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # 接口管理表 (v0.4.1 新增)：可复用 API 接口模板，供 API 型数字员工联动选择
         conn.execute("""
             CREATE TABLE IF NOT EXISTS api_interfaces (
@@ -294,6 +309,8 @@ def init_db():
             logger.error(f"Database migration failed (digital_employees.api_interface_id): {e}", exc_info=True)
 
         # 对话管理表 (v0.5.0 新增 — 多轮对话支持)
+
+        # 对话管理表 (v0.3.0 新增 — 多轮对话支持)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS conversations (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -392,8 +409,10 @@ def seed_default_data():
                 (12, "AI对话", "layui-icon-dialogue", "/chat", 3, 1, 1),
                 # 数字员工 (v0.3.0 新增)
                 (13, "数字员工", "layui-icon-user", "/admin/employee", None, 8, 1),
+                # 技能管理 (v0.5.0 新增)
+                (14, "技能管理", "layui-icon-util", "/admin/skill", None, 9, 1),
                 # 接口管理 (v0.4.1 新增)
-                (14, "接口管理", "layui-icon-link", "/admin/interface", None, 9, 1),
+                (15, "接口管理", "layui-icon-link", "/admin/interface", None, 10, 1),
             ]
             conn.executemany(
                 "INSERT INTO functions (id, name, icon, route_path, parent_id, sort_order, is_enabled) "
@@ -435,6 +454,7 @@ def seed_default_data():
 
     _seed_default_sources()
     _seed_default_models()
+    _seed_default_skills()
     _seed_default_interfaces()
     _seed_default_employees()
 
@@ -568,7 +588,7 @@ def _seed_default_interfaces():
 
 
 def _seed_default_employees():
-    """种子：默认数字化员工（产业专员 + 天机助手 + 天气 + 采集专员 + 文案编写 + 新闻聚合 + 科普助手）。"""
+    """种子：默认数字化员工（产业专员 + 天机助手 + 天气 + 采集专员 + 文案编写 + 新闻聚合 + 科普助手 + 随机音乐）。"""
     import json
     with get_db() as conn:
         weather_interface = conn.execute(
@@ -725,7 +745,30 @@ def _seed_default_employees():
                     1,
                 ),
             )
-            print("[种子] 默认数字化员工已创建（7个：产业专员/天机助手/天气/采集专员/文案编写/新闻聚合/科普助手）")
+            # 随机音乐 — LLM 型数字员工（MCP 工具驱动，调用 get_random_music）
+            conn.execute(
+                "INSERT INTO digital_employees (id, name, employee_type, description, "
+                "model_id, system_prompt, skills, crawl4ai_enabled, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    8, "随机音乐", "llm",
+                    "随机推荐一首来自网易云音乐热歌榜的歌曲，展示歌曲名、歌手、封面图和试听链接",
+                    None,
+                    "你是随机音乐助手，专门为用户推荐歌曲。你的核心能力：\n"
+                    "1. 调用 get_random_music 工具获取随机歌曲\n"
+                    "2. 基于工具返回的真实数据向用户展示歌曲信息\n"
+                    "3. 用轻松愉快的语气介绍歌曲\n\n"
+                    "重要规则：\n"
+                    "- 必须使用 get_random_music 工具获取歌曲数据，不要编造歌曲名\n"
+                    "- 如果工具返回了歌曲数据，直接向用户展示，不要问「要不要来一首」之类的废话\n"
+                    "- 展示格式：先介绍歌曲名和歌手，再引导用户点击试听",
+                    json.dumps(["随机音乐", "歌曲推荐", "音乐点播"], ensure_ascii=False),
+                    0,
+                    1,
+                ),
+            )
+            print("[种子] 默认数字化员工已创建（8个：产业专员/天机助手/天气/采集专员/文案编写/新闻聚合/科普助手/随机音乐）")
+
         elif weather_interface_id:
             conn.execute(
                 "UPDATE digital_employees SET api_interface_id = ? "
@@ -733,3 +776,56 @@ def _seed_default_employees():
                 "AND (api_interface_id IS NULL OR api_interface_id = '')",
                 (weather_interface_id, "天气"),
             )
+
+def _seed_default_skills():
+    """种子：默认技能（5个，涵盖 prompt 增强 和 function 调用两种类型）。"""
+    import json
+    with get_db() as conn:
+        existing = conn.execute("SELECT COUNT(*) as cnt FROM skills").fetchone()
+        if existing["cnt"] == 0:
+            skills_data = [
+                # Prompt 型技能 — 数据统计报告
+                (1, "数据统计", "生成数据仓库统计报告，含图表标记", "prompt",
+                 "你正在进行数据统计分析任务。请遵循以下指令：\n"
+                 "1. 首先调用 get_warehouse_stats 工具获取数据仓库概况\n"
+                 "2. 根据统计结果生成自然语言报告，包含：总记录数、已深度采集数、来源分布\n"
+                 "3. 如果数据适合可视化，请使用 [CHART:bar|pie|line] 标记建议图表类型\n"
+                 "4. 报告格式清晰，使用 Markdown 标题和列表\n"
+                 "5. 最后给出数据利用建议（如：可对Top来源进行深度采集）",
+                 "", "{}"),
+                # Function 型技能 — 数据搜索
+                (2, "数据搜索", "在数据仓库中按关键词搜索采集结果", "function",
+                 "", "search_warehouse",
+                 json.dumps({"keyword": "{user_query}", "limit": 10}, ensure_ascii=False)),
+                # Prompt 型技能 — 新闻摘要
+                (3, "新闻摘要", "聚合多源新闻并生成结构化摘要", "prompt",
+                 "你正在执行新闻摘要任务。请遵循以下指令：\n"
+                 "1. 调用 search_warehouse 或 get_recent_warehouse_data 获取新闻数据\n"
+                 "2. 按主题分类整理新闻（如：科技/财经/政策/社会）\n"
+                 "3. 每条新闻输出：标题、来源、50字摘要、发布时间\n"
+                 "4. 在末尾生成一份「今日要闻速览」（3-5条最重要新闻）\n"
+                 "5. 使用 Markdown 格式，标题用 ###，列表用 -",
+                 "", "{}"),
+                # Function 型技能 — 深度采集
+                (4, "深度采集", "对指定 URL 进行正文深度抓取和内容提取", "function",
+                 "", "deep_collect_url",
+                 json.dumps({"url": "{user_query}"}, ensure_ascii=False)),
+                # Prompt 型技能 — 翻译助手
+                (5, "翻译助手", "高质量中英文双向翻译，保持专业术语准确", "prompt",
+                 "你正在执行翻译任务。请遵循以下指令：\n"
+                 "1. 识别用户输入的源语言和目标语言\n"
+                 "2. 执行高质量翻译，注意：\n"
+                 "   - 保持原文语义和语气\n"
+                 "   - 专业术语使用行业标准译法\n"
+                 "   - 长句合理断句，符合目标语言习惯\n"
+                 "3. 输出格式：先给出翻译结果，再附加【术语注释】（如有专业术语）\n"
+                 "4. 如涉及中文成语/典故，添加简短解释",
+                 "", "{}"),
+            ]
+            conn.executemany(
+                "INSERT INTO skills (id, name, description, skill_type, "
+                "prompt_template, function_name, function_params) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                skills_data,
+            )
+            print("[种子] 默认技能已创建（5个：数据统计/数据搜索/新闻摘要/深度采集/翻译助手）")

@@ -1,15 +1,15 @@
 # 全局约束 (constraint.md)
 
-> 本文档由 AI 自动维护，用于约束当前项目的全局开发规范与技术边界。
+> 本文档用于约束当前项目的全局开发规范与技术边界。请随代码变更同步更新。
 
 ## 1. 技术约束
 
-- **语言**: Python 3.11 (venv 中的解释器版本)
+- **语言**: Python 3.11+ (venv 中的解释器版本，推荐 3.13+)
 - **Web 框架**: Tornado (`tornado.web` / `tornado.ioloop` / `tornado.httpserver`)
 - **数据库**: SQLite3 (`sqlite3` 内置模块，零外部依赖)，DB 文件 `database/finderos.db`
 - **模板**: Tornado 原生模板 (`{% extends %}` / `{% block %}` / `{% module xsrf_form_html() %}`)
 - **前端**: Layui 2.x + 原生 HTML + CSS + JS (未引入构建工具与前端框架)
-- **虚拟环境**: `venv/`；一切依赖安装与运行必须激活 venv
+- **虚拟环境**: `.venv/`；一切依赖安装与运行必须激活 venv
 
 ## 2. 运行约束
 
@@ -18,9 +18,9 @@
 - 启动命令:
   ```bash
   # macOS / Linux:
-  source venv/bin/activate
+  source .venv/bin/activate
   # Windows:
-  # venv\Scripts\activate
+  # .venv\Scripts\activate
   python main.py
   ```
 - 启动前 `init_db()` 自动创建表结构，`seed_default_data()` 插入种子数据（默认管理员账号/角色/功能），无需手动建库
@@ -31,6 +31,8 @@
 |------|------|---------|
 | `app/controllers/` | Controller 层，一个业务一个文件 | 新增业务需新建文件 |
 | `app/models/` | Model 层，Repository 模式 | 每个表一个文件 |
+| `app/mcp/` | MCP 协议模块（Server/Client/Tools） | MCP 工具变更需同时更新 tools.py |
+| `app/services/` | 业务服务层（采集/深度采集/调度） | 独立可复用组件 |
 | `app/templates/` | Tornado 原生模板 | 按模块分目录 |
 | `app/templates/admin/` | 管理后台模板 | 继承 `base_layout.html` |
 | `app/static/` | 静态资源 (CSS/JS/图片) | 按类型分目录 |
@@ -42,12 +44,11 @@
 - SQL 注入防护: 全部使用 `?` 参数占位符
 - 密码存储: 服务端 PBKDF2-SHA256 600K 轮 + 随机盐
 - 登录拦截: `login_url="/"` + `@tornado.web.authenticated`
-- 管理员权限: 继承 `AdminBaseHandler`，prepare() 中校验角色为"系统管理员"
+- 管理员权限: 继承 `AdminBaseHandler`，prepare() 中校验用户是否有关联的后台功能权限（非硬编码角色名）
 - 系统角色保护: `is_system=1` 的角色不允许编辑/删除
-- 超级管理员保护: `admin` 用户不允许禁用/删除自身
-- 接口测试与 API 型员工调用: 必须执行 SSRF 校验，使用已校验 DNS 解析 IP 发起请求，不自动跟随 30x 重定向；接口 Headers 必须是 JSON 对象且禁止 CR/LF
-- API 密钥: `ai_models.api_key`、`api_interfaces.api_secret`、`digital_employees.api_secret` 必须加密存储，不在列表 API 中明文回显
-- 敏感 Header: `Authorization`、`Cookie`、`X-API-Key` 等在接口联动 API 和编辑表单中必须脱敏展示，提交未修改的脱敏值时服务端保留原始 Header
+- 超级管理员保护: `admin` 用户不允许禁用/删除；任何管理员均不可禁用/删除自身
+- 接口测试与 API 型员工调用: 必须执行 SSRF 校验，使用已校验 DNS 解析 IP 发起请求，不自动跟随 30x 重定向；Headers 必须是 JSON 对象且禁止 CR/LF
+- API 密钥与敏感 Header: `ai_models.api_key`、`api_interfaces.api_secret`、`digital_employees.api_secret` 必须加密存储；`Authorization`、`Cookie`、`X-API-Key` 等在联动 API/表单中必须脱敏展示
 
 ## 5. 数据模型
 
@@ -67,7 +68,7 @@
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | name | TEXT UNIQUE NOT NULL | 角色名称 |
-| description | TEXT | 角色描述 |
+| description | TEXT DEFAULT '' | 角色描述 |
 | is_system | INTEGER DEFAULT 0 | 系统角色(1=不可删除/编辑) |
 | created_at | TIMESTAMP | 创建时间 |
 
@@ -76,8 +77,8 @@
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | name | TEXT NOT NULL | 功能名称 |
-| icon | TEXT | Layui 图标类名 |
-| route_path | TEXT | 路由地址 |
+| icon | TEXT DEFAULT '' | Layui 图标类名 |
+| route_path | TEXT DEFAULT '' | 路由地址 |
 | parent_id | INTEGER DEFAULT NULL | 父功能ID(NULL=一级) |
 | sort_order | INTEGER DEFAULT 0 | 排序 |
 | is_enabled | INTEGER DEFAULT 1 | 启用状态 |
@@ -96,43 +97,46 @@
 - **默认角色**: 系统管理员(可访问后台) / 普通用户(仅前台)
 - **菜单生成**: 角色 → role_functions → functions → 按 parent_id 构建树形菜单
 
-## 7. Day6-2 扩展模块 (v0.4)
+## 7. 扩展模块 (v0.4.0)
 
 ### watch_sources 表（瞭源管理）
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | name | TEXT NOT NULL | 瞭望源名称 |
-| description | TEXT | 描述 |
+| description | TEXT DEFAULT '' | 描述 |
 | url_template | TEXT NOT NULL | URL模板（支持{keyword}/{page}占位符） |
-| request_headers | TEXT | HTTP请求头（JSON格式） |
+| request_headers | TEXT DEFAULT '{}' | HTTP请求头（JSON格式） |
 | is_enabled | INTEGER DEFAULT 1 | 启用状态 |
 | sort_order | INTEGER DEFAULT 0 | 排序 |
+| schedule_interval | INTEGER DEFAULT 0 | 定时采集间隔（分钟，0=不启用，v0.4.0 迁移新增） |
 | created_at | TIMESTAMP | 创建时间 |
 
-### watch_results 表（数据仓库）
+### watch_results 表（采集结果记录）
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | source_id | INTEGER FK | 瞭望源ID |
-| keyword | TEXT | 采集关键词 |
-| request_url | TEXT | 实际请求URL |
-| response_status | INTEGER | 响应状态码 |
-| response_size | INTEGER | 响应数据大小（字节） |
-| result_data | TEXT | 响应数据内容 |
+| keyword | TEXT DEFAULT '' | 采集关键词 |
+| request_url | TEXT DEFAULT '' | 实际请求URL（通过 `WHERE request_url != ''` 部分唯一索引去重） |
+| response_status | INTEGER DEFAULT 0 | 响应状态码 |
+| response_size | INTEGER DEFAULT 0 | 响应数据大小（字节） |
+| result_data | TEXT DEFAULT '' | 响应数据内容（JSON 格式存储结构化采集结果） |
 | created_at | TIMESTAMP | 采集时间 |
+
+> **注意**：本表存储每次采集的原始记录。标记保存后的结构化数据存入独立的 `data_warehouse` 表。
 
 ### ai_models 表（模型引擎）
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | name | TEXT NOT NULL | 模型名称 |
-| provider | TEXT | 提供商（openai/deepseek/qwen/...） |
-| api_base | TEXT | API Base URL |
-| api_key | TEXT | API密钥 |
-| model_name | TEXT | 模型标识 |
-| category | TEXT | 分类（text/image/audio/video/multimodal/embedding） |
-| system_prompt | TEXT | 系统提示词 |
+| provider | TEXT DEFAULT 'openai' | 提供商（openai/deepseek/zhipu/baidu/custom） |
+| api_base | TEXT DEFAULT '' | API Base URL |
+| api_key | TEXT DEFAULT '' | API密钥（Fernet 对称加密存储） |
+| model_name | TEXT DEFAULT '' | 模型标识 |
+| category | TEXT DEFAULT 'text' | 分类（text/image/audio/video/multimodal/embedding） |
+| system_prompt | TEXT DEFAULT '' | 系统提示词 |
 | temperature | REAL | 温度参数 |
 | top_p | REAL | Top-P 参数 |
 | top_k | INTEGER | Top-K 参数 |
@@ -140,6 +144,52 @@
 | context_size | INTEGER | 上下文窗口大小 |
 | is_enabled | INTEGER DEFAULT 1 | 启用状态 |
 | is_default | INTEGER DEFAULT 0 | 是否默认模型 |
+| total_tokens | INTEGER DEFAULT 0 | Token 消耗累计 |
+| created_at | TIMESTAMP | 创建时间 |
+
+### data_warehouse 表（独立数据仓库）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| result_id | INTEGER DEFAULT NULL FK | 关联 watch_results.id |
+| title | TEXT DEFAULT '' | 标题 |
+| link | TEXT DEFAULT '' | 链接（`WHERE link != ''` 部分唯一索引去重） |
+| summary | TEXT DEFAULT '' | 摘要 |
+| source_name | TEXT DEFAULT '' | 来源名称（与 title 组合唯一索引 `WHERE link IS NULL OR link = ''`，防止无链接记录重复） |
+| raw_data | TEXT DEFAULT '' | 原始数据（JSON） |
+| is_deep_collected | INTEGER DEFAULT 0 | 是否已深度采集 |
+| deep_collected_at | TIMESTAMP DEFAULT NULL | 深度采集时间 |
+| created_at | TIMESTAMP | 入库时间 |
+
+### audit_logs 表（操作审计日志）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| action | TEXT NOT NULL | 操作类型 |
+| username | TEXT DEFAULT '' | 操作人 |
+| target | TEXT DEFAULT '' | 操作目标 |
+| detail | TEXT DEFAULT '' | 详细信息 |
+| client_ip | TEXT DEFAULT '' | 客户端 IP |
+| created_at | TIMESTAMP | 操作时间 |
+
+### conversations 表（对话管理）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| title | TEXT DEFAULT '新对话' | 对话标题 |
+| username | TEXT DEFAULT '' | 所属用户 |
+| model_id | INTEGER FK | 使用的模型 ID，`FOREIGN KEY REFERENCES ai_models(id) ON DELETE SET NULL` |
+| created_at | TIMESTAMP | 创建时间 |
+| updated_at | TIMESTAMP | 最后更新时间 |
+
+### conversation_messages 表（对话消息）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| conversation_id | INTEGER FK | 所属对话（CASCADE 删除） |
+| role | TEXT NOT NULL | 角色（user/assistant/system） |
+| content | TEXT DEFAULT '' | 消息内容 |
+| token_count | INTEGER DEFAULT 0 | Token 消耗 |
 | created_at | TIMESTAMP | 创建时间 |
 
 ### api_interfaces 表（接口管理，Issue #26）
@@ -147,19 +197,35 @@
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | name | TEXT UNIQUE NOT NULL | 接口模板名称 |
-| description | TEXT | 接口说明 |
+| description | TEXT DEFAULT '' | 接口说明 |
 | api_url | TEXT NOT NULL | 接口 URL 模板，支持 `{message}` |
-| api_method | TEXT DEFAULT 'GET' | HTTP 方法（GET/POST/PUT/PATCH/DELETE） |
+| api_method | TEXT DEFAULT 'GET' | HTTP 方法 |
 | api_headers | TEXT DEFAULT '{}' | 请求头 JSON 对象 |
-| api_params_template | TEXT | 查询串或请求体参数模板 |
-| response_render_template | TEXT | 数字员工响应渲染模板 |
-| api_secret | TEXT | 加密存储的接口密钥 |
+| api_params_template | TEXT DEFAULT '' | 查询串或请求体参数模板 |
+| response_render_template | TEXT DEFAULT '' | 数字员工响应渲染模板 |
+| api_secret | TEXT DEFAULT '' | 加密存储的接口密钥 |
 | is_enabled | INTEGER DEFAULT 1 | 启用状态 |
 | sort_order | INTEGER DEFAULT 0 | 排序 |
 | created_at | TIMESTAMP | 创建时间 |
 | updated_at | TIMESTAMP | 更新时间 |
 
-### digital_employees 表补充（接口联动）
+### digital_employees 表（数字化员工）
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| api_interface_id | INTEGER FK→api_interfaces.id | API 型员工来源接口模板，删除接口后置空 |
+| id | INTEGER PK | 自增主键 |
+| name | TEXT NOT NULL | 员工名称 |
+| employee_type | TEXT NOT NULL DEFAULT 'llm' | 类型（llm/api） |
+| description | TEXT DEFAULT '' | 能力描述 |
+| model_id | INTEGER DEFAULT NULL FK | 绑定模型（LLM 型），`FOREIGN KEY REFERENCES ai_models(id) ON DELETE SET NULL` |
+| system_prompt | TEXT DEFAULT '' | 系统提示词（LLM 型） |
+| skills | TEXT DEFAULT '[]' | 技能列表 JSON（LLM 型） |
+| crawl4ai_enabled | INTEGER DEFAULT 0 | 启用深度采集（LLM 型） |
+| api_url | TEXT DEFAULT '' | API 地址（API 型） |
+| api_method | TEXT DEFAULT 'GET' | HTTP 方法（API 型） |
+| api_headers | TEXT DEFAULT '{}' | 请求头 JSON（API 型） |
+| api_params_template | TEXT DEFAULT '' | 参数模板（API 型） |
+| response_render_template | TEXT DEFAULT '' | 响应渲染模板（API 型） |
+| api_secret | TEXT DEFAULT '' | API 密钥（API 型，加密存储） |
+| api_interface_id | INTEGER DEFAULT NULL FK | API 型员工来源接口模板，删除接口后置空 |
+| is_enabled | INTEGER DEFAULT 1 | 启用状态 |
+| created_at | TIMESTAMP | 创建时间 |
