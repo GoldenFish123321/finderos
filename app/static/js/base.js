@@ -8,6 +8,17 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 /**
+ * HTML 转义函数 —— 防止 DOM-based XSS
+ * 将特殊字符转为 HTML 实体，确保用户输入不会被浏览器解析为 HTML/JS
+ */
+function escapeHtml(str) {
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+}
+
+/**
  * 通用列表页初始化器
  *
  * 通过配置对象统一处理分页、搜索、删除、toggle、消息提示等常见列表页逻辑。
@@ -83,9 +94,9 @@ function initListPage(config) {
     layui.use(['layer'], function(){
         var layer = layui.layer;
 
-        // 消息提示
+        // 消息提示（对 msg 参数做 HTML 转义，防止 DOM-based XSS）
         var msg = new URLSearchParams(location.search).get('msg');
-        if(msg) layer.msg(msg, {icon: 1, time: 2000});
+        if(msg) layer.msg(escapeHtml(msg), {icon: 1, time: 2000});
 
         // 删除
         if (cfg.hasDelete) {
