@@ -31,12 +31,9 @@ class AdminIndexHandler(AdminBaseHandler):
         result_stats = WatchResultRepository.get_stats()
         model_stats = AiModelRepository.get_stats()
 
-        # ── ECharts 图表数据 ──
-        # 1. 数据仓库来源分布（饼图）
+        # ── ECharts 图表数据（传原生 Python 对象，模板用 json.dumps 序列化）──
         source_distribution = self._get_source_distribution()
-        # 2. 采集趋势（近7天每日采集量，柱状图）
         collect_trend = self._get_collect_trend()
-        # 3. 深度采集占比
         deep_stats = DataWarehouseRepository.get_stats()
 
         self.render(
@@ -52,8 +49,8 @@ class AdminIndexHandler(AdminBaseHandler):
             model_count=model_count,
             result_stats=result_stats,
             model_stats=model_stats,
-            source_distribution=json.dumps(source_distribution, ensure_ascii=False),
-            collect_trend=json.dumps(collect_trend, ensure_ascii=False),
+            source_distribution=source_distribution,
+            collect_trend=collect_trend,
             deep_collected=deep_stats.get("deep_collected", 0),
             deep_total=deep_stats.get("total", 0),
         )
