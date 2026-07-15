@@ -1181,9 +1181,23 @@ function detectAndRenderChart(aiContent, totalContent) {
                     tooltip: { trigger: 'axis' },
                     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
                 };
-                // 深色主题适配文字颜色
+                // 深色主题适配
                 if (isDark) {
                     defaultOpts.backgroundColor = 'transparent';
+                    // 全局文字颜色适配
+                    if (!item.config.textStyle) item.config.textStyle = {};
+                    if (item.config.xAxis) {
+                        if (typeof item.config.xAxis === 'object' && !Array.isArray(item.config.xAxis)) {
+                            if (!item.config.xAxis.axisLabel) item.config.xAxis.axisLabel = {};
+                            if (!item.config.xAxis.axisLabel.color) item.config.xAxis.axisLabel.color = '#aaa';
+                        }
+                    }
+                    if (item.config.yAxis) {
+                        if (typeof item.config.yAxis === 'object' && !Array.isArray(item.config.yAxis)) {
+                            if (!item.config.yAxis.axisLabel) item.config.yAxis.axisLabel = {};
+                            if (!item.config.yAxis.axisLabel.color) item.config.yAxis.axisLabel.color = '#aaa';
+                        }
+                    }
                 }
                 chart.setOption(Object.assign({}, defaultOpts, item.config));
                 // 响应式缩放
