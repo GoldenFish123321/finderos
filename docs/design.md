@@ -97,7 +97,9 @@ audit_logs (独立审计)
 用户输入关键词 → 选择瞭望源 (URL模板+Headers)
     → collector.py 拼装 URL → SSRF 安全校验
     → HTTP 请求采集 → HTML 解析 (baidu_news / sogou_news / generic)
+    → SSE 推送 collect_progress (百分比/当前URL/成功失败数)
     → 结构化结果 → 保存到 watch_results
+    → 写入 audit_logs (WATCH_COLLECT)，采集日志页可检索
     → (可选) 标记保存到 data_warehouse (URL 去重 + FTS5 索引)
     → (可选) 深度采集 (正文提取 + crawl4ai)
 ```

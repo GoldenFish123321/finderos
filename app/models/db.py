@@ -462,6 +462,7 @@ def seed_default_data():
                 (8, "瞭望采集", "layui-icon-search", "/admin/watch", None, 4, 1),
                 (9, "瞭源管理", "layui-icon-read", "/admin/watch/source", None, 5, 1),
                 (10, "数据仓库", "layui-icon-component", "/admin/warehouse", None, 6, 1),
+                (17, "采集日志", "layui-icon-list", "/admin/watch/log", None, 7, 1),
                 (11, "模型引擎", "layui-icon-util", "/admin/model", None, 7, 1),
                 # 系统设置子项（新增，借鉴陈子墨丰富的种子数据设计）
                 (12, "AI对话", "layui-icon-dialogue", "/chat", 3, 1, 1),
@@ -486,6 +487,7 @@ def seed_default_data():
         for name, icon, route_path, sort_order in (
             ("MCP 工具管理", "layui-icon-component", "/admin/mcp/tool", 10),
             ("接口管理", "layui-icon-link", "/admin/interface", 11),
+            ("采集日志", "layui-icon-list", "/admin/watch/log", 7),
         ):
             func = conn.execute(
                 "SELECT id FROM functions WHERE route_path = ?", (route_path,)

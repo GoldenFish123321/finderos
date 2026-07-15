@@ -86,6 +86,8 @@
 |------|------|------|
 | GET | `/admin/watch` | 瞭望采集页（?keyword=&page=&source_id=） |
 | POST | `/admin/watch` | **执行采集** → JSON 响应 |
+| GET | `/admin/watch/stream` | **SSE 实时采集进度**（有副作用，需携带 `_xsrf`） |
+| GET | `/admin/watch/log` | 采集日志页（从 `audit_logs` 读取 `*COLLECT*` 记录） |
 
 #### POST /admin/watch 请求参数
 
@@ -114,6 +116,21 @@
   "results": [...],
   "total": 15
 }
+```
+
+#### GET /admin/watch/stream SSE 事件
+
+> 查询参数：`keyword`、`source_ids`、`_xsrf`。虽然使用 GET/EventSource，但会触发采集和写库，因此服务端手动执行 XSRF 校验。
+
+```text
+event: collect_progress
+data: {"percent":50,"current_url":"https://...","success":1,"failed":0,"message":"已完成 1/2"}
+
+event: collect_done
+data: {"code":0,"msg":"采集完成，共获取 15 条新闻","news":[...],"total":15,"success":2,"failed":0}
+
+event: collect_error
+data: {"code":1,"msg":"请输入关键词"}
 ```
 
 ### 3.2 保存到数据仓库
