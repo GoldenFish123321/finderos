@@ -560,6 +560,8 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
             <div style="display:flex;align-items:center;gap:10px;">
                 <span class="meta-info" id="header-meta"></span>
                 <button onclick="exportConversation('md')" title="导出 Markdown" style="background:none;border:1px solid var(--border-subtle);color:var(--text-muted);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;">📥 MD</button>
+                <button onclick="exportConversation('pdf')" title="导出 PDF（通过浏览器打印）" style="background:none;border:1px solid var(--border-subtle);color:var(--text-muted);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;">📄 PDF</button>
+                <button onclick="exportConversation('excel')" title="导出表格数据为 CSV" style="background:none;border:1px solid var(--border-subtle);color:var(--text-muted);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;">📊 Excel</button>
                 <button onclick="exportConversation('print')" title="打印对话" style="background:none;border:1px solid var(--border-subtle);color:var(--text-muted);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;">🖨 打印</button>
             </div>
         </div>
@@ -1370,6 +1372,37 @@ if (typeof marked !== 'undefined') {
 // ============================================================
 // 报告导出功能
 // ============================================================
+function buildPrintHtml(bubbles, titleSuffix) {
+    var html = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">';
+    html += '<title>瞭望与问数系统 — ' + titleSuffix + '</title>';
+    html += '<style>body{font-family:"Microsoft YaHei",sans-serif;max-width:800px;margin:0 auto;padding:20px;line-height:1.8;color:#333;}';
+    html += '.msg{margin:12px 0;padding:10px 16px;border-radius:8px;}';
+    html += '.user{background:#e8f0fe;text-align:right;}';
+    html += '.assistant{background:#f5f5f5;}';
+    html += '.meta{font-size:11px;color:#999;margin-top:4px;}';
+    html += 'h1{color:#1e6fff;border-bottom:2px solid #1e6fff;padding-bottom:8px;}';
+    html += 'table{border-collapse:collapse;width:100%;margin:8px 0;}';
+    html += 'th,td{border:1px solid #ddd;padding:6px 10px;text-align:left;font-size:13px;}';
+    html += 'th{background:#f0f5ff;}';
+    html += '@media print{body{padding:0;} .msg{page-break-inside:avoid;}}</style></head><body>';
+    html += '<h1>🔭 瞭望与问数系统 — 对话记录</h1>';
+    html += '<p style="color:#999;">导出时间: ' + new Date().toLocaleString() + '</p>';
+    bubbles.forEach(function(bubble) {
+        var isUser = bubble.classList.contains('user');
+        var content = bubble.querySelector('.bubble-content');
+        var text = content ? content.innerHTML : '';
+        var meta = bubble.querySelector('.msg-meta');
+        var metaText = meta ? meta.textContent.trim() : '';
+        html += '<div class="msg ' + (isUser ? 'user' : 'assistant') + '">';
+        html += '<strong>' + (isUser ? '👤 用户' : '🤖 AI') + '</strong>';
+        html += '<div>' + text + '</div>';
+        if (metaText) html += '<div class="meta">' + metaText + '</div>';
+        html += '</div>';
+    });
+    html += '</body></html>';
+    return html;
+}
+
 function exportConversation(format) {
     var messages = document.getElementById('chat-messages');
     var bubbles = messages.querySelectorAll('.chat-msg');
@@ -1404,36 +1437,65 @@ function exportConversation(format) {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('已导出 Markdown 文件'); });
-    } else if (format === 'print') {
-        // 打印模式
-        var printWindow = window.open('', '_blank', 'width=800,height=600');
-        var printContent = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">';
-        printContent += '<title>瞭望与问数系统 — 对话记录</title>';
-        printContent += '<style>body{font-family:"Microsoft YaHei",sans-serif;max-width:800px;margin:0 auto;padding:20px;line-height:1.8;}';
-        printContent += '.msg{margin:12px 0;padding:10px 16px;border-radius:8px;}';
-        printContent += '.user{background:#e8f0fe;text-align:right;}';
-        printContent += '.assistant{background:#f5f5f5;}';
-        printContent += '.meta{font-size:11px;color:#999;margin-top:4px;}';
-        printContent += 'h1{color:#1e6fff;border-bottom:2px solid #1e6fff;padding-bottom:8px;}';
-        printContent += '@media print{body{padding:0;} .msg{page-break-inside:avoid;}}</style></head><body>';
-        printContent += '<h1>🔭 瞭望与问数系统 — 对话记录</h1>';
-        printContent += '<p style="color:#999;">导出时间: ' + new Date().toLocaleString() + '</p>';
-        bubbles.forEach(function(bubble) {
-            var isUser = bubble.classList.contains('user');
-            var content = bubble.querySelector('.bubble-content');
-            var text = content ? content.innerHTML : '';
-            var meta = bubble.querySelector('.msg-meta');
-            var metaText = meta ? meta.textContent.trim() : '';
-            printContent += '<div class="msg ' + (isUser ? 'user' : 'assistant') + '">';
-            printContent += '<strong>' + (isUser ? '👤 用户' : '🤖 AI') + '</strong>';
-            printContent += '<div>' + text + '</div>';
-            if (metaText) printContent += '<div class="meta">' + metaText + '</div>';
-            printContent += '</div>';
-        });
-        printContent += '</body></html>';
+    } else if (format === 'pdf') {
+        // 导出 PDF（通过浏览器打印 → 另存为 PDF）
+        var printWindow = window.open('', '_blank', 'width=900,height=700');
+        var printContent = buildPrintHtml(bubbles, 'PDF 导出');
         printWindow.document.write(printContent);
         printWindow.document.close();
-        setTimeout(function() { printWindow.print(); }, 500);
+        setTimeout(function() { printWindow.print(); }, 600);
+        if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('请在打印对话框中选择「另存为 PDF」', {time: 3000}); });
+    } else if (format === 'excel') {
+        // 导出表格数据为 CSV（提取对话中的表格内容）
+        var csvContent = '\uFEFF';  // BOM for Excel UTF-8
+        csvContent += '角色,内容,时间\n';
+        var hasData = false;
+        bubbles.forEach(function(bubble) {
+            var isUser = bubble.classList.contains('user');
+            var roleLabel = isUser ? '用户' : 'AI助手';
+            var content = bubble.querySelector('.bubble-content');
+            var text = content ? content.textContent.trim().replace(/"/g, '""') : '';
+            var meta = bubble.querySelector('.msg-meta');
+            var metaText = meta ? meta.textContent.trim() : '';
+            if (text) {
+                csvContent += '"' + roleLabel + '","' + text.substring(0, 2000) + '","' + metaText + '"\n';
+                hasData = true;
+            }
+            // 提取表格行
+            var tables = bubble.querySelectorAll('table');
+            tables.forEach(function(table) {
+                var rows = table.querySelectorAll('tr');
+                rows.forEach(function(row) {
+                    var cells = [];
+                    row.querySelectorAll('th,td').forEach(function(cell) {
+                        cells.push('"' + cell.textContent.trim().replace(/"/g, '""') + '"');
+                    });
+                    if (cells.length > 0) csvContent += cells.join(',') + '\n';
+                    hasData = true;
+                });
+            });
+        });
+        if (!hasData) {
+            if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('当前对话无可导出的表格数据'); });
+            return;
+        }
+        var blob = new Blob([csvContent], {type: 'text/csv;charset=utf-8'});
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = '对话数据_' + new Date().toISOString().slice(0,10) + '.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('已导出 CSV 文件（可用 Excel 打开）'); });
+    } else if (format === 'print') {
+        // 打印模式
+        var printWindow2 = window.open('', '_blank', 'width=800,height=600');
+        var printContent2 = buildPrintHtml(bubbles, '打印预览');
+        printWindow2.document.write(printContent2);
+        printWindow2.document.close();
+        setTimeout(function() { printWindow2.print(); }, 500);
     }
 }
 </script>
