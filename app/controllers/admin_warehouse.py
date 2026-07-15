@@ -10,6 +10,7 @@ import json
 import concurrent.futures
 import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
+from app.models.db import get_db
 from app.models.watch_result import WatchResultRepository
 from app.models.data_warehouse import DataWarehouseRepository
 
@@ -46,6 +47,70 @@ class WarehouseHandler(AdminBaseHandler):
             title="数据仓库 — 瞭望与问数系统",
             username=self.current_user,
             results=rows,
+            page=page,
+            total=total,
+            total_pages=total_pages,
+            keyword=keyword,
+            stats=stats,
+            xsrf_token=self.xsrf_token.decode() if isinstance(self.xsrf_token, bytes) else self.xsrf_token,
+        )
+
+
+class WatchLogHandler(AdminBaseHandler):
+    """采集日志页：从 audit_logs 读取采集相关记录。"""
+
+    @tornado.web.authenticated
+    def get(self):
+        try:
+            page = int(self.get_query_argument("page", 1))
+        except (ValueError, TypeError):
+            page = 1
+        page = max(1, page)
+        keyword = self.get_query_argument("keyword", "").strip()
+        page_size = 20
+
+        where = ["UPPER(action) LIKE ?"]
+        params = ["%COLLECT%"]
+        if keyword:
+            like = f"%{keyword}%"
+            where.append("(action LIKE ? OR username LIKE ? OR target LIKE ? OR detail LIKE ? OR client_ip LIKE ?)")
+            params.extend([like, like, like, like, like])
+        where_sql = "WHERE " + " AND ".join(where)
+
+        with get_db() as conn:
+            total = conn.execute(
+                f"SELECT COUNT(*) as cnt FROM audit_logs {where_sql}",
+                params,
+            ).fetchone()["cnt"]
+            logs = conn.execute(
+                f"""
+                SELECT id, action, username, target, detail, client_ip, created_at
+                FROM audit_logs
+                {where_sql}
+                ORDER BY id DESC
+                LIMIT ? OFFSET ?
+                """,
+                (*params, page_size, (page - 1) * page_size),
+            ).fetchall()
+
+            stats = {
+                "total": total,
+                "watch_collect": conn.execute(
+                    "SELECT COUNT(*) as cnt FROM audit_logs WHERE action = ?",
+                    ("WATCH_COLLECT",),
+                ).fetchone()["cnt"],
+                "deep_collect": conn.execute(
+                    "SELECT COUNT(*) as cnt FROM audit_logs WHERE UPPER(action) LIKE ? AND action != ?",
+                    ("%COLLECT%", "WATCH_COLLECT"),
+                ).fetchone()["cnt"],
+            }
+
+        total_pages = max(1, (total + page_size - 1) // page_size)
+        self.render(
+            "admin/watch_log.html",
+            title="采集日志 — 瞭望与问数系统",
+            username=self.current_user,
+            logs=logs,
             page=page,
             total=total,
             total_pages=total_pages,
