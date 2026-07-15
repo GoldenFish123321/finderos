@@ -96,7 +96,11 @@ class ModelFormHandler(AdminBaseHandler):
             return
 
         if model_id:
-            model_id = int(model_id)
+            try:
+                model_id = int(model_id)
+            except (ValueError, TypeError):
+                self.write('<script>alert("无效的模型ID");window.history.back();</script>')
+                return
             # 检查是否需要清除 API Key（管理员主动勾选"清除密钥"复选框）
             clear_key = self.get_body_argument("clear_key", "0") == "1"
             if clear_key:
@@ -126,7 +130,11 @@ class ModelDeleteHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def post(self):
-        model_id = int(self.get_body_argument("id", 0))
+        try:
+            model_id = int(self.get_body_argument("id", 0))
+        except (ValueError, TypeError):
+            self.write('<script>alert("无效的模型ID");window.history.back();</script>')
+            return
         AiModelRepository.delete(model_id)
         self.redirect("/admin/model?msg=已删除")
 
@@ -136,7 +144,11 @@ class ModelToggleHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def post(self):
-        model_id = int(self.get_body_argument("id", 0))
+        try:
+            model_id = int(self.get_body_argument("id", 0))
+        except (ValueError, TypeError):
+            self.write('<script>alert("无效的模型ID");window.history.back();</script>')
+            return
         status = AiModelRepository.toggle_enabled(model_id)
         if status == -1:
             self.write('<script>alert("模型不存在");window.history.back();</script>')
@@ -151,7 +163,11 @@ class ModelDefaultHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def post(self):
-        model_id = int(self.get_body_argument("id", 0))
+        try:
+            model_id = int(self.get_body_argument("id", 0))
+        except (ValueError, TypeError):
+            self.write('<script>alert("无效的模型ID");window.history.back();</script>')
+            return
         AiModelRepository.set_default(model_id)
         self.redirect("/admin/model?msg=已设为默认模型")
 

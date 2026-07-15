@@ -86,7 +86,11 @@ class MenuSortHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def post(self):
-        func_id = int(self.get_body_argument("id", 0))
+        try:
+            func_id = int(self.get_body_argument("id", 0))
+        except (ValueError, TypeError):
+            self.write({"code": 1, "msg": "无效的功能ID"})
+            return
         direction = self.get_body_argument("direction", "up")  # "up" or "down"
 
         if not func_id:
