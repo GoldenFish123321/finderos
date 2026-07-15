@@ -162,10 +162,34 @@ DataFinderAgentOS/
 │   ├── constraint.md             # 全局开发约束（DDL、安全规范等）
 │   └── test_case.md              # 测试用例清单（27 项）
 │
-├── test/                         # 单元测试
+├── test/                         # 单元测试与 Bug 回归测试
 │   ├── __init__.py
+│   ├── _smoke_encryption.py      # 加密模块冒烟测试
 │   ├── test_login_rate_limiter.py
-│   └── test_user_models.py
+│   ├── test_user_models.py
+│   ├── test_v0_3_enhancements.py
+│   ├── test_bugs_1_2_3.py
+│   ├── test_bug3_role_delete_500.py
+│   ├── test_bug4_cookie_race.py
+│   ├── test_bug4_hardcoded_role_name.py
+│   ├── test_bug5_child_rf_cleanup.py
+│   ├── test_bug5_threadpool.py
+│   ├── test_bug6_api_key_clear.py
+│   ├── test_bug6_rate_limiter_cleanup.py
+│   ├── test_bug7_dw_dedup.py
+│   ├── test_bug7_watch_url_dedup.py
+│   ├── test_bug8_batch_admin_feedback.py
+│   ├── test_bug8_self_operation.py
+│   ├── test_bug9_watchsave_format.py
+│   ├── test_bug9_watchsave_msg.py
+│   ├── test_bug10_admin_audit_log.py
+│   ├── test_bug11_index_template.py
+│   ├── test_bug12_rowcount.py
+│   ├── test_bugs_14_15_16.py
+│   ├── test_bug17_batch_delete_rowcount.py
+│   ├── test_bug27_jquery_array_save.py
+│   ├── test_bug28_warehouse_detail_columns.py
+│   └── test_bug30_chat_default_model.py
 │
 ├── app/
 │   ├── config/                   # 配置模块
@@ -242,7 +266,6 @@ DataFinderAgentOS/
 │   │       ├── warehouse_detail.html  # 采集结果详情
 │   │       ├── model_list.html        # 模型引擎列表
 │   │       ├── model_form.html        # 模型表单
-│   │       ├── model_chat.html        # AI 流式对话界面
 │   │       ├── employee_list.html     # 数字员工列表（v0.3）
 │   │       ├── employee_form.html     # 数字员工表单（v0.3）
 │   │       ├── employee_test.html     # 数字员工测试页（v0.3）
@@ -309,7 +332,7 @@ python main.py
 
 ```
 ==================================================
-  瞭望与问数系统 (DataFinderAgentOS) v0.4
+  瞭望与问数系统 (DataFinderAgentOS) v0.4.0
   Server started: http://localhost:10010/
 ==================================================
 ```
@@ -390,6 +413,11 @@ python migrate_db.py --status
 | v0.2.5 | 添加 `ai_models.total_tokens`（Token 累加统计） |
 | v0.2.5 | 添加 `audit_logs` 表（操作审计日志） |
 | v0.2.5 | 添加安全相关索引 |
+| v0.2.13 | 添加 `data_warehouse` 独立表 + URL 去重索引 |
+| v0.3.0 | 添加 `conversations` / `conversation_messages` 表 |
+| v0.3.0 | 添加 `digital_employees` 表 |
+| v0.3.0 | 添加 `data_warehouse_fts` FTS5 虚拟表 + 同步触发器 |
+| v0.4.0 | 添加 `watch_sources.schedule_interval` 列 |
 
 > 迁移脚本具有**幂等性**：重复执行不会破坏已有数据。
 
