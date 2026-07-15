@@ -226,14 +226,24 @@ class DataWarehouseRepository:
 
     @staticmethod
     def search(keyword: str, limit: int = 10) -> list:
-        """FTS5 全文检索数据仓库。返回匹配记录列表。"""
+        """FTS5 全文检索数据仓库（优化版：OR 连接提升召回率）。
+
+        策略：
+        1. 优先 FTS5 全文索引（OR + 前缀匹配），提升命中率
+        2. FTS5 无结果时回退 LIKE 模糊匹配
+        3. 若两轮均无结果，尝试单字前缀匹配（最后兜底）
+        """
         if not keyword or not keyword.strip():
             return []
+        kw = keyword.strip()
         with get_db() as conn:
-            # 使用 FTS5 全文检索，支持多关键词和前缀匹配
-            # 将用户输入拆分为多个词，每个词后加 * 做前缀匹配
-            terms = keyword.strip().split()
-            fts_query = " AND ".join(f'"{t}"' for t in terms) if len(terms) > 1 else f'"{keyword.strip()}"'
+            # ── 第一轮：FTS5 OR 前缀匹配（提升召回）──
+            terms = kw.split()
+            if len(terms) > 1:
+                # 多关键词用 OR 连接，每个词加 * 前缀匹配
+                fts_query = " OR ".join(f'"{t}"*' for t in terms)
+            else:
+                fts_query = f'"{kw}"*'
             try:
                 rows = conn.execute(
                     "SELECT dw.* FROM data_warehouse_fts fts "
@@ -247,15 +257,35 @@ class DataWarehouseRepository:
             except Exception:
                 pass
 
-            # FTS5 回退：使用 LIKE 模糊匹配
-            like_pattern = f"%{keyword.strip()}%"
+            # ── 第二轮：LIKE 模糊匹配回退 ──
+            like_pattern = f"%{kw}%"
             rows = conn.execute(
                 "SELECT * FROM data_warehouse "
                 "WHERE title LIKE ? OR summary LIKE ? OR source_name LIKE ? "
                 "ORDER BY id DESC LIMIT ?",
                 (like_pattern, like_pattern, like_pattern, limit),
             ).fetchall()
-            return [dict(r) for r in rows]
+            if rows:
+                return [dict(r) for r in rows]
+
+            # ── 第三轮：单字前缀匹配兜底（中文分词不佳时的最后手段）──
+            if len(kw) > 1:
+                char_terms = " OR ".join(f'"{c}"*' for c in kw if c.strip())
+                if char_terms:
+                    try:
+                        rows = conn.execute(
+                            "SELECT dw.* FROM data_warehouse_fts fts "
+                            "JOIN data_warehouse dw ON fts.rowid = dw.id "
+                            "WHERE data_warehouse_fts MATCH ? "
+                            "ORDER BY rank LIMIT ?",
+                            (char_terms, limit),
+                        ).fetchall()
+                        if rows:
+                            return [dict(r) for r in rows]
+                    except Exception:
+                        pass
+
+            return []
 
     @staticmethod
     def get_stats() -> dict:
