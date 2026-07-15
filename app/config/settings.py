@@ -81,5 +81,13 @@ class Settings:
     AUDIT_ENABLED = os.environ.get("AUDIT_ENABLED", "").lower() != "false"
     """是否启用审计日志（默认启用）。"""
 
+    # === 定时采集配置 ===
+    SCHEDULED_COLLECT_KEYWORDS: list[str] = [
+        kw.strip() for kw in os.environ.get(
+            "SCHEDULED_COLLECT_KEYWORDS", "人工智能,科技,AI,大数据,机器学习"
+        ).split(",") if kw.strip()
+    ]
+    """定时采集默认关键词列表（逗号分隔，支持环境变量覆盖）。"""
+
 
 settings = Settings()
