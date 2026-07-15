@@ -157,7 +157,7 @@ def init_db():
         except Exception as e:
             logger.error(f"Database migration failed (ai_models.total_tokens): {e}", exc_info=True)
 
-        # 兼容旧表迁移：为已存在的 watch_sources 表添加 schedule_interval 列 (v0.6.0)
+        # 兼容旧表迁移：为已存在的 watch_sources 表添加 schedule_interval 列 (v0.4.0)
         try:
             cols = {row[1] for row in conn.execute("PRAGMA table_info(watch_sources)").fetchall()}
             if "schedule_interval" not in cols:
@@ -263,7 +263,7 @@ def init_db():
             )
         """)
 
-        # 对话管理表 (v0.5.0 新增 — 多轮对话支持)
+        # 对话管理表 (v0.4.0 新增 — 多轮对话支持)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS conversations (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
