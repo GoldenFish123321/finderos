@@ -115,10 +115,10 @@
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | source_id | INTEGER FK | 瞭望源ID |
-| keyword | TEXT | 采集关键词 |
+| keyword | TEXT DEFAULT '' | 采集关键词 |
 | request_url | TEXT DEFAULT '' | 实际请求URL（通过 `WHERE request_url != ''` 部分唯一索引去重） |
-| response_status | INTEGER | 响应状态码 |
-| response_size | INTEGER | 响应数据大小（字节） |
+| response_status | INTEGER DEFAULT 0 | 响应状态码 |
+| response_size | INTEGER DEFAULT 0 | 响应数据大小（字节） |
 | result_data | TEXT DEFAULT '' | 响应数据内容（JSON 格式存储结构化采集结果） |
 | created_at | TIMESTAMP | 采集时间 |
 
@@ -164,18 +164,18 @@
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | action | TEXT NOT NULL | 操作类型 |
-| username | TEXT | 操作人 |
-| target | TEXT | 操作目标 |
-| detail | TEXT | 详细信息 |
-| client_ip | TEXT | 客户端 IP |
+| username | TEXT DEFAULT '' | 操作人 |
+| target | TEXT DEFAULT '' | 操作目标 |
+| detail | TEXT DEFAULT '' | 详细信息 |
+| client_ip | TEXT DEFAULT '' | 客户端 IP |
 | created_at | TIMESTAMP | 操作时间 |
 
 ### conversations 表（对话管理）
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
-| title | TEXT | 对话标题 |
-| username | TEXT | 所属用户 |
+| title | TEXT DEFAULT '新对话' | 对话标题 |
+| username | TEXT DEFAULT '' | 所属用户 |
 | model_id | INTEGER FK | 使用的模型 ID，`FOREIGN KEY REFERENCES ai_models(id) ON DELETE SET NULL` |
 | created_at | TIMESTAMP | 创建时间 |
 | updated_at | TIMESTAMP | 最后更新时间 |
@@ -186,7 +186,7 @@
 | id | INTEGER PK | 自增主键 |
 | conversation_id | INTEGER FK | 所属对话（CASCADE 删除） |
 | role | TEXT NOT NULL | 角色（user/assistant/system） |
-| content | TEXT | 消息内容 |
+| content | TEXT DEFAULT '' | 消息内容 |
 | token_count | INTEGER DEFAULT 0 | Token 消耗 |
 | created_at | TIMESTAMP | 创建时间 |
 
@@ -195,7 +195,7 @@
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | name | TEXT NOT NULL | 员工名称 |
-| employee_type | TEXT | 类型（llm/api） |
+| employee_type | TEXT NOT NULL DEFAULT 'llm' | 类型（llm/api） |
 | description | TEXT | 能力描述 |
 | model_id | INTEGER FK | 绑定模型（LLM 型），`FOREIGN KEY REFERENCES ai_models(id) ON DELETE SET NULL` |
 | system_prompt | TEXT | 系统提示词（LLM 型） |
