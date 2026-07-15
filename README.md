@@ -1,7 +1,7 @@
-# 🔭 瞭望与问数系统 (DataFinderAgentOS) v0.4
+# 🔭 瞭望与问数系统 (DataFinderAgentOS) v0.4.0
 
 > 基于 Tornado 异步 Web 框架构建的轻量级智能数据采集与 AI 问数一体化平台。  
-> **v0.4 新增**：MCP 协议工具调用、LLM Function Calling 智能意图识别、/tools 指令。
+> **v0.4.0 新增**：MCP 协议工具调用、LLM Function Calling 智能意图识别、/tools 指令。
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Tornado](https://img.shields.io/badge/Tornado-6.4+-00ADD8?style=flat)](https://www.tornadoweb.org/)
@@ -248,7 +248,8 @@ DataFinderAgentOS/
 │   └── static/                   # 静态资源
 │       ├── css/
 │       │   ├── base.css          # 全局样式
-│       │   └── dark-theme.css    # 暗色主题样式
+│       │   ├── dark-theme.css    # 暗色主题样式
+│       │   └── light-theme.css   # 浅色主题样式
 │       └── js/
 │           └── base.js           # 全局脚本
 ```
@@ -271,7 +272,7 @@ DataFinderAgentOS/
 #### 1. 进入项目目录
 
 ```bash
-cd "day6-2-个人-肖瑾瑜-瞭望与问数系统v0.2源码"
+cd day7-1
 ```
 
 #### 2. 创建虚拟环境
@@ -312,7 +313,7 @@ python main.py
 
 > 首次启动时系统会自动：
 > 1. 创建 `database/` 目录和 `finderos.db` 数据库文件
-> 2. 执行 `CREATE TABLE IF NOT EXISTS` 建表（8 张表）
+> 2. 执行 `CREATE TABLE IF NOT EXISTS` 建表（12 张表 + 1 张 FTS5 虚拟表）
 > 3. 创建数据库索引（10+ 个索引）
 > 4. 插入种子数据（默认角色、管理员账户、功能菜单）
 
@@ -1207,6 +1208,7 @@ Permissions-Policy: camera=(), microphone=(), geolocation=()
 | `PAGE_SIZE` | `20` | 列表默认分页大小 |
 | `LOGIN_MAX_FAILURES` | `5` | 登录失败次数上限（同一 IP + 用户名组合） |
 | `LOGIN_LOCKOUT_SECONDS` | `900` | 登录锁定时间（秒），默认 15 分钟 |
+| `BIND_ADDRESS` | `127.0.0.1` | HTTP 服务监听地址（`0.0.0.0` 监听所有网卡） |
 
 ### 生产环境启动示例
 
@@ -1257,6 +1259,10 @@ python migrate_db.py --status
 | v0.2.5 | 添加 `audit_logs` 表（操作审计日志，含 3 个索引） |
 | v0.2.5 | 添加安全相关索引（`audit_logs.action`、`audit_logs.username`、`audit_logs.created_at`） |
 | v0.2.13 | 添加 `data_warehouse` 独立表（标题/链接/摘要/来源 + URL 去重索引） |
+| v0.3.0 | 添加 `conversations` / `conversation_messages` 表（多轮对话持久化） |
+| v0.3.0 | 添加 `digital_employees` 表（数字化员工配置） |
+| v0.3.0 | 添加 `data_warehouse_fts` 虚拟表 + 3 个同步触发器（FTS5 全文检索） |
+| v0.4.0 | 添加 `watch_sources.schedule_interval` 列（定时采集间隔） |
 
 > 迁移脚本具有**幂等性**：重复执行不会破坏已有数据。使用 `ALTER TABLE ADD COLUMN`（列不存在时静默跳过）和 `CREATE TABLE IF NOT EXISTS` 确保安全。
 
