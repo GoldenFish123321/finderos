@@ -149,7 +149,7 @@ DataFinderAgentOS/
 ├── main.py                       # 程序主入口（路由注册 + Tornado 启动）
 ├── make_admin.py                 # 管理员账号创建/重置工具（命令行）
 ├── migrate_db.py                 # 数据库迁移脚本（向后兼容）
-├── requirements.txt              # Python 依赖清单（仅 tornado）
+├── requirements.txt              # Python 依赖清单（tornado + cryptography + brotli）
 ├── README.md                     # 项目文档（本文件）
 │
 ├── database/                     # SQLite 数据库文件目录
