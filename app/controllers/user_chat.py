@@ -143,6 +143,57 @@ def _sanitize_link(link: str) -> str:
     return html.escape(link)
 
 
+# Prompt Injection 危险模式正则（用于仓库数据脱敏）
+_INJECTION_PATTERNS = [
+    (re.compile(r'(?i)\bIGNORE\b'), '[FILTERED]'),
+    (re.compile(r'(?i)\bSYSTEM\s*:'), '[FILTERED]'),
+    (re.compile(r'(?i)\bOVERRIDE\b'), '[FILTERED]'),
+    (re.compile(r'(?i)\bDISREGARD\b'), '[FILTERED]'),
+    (re.compile(r'指令'), '[FILTERED]'),
+    (re.compile(r'[`]{3,}'), '```'),          # 代码块标记归一化
+    (re.compile(r'--{2,}'), '--'),             # 注释标记归一化
+]
+
+# 连续特殊字符阈值
+_RE_CONSECUTIVE_SPECIAL = re.compile(r'[!@#$%^&*(){}\[\]|\\;:\'",.<>/?]{4,}')
+
+
+def _sanitize_warehouse_data(items: list) -> str:
+    """对仓库数据进行 Prompt Injection 脱敏处理，构建安全的上下文。
+
+    防护措施（安全漏洞 #1 修复）：
+    1. 移除/转义可能导致 prompt injection 的特殊模式
+       （IGNORE、SYSTEM:、OVERRIDE、DISREGARD、"指令"等）
+    2. 使用 XML 标签 <warehouse_data> 包裹数据，使 LLM 将其视为数据而非指令
+    3. 截断超长文本：title 限制 100 字符，summary 限制 200 字符
+    4. 压缩连续特殊字符（4个以上 → ...）
+    """
+    if not items:
+        return ""
+
+    def _sanitize_text(text: str) -> str:
+        if not text:
+            return ""
+        text = str(text)
+        for pattern, replacement in _INJECTION_PATTERNS:
+            text = pattern.sub(replacement, text)
+        # 压缩连续特殊字符
+        text = _RE_CONSECUTIVE_SPECIAL.sub('...', text)
+        return text.strip()
+
+    ctx = "\n\n<warehouse_data>\n"
+    for i, item in enumerate(items[:5], 1):
+        title = _sanitize_text(item.get('title', ''))[:100]
+        summary = _sanitize_text(item.get('summary', '') or '')[:200]
+        ctx += f"<item id=\"{i}\">\n"
+        ctx += f"  <title>{title}</title>\n"
+        ctx += f"  <summary>{summary}</summary>\n"
+        ctx += f"</item>\n"
+    ctx += f"<total_count>{len(items)}</total_count>\n"
+    ctx += "</warehouse_data>\n\n请基于以上数据回答用户问题。"
+    return ctx
+
+
 def _build_employee_card(emp: dict, api_data: dict, user_message: str = "") -> dict:
     """根据数字员工类型和 API 返回数据构建前端卡片。
 
@@ -1129,7 +1180,7 @@ class UserChatStreamHandler(BaseHandler):
             f"您好！我是 **{model_name}**（{provider}）。\n\n"
             f"您刚才问：「{message}」\n\n"
             f"当前为本地智能模式。配置有效的 API Key 后，将启用完整 AI 大模型对话与 MCP 工具调用。\n\n"
-            f"🔧 系统提示词：{system_prompt[:100] if system_prompt else '（未设置）'}\n\n"
+            f"🔧 系统提示词：{'已配置' if system_prompt else '未配置'}\n\n"
             f"💡 可用 MCP 工具（输入 /tools 查看详情）：\n"
             + "\n".join(f"  • {n}" for n in _mcp_server.tool_names[:6])
             + "\n\n💬 试试这些：\n"
@@ -1320,13 +1371,9 @@ class UserEmployeeInvokeHandler(BaseHandler):
                 else:
                     items = result_data.get("items", [])
                     if items:
-                        warehouse_ctx = "\n\n[工具查询结果]\n"
-                        for i, item in enumerate(items[:5], 1):
-                            warehouse_ctx += (
-                                f"{i}. {item.get('title','')[:100]}\n"
-                                f"   摘要: {(item.get('summary','') or '')[:200]}\n"
-                            )
-                        warehouse_ctx += f"共 {len(items)} 条结果。请基于以上真实数据回答。"
+                        # 安全漏洞 #1 修复：使用 _sanitize_warehouse_data 进行
+                        # Prompt Injection 脱敏 + XML 标签包裹 + 长度截断
+                        warehouse_ctx = _sanitize_warehouse_data(items)
 
         messages = []
         full_system = _build_system_prompt(system_prompt) + skills_ctx + warehouse_ctx
