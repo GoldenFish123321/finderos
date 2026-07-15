@@ -1,7 +1,7 @@
 """
 home.py — 前台首页控制器
 
-普通用户登录后进入的前台首页。
+无后台功能权限的用户登录后进入前台首页。
 """
 
 import tornado.web
@@ -21,11 +21,11 @@ class IndexHandler(BaseHandler):
 
     @tornado.web.authenticated
     def get(self):
-        # 有管理权限的用户直接跳转管理后台（根据功能权限判断，避免硬编码角色名）
-        funcs = UserRepository.get_user_functions(self.current_user)
-        if funcs:
-            self.redirect("/admin")
+        # 有管理权限的用户直接跳转后台（根据功能权限判断，避免硬编码角色名）
+        routes = [r for r in UserRepository.get_user_function_routes(self.current_user) if r.startswith("/admin")]
+        if routes:
+            self.redirect("/admin" if "/admin" in routes else routes[0])
             return
 
-        # 普通用户直接跳转到智能问数对话页面
+        # 无后台功能权限的用户直接跳转到智能问数对话页面
         self.redirect("/chat")

@@ -2,7 +2,7 @@
 auth.py — 认证相关控制器
 
 处理用户登录、登出逻辑。
-登录后根据角色跳转：系统管理员 → 管理后台，普通用户 → 用户前台。
+登录后根据功能权限跳转：有后台功能权限 → 管理后台，无后台功能权限 → 用户前台。
 """
 
 import time
@@ -142,10 +142,11 @@ class LoginHandler(BaseHandler):
             self.redirect("/index")
             return
 
-        # 根据是否有后台功能权限决定跳转（避免硬编码角色名）
-        funcs = UserRepository.get_user_functions(username)
-        if funcs:
-            self.redirect("/admin")
+        # 根据是否有后台功能权限决定跳转（避免硬编码角色名）。
+        # 优先进入后台首页；若自定义角色没有 /admin，则进入第一个授权后台路由。
+        routes = [r for r in UserRepository.get_user_function_routes(username) if r.startswith("/admin")]
+        if routes:
+            self.redirect("/admin" if "/admin" in routes else routes[0])
         else:
             self.redirect("/index")
 

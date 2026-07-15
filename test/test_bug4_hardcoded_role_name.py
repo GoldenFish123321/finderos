@@ -61,12 +61,12 @@ def test_admin_access_control():
     assert len(funcs) > 0
     print(f"  ✅ admin 功能数={len(funcs)}，可访问后台")
 
-    # 创建仅"普通用户"角色的用户（无功能权限）
+    # 普通用户角色现在会由种子数据授予最小后台权限（如模型 API 配置），
+    # 无功能访问场景应使用上面的自定义无功能角色覆盖。
     setup()
     UserRepository.create_user("_bug4_normal_", "test123456", role_id=2)
     funcs = UserRepository.get_user_functions("_bug4_normal_")
-    # 普通用户(role_id=2)默认无功能权限
-    print(f"  ✅ 普通用户(role_id=2)功能数={len(funcs)}，不可访问后台")
+    print(f"  ✅ 普通用户(role_id=2)功能数={len(funcs)}，默认权限由种子配置决定")
 
     setup()
     print("  ✅ 访问控制验证通过")

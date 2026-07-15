@@ -122,6 +122,25 @@ class UserRepository:
         return [r["function_id"] for r in rows]
 
     @staticmethod
+    def get_user_function_routes(username: str) -> list[str]:
+        """Get enabled function route paths accessible to a user.
+
+        Empty route paths are ignored because they represent menu group nodes.
+        """
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT f.route_path FROM users u "
+                "JOIN role_functions rf ON u.role_id = rf.role_id "
+                "JOIN functions f ON rf.function_id = f.id "
+                "WHERE u.username = ? AND f.is_enabled = 1 "
+                "AND COALESCE(f.route_path, '') != '' "
+                "ORDER BY CASE WHEN f.route_path = '/admin' THEN 0 ELSE 1 END, "
+                "f.sort_order ASC, f.id ASC",
+                (username,),
+            ).fetchall()
+        return [r["route_path"] for r in rows]
+
+    @staticmethod
     def update_user(user_id: int, username: str, password: str = "", role_id: int = None) -> bool:
         """Update user info. If password is empty, keep existing."""
         try:

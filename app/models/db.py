@@ -438,7 +438,7 @@ def seed_default_data():
             )
             conn.execute(
                 "INSERT INTO roles (id, name, description, is_system) VALUES (?, ?, ?, ?)",
-                (2, "普通用户", "普通用户角色，仅可登录前台用户侧", 1),
+                (2, "普通用户", "普通用户角色，可使用前台并默认配置模型 API", 1),
             )
             print("[种子] 默认角色已创建")
 
@@ -473,6 +473,7 @@ def seed_default_data():
                 (17, "采集日志", "layui-icon-list", "/admin/watch/log", None, 7, 1),
                 (11, "模型引擎", "layui-icon-util", "/admin/model", None, 7, 1),
                 (18, "会话管理", "layui-icon-dialogue", "/admin/conversation", None, 8, 1),
+                (19, "模型 API 配置", "layui-icon-set", "/admin/model/config", None, 8, 1),
                 # 系统设置子项（新增，借鉴陈子墨丰富的种子数据设计）
                 (12, "AI对话", "layui-icon-dialogue", "/chat", 3, 1, 1),
                 # 数字员工 (v0.4 新增)
@@ -498,6 +499,7 @@ def seed_default_data():
             ("接口管理", "layui-icon-link", "/admin/interface", 11),
             ("采集日志", "layui-icon-list", "/admin/watch/log", 7),
             ("会话管理", "layui-icon-dialogue", "/admin/conversation", 8),
+            ("模型 API 配置", "layui-icon-set", "/admin/model/config", 8),
         ):
             func = conn.execute(
                 "SELECT id FROM functions WHERE route_path = ?", (route_path,)
@@ -514,6 +516,20 @@ def seed_default_data():
                 func_id = func["id"]
             managed_func_ids.append(func_id)
 
+        # 普通用户默认具备最小后台能力：配置模型 API。
+        # 如需让普通用户默认管理 MCP 工具，可在此列表追加 "/admin/mcp/tool"。
+        default_user_func_ids = []
+        for route_path in ("/admin/model/config",):
+            func = conn.execute(
+                "SELECT id FROM functions WHERE route_path = ?", (route_path,)
+            ).fetchone()
+            if func:
+                default_user_func_ids.append(func["id"])
+        normal_role = conn.execute(
+            "SELECT id FROM roles WHERE name = ?", ("普通用户",)
+        ).fetchone()
+        normal_role_id = normal_role["id"] if normal_role else 2
+
         existing_rf = conn.execute("SELECT COUNT(*) as cnt FROM role_functions").fetchone()
         if existing_rf["cnt"] == 0:
             func_ids = conn.execute("SELECT id FROM functions WHERE is_enabled = 1").fetchall()
@@ -521,12 +537,21 @@ def seed_default_data():
                 "INSERT INTO role_functions (role_id, function_id) VALUES (?, ?)",
                 [(1, row["id"]) for row in func_ids],
             )
+            conn.executemany(
+                "INSERT OR IGNORE INTO role_functions (role_id, function_id) VALUES (?, ?)",
+                [(normal_role_id, func_id) for func_id in default_user_func_ids],
+            )
             print("[种子] 管理员角色功能关联已创建")
         else:
             for func_id in managed_func_ids:
                 conn.execute(
                     "INSERT OR IGNORE INTO role_functions (role_id, function_id) VALUES (?, ?)",
                     (1, func_id),
+                )
+            for func_id in default_user_func_ids:
+                conn.execute(
+                    "INSERT OR IGNORE INTO role_functions (role_id, function_id) VALUES (?, ?)",
+                    (normal_role_id, func_id),
                 )
 
         conn.commit()

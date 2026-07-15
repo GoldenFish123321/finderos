@@ -194,6 +194,12 @@ class MCPToolRegistry:
     def get_instance(cls, server: Optional[MCPServer] = None) -> "MCPToolRegistry":
         if cls._instance is None:
             cls._instance = cls(server)
+        elif server is not None and cls._instance._server is not server:
+            # 测试或热重启场景可能会重置 MCPServer 单例。此时 registry
+            # 必须切换到调用方传入的新 server，否则工具会被加载到旧实例，
+            # 新 server 的 tools/list 结果为空。
+            cls._instance._server = server
+            cls._instance._loaded_tool_names.clear()
         return cls._instance
 
     # ── 加载与重载 ────────────────────────────────────────

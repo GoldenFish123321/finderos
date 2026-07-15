@@ -470,7 +470,7 @@ python migrate_db.py --status
     → PBKDF2-SHA256 密码验证（60 万轮迭代）
     → 检查 is_enabled 状态
     → 成功: set_secure_cookie + 按功能权限跳转
-        ├── 有后台功能权限 → /admin（管理后台仪表盘）
+        ├── 有后台功能权限 → 优先 /admin，否则跳第一个授权后台路由
         └── 无后台功能权限 → /index（前台主页）
     → 失败: 记录失败次数 + 返回错误提示
     → 锁定: 超过阈值后返回"账户已锁定"提示
@@ -498,13 +498,13 @@ python migrate_db.py --status
     → @tornado.web.authenticated 装饰器拦截
     → 302 重定向到 login_url="/"（登录页）
 
-已登录但角色无权限
+已登录但角色/功能无权限
     → AdminBaseHandler.prepare() 校验
-    → 角色为"普通用户" → 403 权限不足页面
+    → 无角色/无功能/缺少当前路由功能权限 → 403 权限不足页面
     → 用户被禁用 → 清除 Cookie + 302 重定向
 
 已登录且角色有权限
-    → 正常进入管理后台页面
+    → 仅能进入已授权的管理后台页面
 ```
 
 #### 1.4 登录频率限制器
@@ -576,8 +576,10 @@ limiter.clear(client_ip, username)
 | 角色 | 后台访问 | 说明 |
 |------|---------|------|
 | 系统管理员 (id=1) | ✅ 全部功能 | 拥有所有后台功能的访问权限，不可删除/编辑 |
-| 普通用户 (id=2) | ❌ 仅前台 | 只能访问登录后的前台主页 `/index`，不可删除/编辑 |
+| 普通用户 (id=2) | ✅ 最小后台权限 | 默认拥有 `/admin/model/config`，可进入模型 API 快速配置页；其它后台功能仍需管理员授权 |
 | 自定义角色 | 取决于配置 | 通过角色管理分配具体功能权限 |
+
+> 后台权限采用**路由级校验**：拥有任意后台功能不再等于拥有全部后台功能。例如普通用户默认可访问 `/admin/model/config`，但不能访问 `/admin/model/add`、`/admin/mcp/tool` 或 `/admin/user`，除非角色被额外授权。
 
 ---
 
@@ -728,6 +730,16 @@ limiter.clear(client_ip, username)
 | 🎵 娱乐 | `get_random_music` | 随机音乐推荐 |
 | 🕷️ 爬虫增强 | `collect_with_crawl4ai`, `batch_deep_collect` | Crawl4ai 智能/批量采集 |
 | 🔧 系统 | `load_skill`, `get_system_stats` | 技能加载、系统统计 |
+
+**MCP 工具管理怎么用**：
+
+1. 进入 `/admin/mcp/tool` 查看工具卡片，确认工具为“已启用”。
+2. 修改工具配置后点击“热重载”，让数据库配置重新加载到 MCP Server。
+3. 点击“测试”，按工具 Input Schema 输入 JSON 参数，例如 `{"keyword":"AI","limit":5}`。
+4. 如果要让某个数字员工调用该工具，进入“数字员工 → 编辑 → MCP 工具权限”勾选对应工具。
+5. 只需要配置大模型 API 时进入 `/admin/model/config`；普通用户默认已经具备该权限。
+
+HTTP API 型 MCP 工具支持在 URL 中使用 `{参数名}` 占位符；GET 请求会把未出现在 URL 中的参数追加到 query string，POST 请求会发送 JSON body。
 
 **对话流程（有 API Key）**：
 
@@ -1008,7 +1020,7 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 | GET | `/register` | 注册页面 |
 | POST | `/register` | 提交注册表单 |
 | GET | `/logout` | 登出（清除 Cookie，重定向到登录页） |
-| GET | `/index` | 前台首页（需登录，普通用户默认跳转） |
+| GET | `/index` | 前台首页（需登录，无后台功能权限用户默认跳转） |
 
 ### 管理后台 (需管理员权限)
 
@@ -1091,6 +1103,7 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/admin/model` | 模型列表（`?page=&category=`） |
+| GET/POST | `/admin/model/config` | 模型 API 快速配置（普通用户默认权限，不含删除/启停/设默认） |
 | GET | `/admin/model/add` | 新增模型页面 |
 | POST | `/admin/model/add` | 提交新增模型 |
 | GET | `/admin/model/edit` | 编辑模型页面（`?id=`） |
@@ -1527,6 +1540,7 @@ python make_admin.py --reset --username admin --password newpassword
 | `admin` | `admin888` | 系统管理员 | ✅ 全部功能 | 不可删除/禁用自身 |
 
 > ⚠️ **首次登录后请立即修改默认密码！** 可使用管理后台的用户编辑功能或 `make_admin.py --reset` 命令。
+> 自助注册用户默认绑定“普通用户”角色，可访问 `/admin/model/config` 来配置模型 API；如需使用 MCP 工具管理、用户管理等页面，请由管理员在角色权限中额外授权。
 
 ---
 
@@ -1544,6 +1558,7 @@ python make_admin.py --reset --username admin --password newpassword
 | **会话管理** | 5 | 跨用户列表、用户筛选、消息详情、管理员删除、用户侧隔离保持 |
 | **接口管理** | 10 | 接口模板 CRUD、安全校验、敏感 Header 脱敏、安全 HTTP 调用、接口测试、API 型数字员工联动创建 |
 | **MCP 重构** | 6 | 工具表查询、CRUD、注册表加载、员工权限、技能关联、测试日志 |
+| **MCP 与默认权限** | 7 | MCP 页面使用说明、普通用户默认模型 API 配置权限、后台路由级权限匹配、禁用子路由隔离、模型快速配置入口、Registry 重绑定 |
 | **安全测试** | 5 | XSS 注入（采集内容）、SQL 注入（参数化查询验证）、CSRF Token 校验、密码哈希强度、安全响应头存在性 |
 
 ### 运行测试
@@ -1563,6 +1578,9 @@ python -m pytest test/test_issue24_collect_progress.py -v
 
 # 运行 Issue #17 管理侧会话管理测试
 python -m pytest test/test_issue17_admin_conversation.py -v
+
+# 运行 MCP 使用说明与普通用户默认权限测试
+python -m pytest test/test_mcp_user_default_permissions.py -v
 
 # 运行单个测试方法
 python -m pytest test/test_login_rate_limiter.py::TestLoginRateLimiter::test_rate_limit -v

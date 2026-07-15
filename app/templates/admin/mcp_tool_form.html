@@ -7,6 +7,8 @@
 .form-section { margin-bottom:20px; }
 .form-section h4 { font-size:14px; color:var(--accent-blue); margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid var(--border-subtle); }
 .json-editor { font-family:'Consolas','Courier New',monospace; font-size:12px; min-height:120px; }
+.form-help { margin-bottom:16px; padding:12px 14px; border-radius:10px; border:1px solid rgba(94,163,255,0.22); background:rgba(94,163,255,0.07); color:var(--text-secondary); font-size:12px; line-height:1.7; }
+.form-help code { color:var(--accent-blue); }
 </style>
 
 <div class="layui-card">
@@ -15,6 +17,14 @@
         <a href="/admin/mcp/tool" style="float:right;font-size:12px;">← 返回列表</a>
     </div>
     <div class="layui-card-body">
+        <div class="form-help">
+            <b>配置说明：</b>
+            内置函数工具需要填写 Python 处理函数路径，例如
+            <code>app.mcp.builtin_tools.warehouse_tools._search_warehouse</code>；
+            HTTP API 工具需要填写 API URL，并用 <code>{参数名}</code> 作为占位符，例如
+            <code>https://api.example.com/weather?city={city}</code>。
+            保存后可先在列表页“测试”，确认成功后点击“热重载”，再到数字员工表单中授权给具体员工。
+        </div>
         <form class="layui-form" method="post" action="/admin/mcp/tool/{{ 'edit' if tool else 'add' }}">
             {% module xsrf_form_html() %}
             {% if tool %}
@@ -106,6 +116,9 @@
                     <label class="layui-form-label">参数模板</label>
                     <div class="layui-input-block">
                         <textarea name="api_params_template" class="layui-textarea" rows="2">{{ tool['api_params_template'] if tool else '' }}</textarea>
+                        <div class="layui-form-mid layui-word-aux">
+                            可选说明字段；实际参数以 Input Schema 和测试 JSON 为准。GET 会把未出现在 URL 占位符中的参数追加到 query string，POST 会发送 JSON body。
+                        </div>
                     </div>
                 </div>
             </div>
@@ -116,7 +129,10 @@
                     <label class="layui-form-label">Input Schema</label>
                     <div class="layui-input-block">
                         <textarea name="input_schema" class="layui-textarea json-editor" rows="8" placeholder='{"type":"object","properties":{},"required":[]}'>{{ tool['input_schema'] if tool else '{}' }}</textarea>
-                        <div class="layui-form-mid layui-word-aux">JSON Schema 格式参数定义</div>
+                        <div class="layui-form-mid layui-word-aux">
+                            JSON Schema 格式参数定义。测试时输入的 JSON 字段应与这里的 properties 对应。
+                            示例：<code>{"type":"object","properties":{"city":{"type":"string","description":"城市"}},"required":["city"]}</code>
+                        </div>
                     </div>
                 </div>
                 <div class="layui-form-item">
