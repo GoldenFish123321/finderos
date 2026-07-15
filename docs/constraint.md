@@ -1,6 +1,6 @@
 # 全局约束 (constraint.md)
 
-> 本文档由 AI 自动维护，用于约束当前项目的全局开发规范与技术边界。
+> 本文档用于约束当前项目的全局开发规范与技术边界。请随代码变更同步更新。
 
 ## 1. 技术约束
 
@@ -110,17 +110,19 @@
 | schedule_interval | INTEGER DEFAULT 0 | 定时采集间隔（秒，0=不启用） |
 | created_at | TIMESTAMP | 创建时间 |
 
-### watch_results 表（数据仓库）
+### watch_results 表（采集结果记录）
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | source_id | INTEGER FK | 瞭望源ID |
 | keyword | TEXT | 采集关键词 |
-| request_url | TEXT | 实际请求URL |
+| request_url | TEXT | 实际请求URL（UNIQUE 去重：非空 URL 唯一索引） |
 | response_status | INTEGER | 响应状态码 |
 | response_size | INTEGER | 响应数据大小（字节） |
-| result_data | TEXT | 响应数据内容 |
+| result_data | TEXT | 响应数据内容（标记保存到数据仓库时前缀 "SAVED:"） |
 | created_at | TIMESTAMP | 采集时间 |
+
+> **注意**：本表存储每次采集的原始记录。标记保存后的结构化数据存入独立的 `data_warehouse` 表。
 
 ### ai_models 表（模型引擎）
 | 字段 | 类型 | 说明 |
@@ -129,7 +131,7 @@
 | name | TEXT NOT NULL | 模型名称 |
 | provider | TEXT | 提供商（openai/deepseek/qwen/...） |
 | api_base | TEXT | API Base URL |
-| api_key | TEXT | API密钥 |
+| api_key | TEXT | API密钥（Fernet 对称加密存储） |
 | model_name | TEXT | 模型标识 |
 | category | TEXT | 分类（text/image/audio/video/multimodal/embedding） |
 | system_prompt | TEXT | 系统提示词 |

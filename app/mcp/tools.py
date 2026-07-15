@@ -11,7 +11,7 @@ app/mcp/tools.py — MCP 工具定义与注册
 工具分类：
 1. 数据仓库类: search_warehouse, get_recent_warehouse_data, get_warehouse_stats
 2. 数据采集类: collect_web_data, deep_collect_url
-3. 数字员工类: list_digital_employees, invoke_digital_employee
+3. 数字员工类: list_digital_employees
 4. 对话管理类: list_conversations, get_conversation_messages
 """
 

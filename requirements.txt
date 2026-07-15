@@ -1,4 +1,4 @@
-# 瞭望与问数系统 (DataFinderAgentOS) v0.4
+# 瞭望与问数系统 (DataFinderAgentOS) v0.4.0
 # =========================================
 # 核心依赖
 tornado>=6.4
