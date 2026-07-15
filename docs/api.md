@@ -1,4 +1,4 @@
-# API 接口文档 v0.4
+# API 接口文档 v0.4.0
 
 > 基础 URL: `http://localhost:10010`
 > 认证方式: Tornado Secure Cookie（登录后自动携带）
@@ -176,3 +176,95 @@ data: {"tokens": 42, "mock": false}
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/admin/api/model/list` | JSON 格式模型列表（?page=&limit=&category=） |
+
+### 4.4 其他模型操作
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/admin/model/clear-tokens` | Token 消耗清零 |
+
+---
+
+## 五、已省略的补充端点
+
+> 以下端点在前面章节中未列出，在此补充。
+
+### 5.1 用户管理（补充）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/admin/user/batch-delete` | 批量删除用户 (ids) |
+| POST | `/admin/user/batch-toggle` | 批量启用/禁用 (ids, action) |
+| GET/POST | `/admin/user/change-password` | 修改密码 |
+
+### 5.2 菜单管理（补充）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/admin/menu/sort` | 菜单排序（上移/下移） |
+
+### 5.3 瞭望采集（补充）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/admin/watch/deep-collect` | 一站式深度采集 |
+
+### 5.4 数据仓库（补充）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/admin/warehouse/deep-collect` | 深度采集指定仓库记录 |
+
+---
+
+## 六、数字化员工（v0.3.0）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/employee` | 员工列表（卡片式，?page=&type=） |
+| GET | `/admin/employee/add` | 新增员工页面 |
+| POST | `/admin/employee/add` | 提交新增员工 |
+| GET | `/admin/employee/edit?id=` | 编辑员工页面 |
+| POST | `/admin/employee/edit` | 提交编辑员工 |
+| POST | `/admin/employee/delete` | 删除员工 |
+| POST | `/admin/employee/toggle` | 启用/禁用员工 |
+| POST | `/admin/employee/invoke` | **SSE 流式调用员工** |
+| GET | `/admin/api/employee/list` | 员工 JSON API |
+| GET | `/admin/employee/test` | 员工对话测试页 |
+
+---
+
+## 七、用户前台-智能问数（v0.3.0）
+
+### 7.1 对话页面与流式 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/chat` | 用户前台 A/B/C/D/E 五区对话主页 |
+| POST | `/chat/stream` | **SSE 流式 AI 对话**（含 MCP Function Calling） |
+| POST | `/chat/employee/invoke` | **SSE 流式 @数字员工调用** |
+
+### 7.2 前台 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/chat/models` | 获取可用模型列表（JSON） |
+| GET | `/api/chat/employees` | 获取数字员工列表（JSON） |
+
+### 7.3 对话管理 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/chat/conversation/list` | 当前用户对话历史列表 |
+| POST | `/api/chat/conversation/create` | 创建新对话 |
+| POST | `/api/chat/conversation/delete` | 删除对话（?id=） |
+| GET | `/api/chat/conversation/messages` | 获取对话消息（?id=） |
+
+### 7.4 后台对话管理 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/api/conversation/list` | 对话列表 |
+| POST | `/admin/api/conversation/create` | 创建对话 |
+| POST | `/admin/api/conversation/delete` | 删除对话 |
+| GET | `/admin/api/conversation/messages` | 获取对话消息 |
