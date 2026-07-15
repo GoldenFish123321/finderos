@@ -1,4 +1,4 @@
-# API 接口文档 v0.4
+# API 接口文档 v0.4.0
 
 > 基础 URL: `http://localhost:10010`
 > 认证方式: Tornado Secure Cookie（登录后自动携带）
@@ -15,6 +15,15 @@
 - **失败**: 渲染登录页 + 错误提示
 - **限速**: 同 IP+用户名 5次/15分钟
 
+### POST /register — 用户注册
+- **Content-Type**: `application/x-www-form-urlencoded`
+- **参数**: `username`, `password`, `password_confirm`
+- **成功**: 自动登录并 302 跳转（管理员→/admin，普通用户→/index）
+- **失败**: 渲染注册页 + 错误提示（用户名已存在 / 密码不一致 / 密码强度不足等）
+
+### GET /register — 注册页面
+- 渲染 `register.html` 注册表单页面
+
 ### GET /logout — 登出
 - 清除 Cookie，302 跳转到 `/`
 
@@ -22,7 +31,7 @@
 
 ## 二、管理后台
 
-> 所有 `/admin/*` 接口需要管理员权限（`AdminBaseHandler.prepare()` 校验）
+> 所有 `/admin/*` 接口需要后台功能权限（`AdminBaseHandler.prepare()` 校验角色是否关联后台功能，非硬编码角色名）
 
 ### 2.1 仪表盘
 
@@ -80,12 +89,12 @@
 
 #### POST /admin/watch 请求参数
 
-```json
-{
-  "keyword": "搜索关键词",
-  "source_ids": "1,2,3"  // 瞭源ID列表，逗号分隔；为空则使用所有启用的瞭源
-}
-```
+> **Content-Type**: `application/x-www-form-urlencoded`
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `keyword` | string | 搜索关键词 |
+| `source_ids` | string | 瞭源ID列表，逗号分隔；为空则使用所有启用的瞭源。兼容 jQuery 数组语法 `source_ids[]=1&source_ids[]=2` |
 
 #### POST /admin/watch 响应
 
@@ -127,7 +136,7 @@
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/warehouse` | 数据仓库列表（?page=&search=） |
+| GET | `/admin/warehouse` | 数据仓库列表（?page=&keyword=&source_id=） |
 | GET | `/admin/warehouse/detail?id=` | 查看详情 |
 | POST | `/admin/warehouse/delete` | 删除记录 (id) |
 | POST | `/admin/warehouse/batch-delete` | 批量删除 (ids) |
@@ -147,102 +156,184 @@
 | POST | `/admin/model/toggle` | 启用/禁用 |
 | POST | `/admin/model/default` | 设为默认模型 |
 
-### 4.2 模型对话 (SSE)
+### 4.2 模型对话 (SSE) — ⚠️ 已废弃
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/admin/model/chat?model_id=` | 对话页面 |
-| POST | `/admin/model/chat/stream` | **SSE 流式对话** |
-
-#### POST /admin/model/chat/stream
-
-**请求**: `model_id`, `message`
-
-**SSE 事件**:
-```
-data: {"content": "你"}
-data: {"content": "好"}
-...
-data: [DONE]
-event: stats
-data: {"tokens": 42, "mock": false}
-```
-
-- `mock: true` 表示使用本地 Mock 模式（API Key 未配置）
-- Token 消耗会自动累加到 `ai_models.total_tokens`
+> **v0.4.0 起已废弃**：后台模型对话功能已统一迁移至前台 `/chat/stream`（MCP 架构）。
+> 请使用 [七、用户前台-智能问数](#七用户前台-智能问数v030) 中的 `/chat/stream` 端点。
 
 ### 4.3 模型 API
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/api/model/list` | JSON 格式模型列表（?page=&limit=&category=） |
+| GET | `/admin/api/model/list` | JSON 格式模型列表（?page=&limit=&category=）。仅返回已启用模型（`is_enabled=1`） |
+
+### 4.4 Token 消耗说明
+
+- Token 消耗通过 `/chat/stream` 对话自动累加到 `ai_models.total_tokens`
+- `migrate_db.py` 提供 `ai_models.total_tokens` 列的 DDL 迁移（v0.2.5），不涉及跨表数据搬运
 
 ---
 
-## 五、接口管理（Issue #26）
+## 五、已省略的补充端点
 
-### 5.1 接口模板管理
+> 以下端点在前面章节中未列出，在此补充。
+
+### 5.1 用户管理（补充）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/interface` | 接口模板列表（?page=&keyword=） |
+| POST | `/admin/user/batch-delete` | 批量删除用户 (ids) |
+| POST | `/admin/user/batch-toggle` | 批量启用/禁用 (ids, enable) |
+| GET/POST | `/admin/user/change-password` | 修改密码 |
+
+### 5.2 菜单管理（补充）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/admin/menu/sort` | 菜单排序（上移/下移） |
+
+### 5.3 瞭望采集（补充）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/admin/watch/deep-collect` | 一站式深度采集 |
+
+### 5.4 数据仓库（补充）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/admin/warehouse/deep-collect` | 深度采集指定仓库记录 |
+
+---
+
+## 六、数字化员工（v0.3.0）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/employee` | 员工列表（卡片式，?page=&type=） |
+| GET | `/admin/employee/add` | 新增员工页面 |
+| POST | `/admin/employee/add` | 提交新增员工 |
+| GET | `/admin/employee/edit?id=` | 编辑员工页面 |
+| POST | `/admin/employee/edit` | 提交编辑员工 |
+| POST | `/admin/employee/delete` | 删除员工 |
+| POST | `/admin/employee/toggle` | 启用/禁用员工 |
+| POST | `/admin/employee/invoke` | **SSE 流式调用员工** |
+| GET | `/admin/api/employee/list` | 员工 JSON API |
+| GET | `/admin/employee/test` | 员工对话测试页 |
+
+---
+
+## 七、用户前台-智能问数（v0.3.0）
+
+### 7.1 对话页面与流式 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/chat` | 用户前台 A/B/C/D/E 五区对话主页 |
+| POST | `/chat/stream` | **SSE 流式 AI 对话**（含 MCP Function Calling） |
+| POST | `/chat/employee/invoke` | **SSE 流式 @数字员工调用** |
+
+#### POST /chat/stream 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `model_id` | int | 是 | 使用的 AI 模型 ID |
+| `message` | string | 是 | 用户消息内容 |
+| `conversation_id` | int | 否 | 对话 ID（多轮对话上下文） |
+
+#### POST /chat/employee/invoke 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `employee_id` | int | 是 | 数字员工 ID |
+| `message` | string | 是 | 用户消息内容（含 @员工名） |
+
+### 7.2 前台 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/chat/models` | 获取可用模型列表（JSON）。仅返回已启用模型（`is_enabled=1`），字段：`id`, `name`, `provider`, `model_name`, `category`, `is_default` |
+| GET | `/api/chat/employees` | 获取数字员工列表（JSON） |
+
+### 7.3 对话管理 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/chat/conversation/list` | 当前用户对话历史列表 |
+| POST | `/api/chat/conversation/create` | 创建新对话 |
+| POST | `/api/chat/conversation/delete` | 删除对话（body 参数 `id`） |
+| GET | `/api/chat/conversation/messages` | 获取对话消息（?id=） |
+
+### 7.4 TTS 语音合成 API（v0.4.1）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/chat/tts` | **Edge TTS 语音合成**，返回 MP3 音频流 |
+
+#### POST /api/chat/tts 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `text` | string | 是 | 待合成文本（1-4000 字符） |
+| `voice` | string | 否 | 语音名称，默认 `zh-CN-XiaoxiaoNeural`（晓晓） |
+
+#### 可用语音
+
+| 语音 ID | 名称 | 风格 |
+|---------|------|------|
+| `zh-CN-XiaoxiaoNeural` | 晓晓 | 女声，活泼（默认） |
+| `zh-CN-YunxiNeural` | 云希 | 男声，青年 |
+| `zh-CN-YunjianNeural` | 云健 | 男声，中年 |
+| `zh-CN-XiaoyiNeural` | 晓伊 | 女声，温柔 |
+| `zh-CN-YunyangNeural` | 云扬 | 男声，新闻播报 |
+| `zh-CN-XiaochenNeural` | 晓晨 | 女声，自然 |
+
+#### 响应
+
+- **成功**：`Content-Type: audio/mpeg`，返回 MP3 二进制音频流
+  - 响应头 `X-TTS-Voice`: 使用的语音名称
+  - 响应头 `X-TTS-Cached`: 是否命中缓存（`true`/`false`）
+- **失败**：HTTP 400/500，返回 JSON `{"code": 1, "msg": "错误描述"}`
+
+#### 缓存机制
+
+- 基于 `MD5(text + voice)` 的本地文件缓存
+- 缓存目录：系统临时目录 `/finderos_tts/`
+- 相同文本 + 语音不重复生成，永久缓存
+- 生成失败自动清理损坏的缓存文件
+
+---
+
+## 八、接口管理（Issue #26）
+
+### 8.1 管理侧接口模板
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/interface` | 接口模板列表（`?page=&keyword=`） |
 | GET/POST | `/admin/interface/add` | 新增接口模板 |
-| GET/POST | `/admin/interface/edit` | 编辑接口模板（?id=） |
-| POST | `/admin/interface/delete` | 删除接口模板 (id) |
-| POST | `/admin/interface/toggle` | 启用/禁用接口模板 (id) |
-| POST | `/admin/interface/test` | 测试接口模板（支持 id 或表单草稿字段） |
-| GET | `/admin/api/interface/list` | 获取已启用接口模板（供 API 型数字员工联动） |
+| GET/POST | `/admin/interface/edit` | 编辑接口模板（`?id=`） |
+| POST | `/admin/interface/delete` | 删除接口模板 |
+| POST | `/admin/interface/toggle` | 启用/禁用接口模板 |
+| POST | `/admin/interface/test` | 测试接口模板（支持保存接口或表单草稿配置） |
+| GET | `/admin/api/interface/list` | 获取已启用接口模板，供 API 型数字员工联动 |
 
-### 5.2 POST /admin/interface/test
+### 8.2 接口测试
 
-**请求参数（已保存接口）**
-
-```json
-{
-  "id": 1,
-  "message": "成都"
-}
-```
-
-**请求参数（草稿配置）**
+请求可传已保存接口 `id + message`，也可提交表单草稿字段：
 
 ```json
 {
-  "name": "天气查询接口",
   "api_url": "https://wttr.in/{message}?format=j1",
   "api_method": "GET",
   "api_headers": "{\"Accept\":\"application/json\"}",
   "api_params_template": "",
-  "response_render_template": "",
-  "api_secret": "",
   "message": "成都"
 }
 ```
 
-**响应**
+响应包含 `code`、`status`、`elapsed_ms`、`headers`、`raw` 与可解析的 `data`。安全约束：仅允许 `http/https`，Headers 必须是 JSON 对象且不得包含 CR/LF；接口测试不自动跟随 30x 重定向，并使用已校验的 DNS 解析 IP 发起请求。
 
-```json
-{
-  "code": 0,
-  "msg": "测试成功",
-  "status": 200,
-  "elapsed_ms": 320,
-  "data": {},
-  "raw": "...",
-  "truncated": false
-}
-```
+### 8.3 数字员工联动
 
-安全约束：仅允许 `http/https`，执行前复用 SSRF 防护；Headers 必须是 JSON 对象且不得包含 CR/LF。接口测试不会自动跟随 30x 重定向，并使用已校验的 DNS 解析 IP 发起请求，避免 DNS Rebinding/重定向绕过。
-
-### 5.3 数字员工联动
-
-API 型数字员工新增/编辑页可通过 `api_interface_id` 选择接口模板。选择后前端自动填充：
-
-- `api_url`
-- `api_method`
-- `api_headers`
-- `api_params_template`
-- `response_render_template`
-
-接口模板中的 `api_secret` 不通过 `/admin/api/interface/list` 回显；保存员工时由服务端复用。`Authorization`、`Cookie`、`X-API-Key` 等敏感 Header 在联动 API/表单中以 `******` 脱敏展示，提交未修改的脱敏值时服务端会保留原始 Header。
+API 型数字员工新增/编辑页可通过 `api_interface_id` 选择接口模板，自动填充 URL / Method / Headers / Params / Response Template。接口密钥不通过列表 API 回显；`Authorization`、`Cookie`、`X-API-Key` 等敏感 Header 以 `******` 脱敏展示，提交未修改的脱敏值时服务端保留原始 Header。

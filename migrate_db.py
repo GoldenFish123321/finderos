@@ -6,10 +6,16 @@ migrate_db.py — 数据库迁移脚本
 在项目根目录运行：python migrate_db.py
 
 迁移历史:
-  v0.2.5 — 添加 ai_models.total_tokens (Token 累加统计)
-  v0.2.5 — 添加 audit_logs 表 (操作审计日志)
-  v0.2.5 — 添加安全相关索引
-  v0.4.1 — 添加 api_interfaces 表与 digital_employees.api_interface_id
+  v0.2.5  — 添加 ai_models.total_tokens (Token 累加统计)
+  v0.2.5  — 添加 audit_logs 表 (操作审计日志)
+  v0.2.5  — 添加安全相关索引
+  v0.2.13 — 添加 data_warehouse 独立表 + URL 去重索引
+  v0.3.0  — 添加 conversations / conversation_messages 表
+  v0.3.0  — 添加 digital_employees 表
+  v0.3.0  — 添加 data_warehouse_fts 虚拟表 + 同步触发器
+  v0.4.0  — 添加 watch_sources.schedule_interval 列
+  v0.4.1  — 添加 api_interfaces 表与 digital_employees.api_interface_id
+  v0.5.0  — 添加 skills 技能库表
 
 Usage:
   python migrate_db.py              # 执行待处理迁移
@@ -90,6 +96,138 @@ def run_migrations():
             "name": "idx_dw_title_source",
             "sql": "CREATE UNIQUE INDEX IF NOT EXISTS idx_dw_title_source ON data_warehouse(title, source_name) WHERE (link IS NULL OR link = '')",
             "check": lambda c: _index_exists(c, "idx_dw_title_source"),
+        },
+        # v0.3.0: 对话管理表
+        {
+            "name": "create_conversations",
+            "sql": """
+                CREATE TABLE IF NOT EXISTS conversations (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title       TEXT DEFAULT '新对话',
+                    username    TEXT DEFAULT '',
+                    model_id    INTEGER DEFAULT NULL,
+                    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (model_id) REFERENCES ai_models(id) ON DELETE SET NULL
+                )
+            """,
+            "check": lambda c: _table_exists(c, "conversations"),
+        },
+        {
+            "name": "create_conversation_messages",
+            "sql": """
+                CREATE TABLE IF NOT EXISTS conversation_messages (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    conversation_id INTEGER NOT NULL,
+                    role            TEXT NOT NULL,
+                    content         TEXT DEFAULT '',
+                    token_count     INTEGER DEFAULT 0,
+                    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+                )
+            """,
+            "check": lambda c: _table_exists(c, "conversation_messages"),
+        },
+        {
+            "name": "idx_conv_msgs_conv",
+            "sql": "CREATE INDEX IF NOT EXISTS idx_conv_msgs_conv ON conversation_messages(conversation_id)",
+            "check": lambda c: _index_exists(c, "idx_conv_msgs_conv"),
+        },
+        # v0.3.0: 数字化员工表
+        {
+            "name": "create_digital_employees",
+            "sql": """
+                CREATE TABLE IF NOT EXISTS digital_employees (
+                    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name                    TEXT NOT NULL,
+                    employee_type           TEXT NOT NULL DEFAULT 'llm',
+                    description             TEXT DEFAULT '',
+                    model_id                INTEGER DEFAULT NULL,
+                    system_prompt           TEXT DEFAULT '',
+                    skills                  TEXT DEFAULT '[]',
+                    crawl4ai_enabled        INTEGER DEFAULT 0,
+                    api_url                 TEXT DEFAULT '',
+                    api_method              TEXT DEFAULT 'GET',
+                    api_headers             TEXT DEFAULT '{}',
+                    api_params_template     TEXT DEFAULT '',
+                    response_render_template TEXT DEFAULT '',
+                    api_secret              TEXT DEFAULT '',
+                    is_enabled              INTEGER DEFAULT 1,
+                    created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (model_id) REFERENCES ai_models(id) ON DELETE SET NULL
+                )
+            """,
+            "check": lambda c: _table_exists(c, "digital_employees"),
+        },
+        # v0.3.0: FTS5 全文检索虚拟表 + 同步触发器
+        {
+            "name": "create_data_warehouse_fts",
+            "sql": """
+                CREATE VIRTUAL TABLE IF NOT EXISTS data_warehouse_fts USING fts5(
+                    title, summary, source_name, content=data_warehouse,
+                    content_rowid=id
+                )
+            """,
+            "check": lambda c: _table_exists(c, "data_warehouse_fts"),
+        },
+        {
+            "name": "dw_fts_insert_trigger",
+            "sql": """
+                CREATE TRIGGER IF NOT EXISTS dw_fts_insert AFTER INSERT ON data_warehouse
+                BEGIN
+                    INSERT INTO data_warehouse_fts(rowid, title, summary, source_name)
+                    VALUES (new.id, new.title, new.summary, new.source_name);
+                END
+            """,
+            "check": lambda c: _trigger_exists(c, "dw_fts_insert"),
+        },
+        {
+            "name": "dw_fts_delete_trigger",
+            "sql": """
+                CREATE TRIGGER IF NOT EXISTS dw_fts_delete AFTER DELETE ON data_warehouse
+                BEGIN
+                    INSERT INTO data_warehouse_fts(data_warehouse_fts, rowid, title, summary, source_name)
+                    VALUES ('delete', old.id, old.title, old.summary, old.source_name);
+                END
+            """,
+            "check": lambda c: _trigger_exists(c, "dw_fts_delete"),
+        },
+        {
+            "name": "dw_fts_update_trigger",
+            "sql": """
+                CREATE TRIGGER IF NOT EXISTS dw_fts_update AFTER UPDATE ON data_warehouse
+                BEGIN
+                    INSERT INTO data_warehouse_fts(data_warehouse_fts, rowid, title, summary, source_name)
+                    VALUES ('delete', old.id, old.title, old.summary, old.source_name);
+                    INSERT INTO data_warehouse_fts(rowid, title, summary, source_name)
+                    VALUES (new.id, new.title, new.summary, new.source_name);
+                END
+            """,
+            "check": lambda c: _trigger_exists(c, "dw_fts_update"),
+        },
+        # v0.4.0: 瞭望源定时采集间隔
+        {
+            "name": "add_watch_sources_schedule_interval",
+            "sql": "ALTER TABLE watch_sources ADD COLUMN schedule_interval INTEGER DEFAULT 0",
+            "check": lambda c: _column_exists(c, "watch_sources", "schedule_interval"),
+        },
+        # v0.5.0: 技能库表
+        {
+            "name": "create_skills",
+            "sql": """
+                CREATE TABLE IF NOT EXISTS skills (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name            TEXT UNIQUE NOT NULL,
+                    description     TEXT DEFAULT '',
+                    skill_type      TEXT NOT NULL DEFAULT 'prompt',
+                    prompt_template TEXT DEFAULT '',
+                    function_name   TEXT DEFAULT '',
+                    function_params TEXT DEFAULT '{}',
+                    is_enabled      INTEGER DEFAULT 1,
+                    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """,
+            "check": lambda c: _table_exists(c, "skills"),
         },
         # v0.4.1: 接口管理模块
         {
@@ -177,6 +315,15 @@ def _index_exists(conn, index_name: str) -> bool:
     row = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='index' AND name=?",
         (index_name,),
+    ).fetchone()
+    return row is not None
+
+
+def _trigger_exists(conn, trigger_name: str) -> bool:
+    """检查触发器是否存在。"""
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='trigger' AND name=?",
+        (trigger_name,),
     ).fetchone()
     return row is not None
 

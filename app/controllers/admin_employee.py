@@ -22,6 +22,7 @@ from app.models.api_interface import (
     redact_sensitive_headers,
     restore_redacted_headers,
 )
+from app.models.skill import SkillRepository
 from app.models.data_warehouse import DataWarehouseRepository
 from app.utils.security import has_crlf, write_audit_log
 from app.utils.safe_http import SafeHttpError, safe_http_request
@@ -55,13 +56,22 @@ class EmployeeListHandler(AdminBaseHandler):
         total_pages = max(1, (total + 12 - 1) // 12)
         stats = DigitalEmployeeRepository.get_stats()
 
-        # 预解析 skills JSON（避免模板中使用 __import__ 反模式）
+        # 预解析 skills（v0.5.0: 存储技能 ID 数组，需从技能库解析名称；
+        # 兼容旧格式：字符串标签数组）
         import json as _json
         for emp in rows:
             try:
-                emp["skills_list"] = _json.loads(emp.get("skills", "[]"))
+                raw_skills = _json.loads(emp.get("skills", "[]"))
             except (_json.JSONDecodeError, TypeError):
-                emp["skills_list"] = []
+                raw_skills = []
+            resolved = SkillRepository.resolve_by_ids(raw_skills) if raw_skills and isinstance(raw_skills[0], int) else []
+            emp["skills_list"] = [s["name"] for s in resolved] if resolved else []
+            # 兼容旧格式（字符串标签）
+            if not emp["skills_list"] and raw_skills and isinstance(raw_skills[0], str):
+                resolved_names = SkillRepository.resolve_by_names(raw_skills)
+                emp["skills_list"] = [s["name"] for s in resolved_names] if resolved_names else raw_skills
+                # 标记为旧格式（模板中可区分显示）
+                emp["skills_legacy"] = True
             # JS 安全转义员工名称（用于 confirm 对话框）
             emp["name_js"] = _json.dumps(emp.get("name", ""), ensure_ascii=False)
 
@@ -108,6 +118,9 @@ class EmployeeFormHandler(AdminBaseHandler):
             emp["api_headers"] = redact_sensitive_headers(emp.get("api_headers", "{}"))
         api_interfaces = ApiInterfaceRepository.get_for_employee_form(current_interface_id)
 
+        # 获取启用的技能库（供技能选择器使用）
+        skills_library = SkillRepository.get_enabled()
+
         self.render(
             "admin/employee_form.html",
             title="编辑员工" if emp else "新增员工",
@@ -116,6 +129,7 @@ class EmployeeFormHandler(AdminBaseHandler):
             employee_types=EMPLOYEE_TYPES,
             models=enabled_models,
             api_interfaces=api_interfaces,
+            skills_library=skills_library,
         )
 
     @tornado.web.authenticated
@@ -129,16 +143,14 @@ class EmployeeFormHandler(AdminBaseHandler):
         model_id_str = self.get_body_argument("model_id", "").strip()
         model_id = int(model_id_str) if model_id_str else None
         system_prompt = self.get_body_argument("system_prompt", "").strip()
-        skills_raw = self.get_body_argument("skills", "[]").strip()
         crawl4ai_enabled = 1 if self.get_body_argument("crawl4ai_enabled", "0") == "1" else 0
 
-        # 解析 skills（支持 JSON 数组 或 逗号分隔 或 换行分隔）
+        # 解析技能选择（v0.5.0: 从技能库多选，存储技能 ID 数组）
+        skill_ids = self.get_body_arguments("skill_ids")
         try:
-            skills = json.loads(skills_raw)
-            if not isinstance(skills, list):
-                skills = [s.strip() for s in skills_raw.replace("\n", ",").split(",") if s.strip()]
-        except (json.JSONDecodeError, TypeError):
-            skills = [s.strip() for s in skills_raw.replace("\n", ",").split(",") if s.strip()]
+            skills = [int(sid) for sid in skill_ids if sid.strip()]
+        except (ValueError, TypeError):
+            skills = []
         skills_json = json.dumps(skills, ensure_ascii=False)
 
         # API 型字段
@@ -552,7 +564,16 @@ class EmployeeInvokeHandler(AdminBaseHandler):
 
         if not tool_results.get("warehouse_data") and not tool_results.get("deep_collect_result") and not tool_results.get("warehouse_stats"):
             lines.append(f"\n您问：「{message}」\n")
-            skills_text = "、".join(skills_list) if skills_list else "通用助手"
+            # v0.5.0: skills 存储的是 ID 数组，需解析为技能名称用于展示
+            if skills_list and isinstance(skills_list[0], int):
+                try:
+                    resolved = SkillRepository.resolve_by_ids(skills_list)
+                    skill_names = [s["name"] for s in resolved]
+                except Exception:
+                    skill_names = [str(s) for s in skills_list]
+            else:
+                skill_names = [str(s) for s in skills_list] if skills_list else []
+            skills_text = "、".join(skill_names) if skill_names else "通用助手"
             lines.append(f"🔧 我的技能: {skills_text}")
             if crawl4ai_on:
                 lines.append(f"🕷️ Crawl4ai 网页采集: 已启用")

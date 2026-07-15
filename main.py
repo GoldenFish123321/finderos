@@ -52,11 +52,15 @@ from app.controllers.admin_employee import (
     EmployeeToggleHandler, EmployeeInvokeHandler, EmployeeApiListHandler,
     EmployeeTestPageHandler,
 )
+from app.controllers.admin_skill import (
+    SkillListHandler, SkillFormHandler, SkillDeleteHandler, SkillToggleHandler,
+)
 from app.controllers.user_chat import (
     UserChatPageHandler, UserModelListHandler, UserEmployeeListHandler,
     UserConversationListHandler, UserConversationCreateHandler,
     UserConversationDeleteHandler, UserConversationMessagesHandler,
     UserChatStreamHandler, UserEmployeeInvokeHandler,
+    UserChatTTSHandler,
 )
 from app.models.db import init_db, seed_default_data
 from app.services.scheduler import CollectionScheduler
@@ -164,6 +168,13 @@ def make_app() -> tornado.web.Application:
             # 员工测试对话页
             (r"/admin/employee/test", EmployeeTestPageHandler),
 
+            # 技能管理
+            (r"/admin/skill", SkillListHandler),
+            (r"/admin/skill/add", SkillFormHandler),
+            (r"/admin/skill/edit", SkillFormHandler),
+            (r"/admin/skill/delete", SkillDeleteHandler),
+            (r"/admin/skill/toggle", SkillToggleHandler),
+
             # ========== v0.3.0 用户前台-智能问数 ==========
             # 前台对话主页
             (r"/chat", UserChatPageHandler),
@@ -180,6 +191,8 @@ def make_app() -> tornado.web.Application:
             (r"/api/chat/conversation/create", UserConversationCreateHandler),
             (r"/api/chat/conversation/delete", UserConversationDeleteHandler),
             (r"/api/chat/conversation/messages", UserConversationMessagesHandler),
+            # TTS 语音合成（Edge TTS）
+            (r"/api/chat/tts", UserChatTTSHandler),
         ],
         template_path="app/templates",
         static_path="app/static",
@@ -204,7 +217,7 @@ if __name__ == "__main__":
     # 创建应用
     app = make_app()
 
-    # 启动定时采集调度器 (v0.6.0)
+    # 启动定时采集调度器 (v0.4.0)
     scheduler = CollectionScheduler(app, check_interval_ms=60000)
     scheduler.start()
 
@@ -212,7 +225,7 @@ if __name__ == "__main__":
     bind_address = os.environ.get("BIND_ADDRESS", "127.0.0.1")
     app.listen(settings.PORT, bind_address)
     logger.info("=" * 50)
-    logger.info("  瞭望与问数系统 (DataFinderAgentOS) v0.4")
+    logger.info("  瞭望与问数系统 (DataFinderAgentOS) v%s", settings.VERSION)
     logger.info("  Server started: http://localhost:%d/", settings.PORT)
     logger.info("=" * 50)
 

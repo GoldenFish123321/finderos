@@ -1,7 +1,8 @@
-# 🔭 瞭望与问数系统 (DataFinderAgentOS) v0.4
+# 🔭 瞭望与问数系统 (DataFinderAgentOS) v0.4.1
 
-> 基于 Tornado 异步 Web 框架构建的轻量级智能数据采集与 AI 问数一体化平台。  
-> **v0.4 新增**：MCP 协议工具调用、LLM Function Calling 智能意图识别、/tools 指令。
+> 基于 Tornado 异步 Web 框架构建的轻量级智能数据采集与 AI 问数一体化平台。
+> **v0.4.1 新增**：Edge TTS 语音合成播报（🔊 AI 回复一键朗读）。
+> **v0.4.0 新增**：MCP 协议工具调用、LLM Function Calling 智能意图识别、/tools 指令。
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Tornado](https://img.shields.io/badge/Tornado-6.4+-00ADD8?style=flat)](https://www.tornadoweb.org/)
@@ -29,6 +30,11 @@
   - [5. AI 模型引擎](#5-ai-模型引擎)
   - [6. 菜单管理](#6-菜单管理)
   - [7. 管理后台仪表盘](#7-管理后台仪表盘)
+  - [8. 数字化员工](#8-数字化员工)
+  - [9. 技能管理](#9-技能管理)
+  - [10. 智能问数前台](#10-智能问数前台)
+  - [11. MCP 协议架构](#11-mcp-协议架构)
+  - [12. TTS 语音合成播报](#12-tts-语音合成播报)
 - [API 接口一览](#api-接口一览)
 - [数据库设计](#数据库设计)
 - [安全设计](#安全设计)
@@ -46,15 +52,16 @@
 
 **瞭望与问数系统 (DataFinderAgentOS)** 是一个面向中小团队的智能数据采集与 AI 问数一体化平台。它将 **Web 数据采集（瞭望）** 和 **大语言模型对话（问数）** 两大核心能力整合于统一的 Web 管理后台中，并配备完整的 RBAC 权限体系。
 
-系统采用 **"零依赖"设计理念**：除 Tornado Web 框架外，所有功能均使用 Python 标准库实现（`sqlite3`、`urllib`、`hashlib`、`ssl`、`re` 等），无需安装第三方爬虫框架、ORM 或 HTML 解析器。
+系统采用 **轻量依赖**设计理念：核心功能基于 Python 标准库实现（`sqlite3`、`urllib`、`hashlib`、`ssl`、`re` 等），仅引入少量必要的外部依赖（Tornado Web 框架、cryptography 加密库、Brotli 解压支持）。
 
 ### 核心能力
 
 ```
 � 智能问数 — 用户前台 AI 对话         — A/B/C/D/E 五区布局 + SSE 流式 + 多轮对话
-🤖 数字员工 — @ 触发智能 Agent         — 天气/采集专员/文案编写/新闻聚合/科普助手等 7 个
-🔗 接口管理 — API 模板复用与测试       — 数字员工 API 型配置一键联动填充
+🤖 数字员工 — @ 触发智能 Agent         — 天气/采集专员/文案编写/新闻聚合/科普助手/随机音乐等 8 个
+🔗 接口管理 — API 模板复用与测试       — API 型数字员工配置一键联动填充
 📊 报表呈现 — ECharts 交互图表         — 柱状图/折线图/饼图/散点图 + 数据表格
+🔊 语音播报 — Edge TTS 语音合成        — AI 回复一键朗读，6 种中文语音可选
 �🔐 用户认证与 RBAC 权限管理          — 安全的密码存储、登录限速、审计日志
 🔭 瞭望采集 — 可配置的 Web 采集引擎    — 百度/搜狗新闻等多源采集 + SSRF 防护
 🗄️ 数据仓库 — 采集结果独立存储与检索   — 独立 data_warehouse 表，支持去重
@@ -136,7 +143,7 @@
 | **数据采集** | Python 标准库 `urllib` | 零第三方爬虫依赖 |
 | **HTML 解析** | Python `re` 正则 | 内置解析器，无需 BeautifulSoup |
 | **AI 对话** | OpenAI 范式 SSE + Function Calling | 支持 OpenAI / DeepSeek / 智谱 AI / 百度文心 / 自定义 Provider |
-| **工具协议** | MCP (Model Context Protocol) | 8 个标准化工具，LLM 自主决策调用，语义匹配回退 |
+| **工具协议** | MCP (Model Context Protocol) | 9 个标准化工具，LLM 自主决策调用，语义匹配回退 |
 
 ---
 
@@ -147,7 +154,7 @@ DataFinderAgentOS/
 ├── main.py                       # 程序主入口（路由注册 + Tornado 启动）
 ├── make_admin.py                 # 管理员账号创建/重置工具（命令行）
 ├── migrate_db.py                 # 数据库迁移脚本（向后兼容）
-├── requirements.txt              # Python 依赖清单（仅 tornado）
+├── requirements.txt              # Python 依赖清单（tornado + cryptography + brotli）
 ├── README.md                     # 项目文档（本文件）
 │
 ├── database/                     # SQLite 数据库文件目录
@@ -158,12 +165,37 @@ DataFinderAgentOS/
 │   ├── requirement.md            # 需求文档
 │   ├── api.md                    # API 接口文档
 │   ├── constraint.md             # 全局开发约束（DDL、安全规范等）
-│   └── test_case.md              # 测试用例清单（27 项）
+│   ├── test_case.md              # 测试用例清单（58 项）
+│   └── v0.3_gap_analysis_and_plan.md  # v0.3 差距分析与规划（已归档）
 │
-├── test/                         # 单元测试
+├── test/                         # 单元测试与 Bug 回归测试
 │   ├── __init__.py
+│   ├── _smoke_encryption.py      # 加密模块冒烟测试
 │   ├── test_login_rate_limiter.py
-│   └── test_user_models.py
+│   ├── test_user_models.py
+│   ├── test_v0_3_enhancements.py
+│   ├── test_bugs_1_2_3.py
+│   ├── test_bug3_role_delete_500.py
+│   ├── test_bug4_cookie_race.py
+│   ├── test_bug4_hardcoded_role_name.py
+│   ├── test_bug5_child_rf_cleanup.py
+│   ├── test_bug5_threadpool.py
+│   ├── test_bug6_api_key_clear.py
+│   ├── test_bug6_rate_limiter_cleanup.py
+│   ├── test_bug7_dw_dedup.py
+│   ├── test_bug7_watch_url_dedup.py
+│   ├── test_bug8_batch_admin_feedback.py
+│   ├── test_bug8_self_operation.py
+│   ├── test_bug9_watchsave_format.py
+│   ├── test_bug9_watchsave_msg.py
+│   ├── test_bug10_admin_audit_log.py
+│   ├── test_bug11_index_template.py
+│   ├── test_bug12_rowcount.py
+│   ├── test_bugs_14_15_16.py
+│   ├── test_bug17_batch_delete_rowcount.py
+│   ├── test_bug27_jquery_array_save.py
+│   ├── test_bug28_warehouse_detail_columns.py
+│   └── test_bug30_chat_default_model.py
 │
 ├── app/
 │   ├── config/                   # 配置模块
@@ -185,8 +217,7 @@ DataFinderAgentOS/
 │   │   ├── admin_watch.py        # 瞭望采集页 + 执行采集 + 保存仓库 + 深度采集
 │   │   ├── admin_watch_source.py # 瞭望源管理 CRUD + 启用/禁用
 │   │   ├── admin_warehouse.py    # 数据仓库列表/详情/单删/批量删除 + 深度采集
-│   │   ├── admin_model.py        # 模型引擎 CRUD + SSE 流式对话 + 多轮对话 API
-│   │   ├── admin_interface.py    # 接口管理 CRUD + 接口测试 + 员工联动
+│   │   ├── admin_model.py        # 模型引擎 CRUD（对话已统一迁移至前台 /chat）
 │   │   └── admin_employee.py     # 数字化员工 CRUD + SSE 调用 + 测试页
 │   │
 │   ├── models/                   # 数据模型层（Repository 模式）
@@ -199,7 +230,6 @@ DataFinderAgentOS/
 │   │   ├── watch_result.py       # WatchResultRepository — 采集结果仓储
 │   │   ├── data_warehouse.py     # DataWarehouseRepository — 数据仓库仓储
 │   │   ├── ai_model.py           # AiModelRepository — AI 模型仓储
-│   │   ├── api_interface.py      # ApiInterfaceRepository — API 接口模板仓储
 │   │   ├── conversation.py       # ConversationRepository — 对话管理仓储（v0.3）
 │   │   └── digital_employee.py   # DigitalEmployeeRepository — 数字员工仓储（v0.3）
 │   │
@@ -207,7 +237,7 @@ DataFinderAgentOS/
 │   │   ├── __init__.py           # 模块入口
 │   │   ├── server.py             # MCP Server（工具注册、MCP/OpenAI 格式互转）
 │   │   ├── client.py             # MCP Client（工具执行、智能语义匹配、上下文注入）
-│   │   └── tools.py              # 8 个 MCP 工具定义 + 处理函数
+│   │   └── tools.py              # 9 个 MCP 工具定义 + 处理函数
 │   │
 │   ├── services/                 # 业务服务层
 │   │   ├── __init__.py
@@ -242,9 +272,6 @@ DataFinderAgentOS/
 │   │       ├── warehouse_detail.html  # 采集结果详情
 │   │       ├── model_list.html        # 模型引擎列表
 │   │       ├── model_form.html        # 模型表单
-│   │       ├── model_chat.html        # AI 流式对话界面
-│   │       ├── interface_list.html    # 接口模板列表 + 测试弹窗
-│   │       ├── interface_form.html    # 接口模板新增/编辑 + 草稿测试
 │   │       ├── employee_list.html     # 数字员工列表（v0.3）
 │   │       ├── employee_form.html     # 数字员工表单（v0.3）
 │   │       ├── employee_test.html     # 数字员工测试页（v0.3）
@@ -253,7 +280,8 @@ DataFinderAgentOS/
 │   └── static/                   # 静态资源
 │       ├── css/
 │       │   ├── base.css          # 全局样式
-│       │   └── dark-theme.css    # 暗色主题样式
+│       │   ├── dark-theme.css    # 暗色主题样式
+│       │   └── light-theme.css   # 浅色主题样式
 │       └── js/
 │           └── base.js           # 全局脚本
 ```
@@ -276,7 +304,7 @@ DataFinderAgentOS/
 #### 1. 进入项目目录
 
 ```bash
-cd "day6-2-个人-肖瑾瑜-瞭望与问数系统v0.2源码"
+cd day7-1
 ```
 
 #### 2. 创建虚拟环境
@@ -297,8 +325,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-> **唯一外部依赖为 `tornado>=6.4`，安装极快（约 2 秒）。**  
-> 所有其他功能（数据库、HTTP 采集、HTML 解析、加密）均使用 Python 标准库。
+> **核心外部依赖**：`tornado>=6.4`（Web 框架）、`cryptography>=41.0`（API Key 加密）、`brotli>=1.1`（HTTP 解压）、`crawl4ai>=0.4`（深度采集，可选）。
+> 数据库、HTTP 采集、HTML 基础解析、密码哈希等功能均使用 Python 标准库。
 
 #### 4. 启动服务
 
@@ -310,14 +338,14 @@ python main.py
 
 ```
 ==================================================
-  瞭望与问数系统 (DataFinderAgentOS) v0.4
+  瞭望与问数系统 (DataFinderAgentOS) v0.4.0
   Server started: http://localhost:10010/
 ==================================================
 ```
 
 > 首次启动时系统会自动：
 > 1. 创建 `database/` 目录和 `finderos.db` 数据库文件
-> 2. 执行 `CREATE TABLE IF NOT EXISTS` 建表（8 张表）
+> 2. 执行 `CREATE TABLE IF NOT EXISTS` 建表（12 张表 + 1 张 FTS5 虚拟表）
 > 3. 创建数据库索引（10+ 个索引）
 > 4. 插入种子数据（默认角色、管理员账户、功能菜单）
 
@@ -391,6 +419,11 @@ python migrate_db.py --status
 | v0.2.5 | 添加 `ai_models.total_tokens`（Token 累加统计） |
 | v0.2.5 | 添加 `audit_logs` 表（操作审计日志） |
 | v0.2.5 | 添加安全相关索引 |
+| v0.2.13 | 添加 `data_warehouse` 独立表 + URL 去重索引 |
+| v0.3.0 | 添加 `conversations` / `conversation_messages` 表 |
+| v0.3.0 | 添加 `digital_employees` 表 |
+| v0.3.0 | 添加 `data_warehouse_fts` FTS5 虚拟表 + 同步触发器 |
+| v0.4.0 | 添加 `watch_sources.schedule_interval` 列 |
 | v0.4.1 | 添加 `api_interfaces` 表与 `digital_employees.api_interface_id`（接口管理联动） |
 
 > 迁移脚本具有**幂等性**：重复执行不会破坏已有数据。
@@ -408,9 +441,9 @@ python migrate_db.py --status
     → 频率限制检查（IP + 用户名维度，5 次/15 分钟）
     → PBKDF2-SHA256 密码验证（60 万轮迭代）
     → 检查 is_enabled 状态
-    → 成功: set_secure_cookie + 按角色跳转
-        ├── 系统管理员 → /admin（管理后台仪表盘）
-        └── 普通用户   → /index（前台主页）
+    → 成功: set_secure_cookie + 按功能权限跳转
+        ├── 有后台功能权限 → /admin（管理后台仪表盘）
+        └── 无后台功能权限 → /index（前台主页）
     → 失败: 记录失败次数 + 返回错误提示
     → 锁定: 超过阈值后返回"账户已锁定"提示
 ```
@@ -570,6 +603,7 @@ limiter.clear(client_ip, username)
 | `url_template` | TEXT | URL 模板（支持占位符） | `https://www.baidu.com/s?tn=news&word={keyword}&pn={(page-1)*10}` |
 | `request_headers` | TEXT(JSON) | 自定义 HTTP 请求头 | `{"Referer":"https://www.baidu.com/"}` |
 | `sort_order` | INTEGER | 排序权重 | 数字越小越靠前 |
+| `schedule_interval` | INTEGER | 定时采集间隔（分钟） | 0=不启用，60=每小时 |
 | `is_enabled` | INTEGER | 启用状态 | 1=启用, 0=禁用 |
 
 支持的操作：**新增、编辑、删除、启用/禁用切换**。
@@ -642,7 +676,7 @@ limiter.clear(client_ip, username)
 
 - **有 API Key**：LLM Function Calling 自主决策工具调用，Tool → Execute → Reply 闭环
 - **无 API Key**：MCP 语义匹配智能回退，基于工具描述自动路由到最佳工具
-- **工具标准化**：8 个 MCP Tool，遵循 `tools/list` + `tools/call` JSON-RPC 协议
+- **工具标准化**：9 个 MCP Tool，遵循 `tools/list` + `tools/call` JSON-RPC 协议
 - **OpenAI 兼容**：工具定义自动转换为 OpenAI Function Calling 格式，无缝对接主流 LLM
 
 **MCP 工具列表**：
@@ -656,6 +690,7 @@ limiter.clear(client_ip, username)
 | `collect_web_data` | 数据采集 | 执行全网瞭望采集（从配置的瞭望源搜索关键词） |
 | `list_digital_employees` | 数字员工 | 列出所有可用的数字员工及能力描述 |
 | `list_conversations` | 对话管理 | 获取用户的历史对话列表 |
+| `get_random_music` | 音乐/娱乐 | 从网易云热歌榜随机推荐歌曲（Meting API），返回歌曲名/歌手/封面/试听链接 |
 | `get_conversation_messages` | 对话管理 | 获取指定对话的消息记录 |
 
 **对话流程（有 API Key）**：
@@ -720,40 +755,11 @@ limiter.clear(client_ip, username)
 | `is_enabled` | INTEGER | `1` | 启用状态 |
 | `is_default` | INTEGER | `0` | 是否默认模型（全局唯一） |
 
-支持的操作：**新增、编辑、删除、启用/禁用、设为默认、Token 清零**。
+支持的操作：**新增、编辑、删除、启用/禁用、设为默认**。
 
-#### 5.3 流式对话 (`/admin/model/chat`)
+> **注**：模型流式对话功能已统一迁移至前台 `/chat/stream`（MCP 架构），后台不再提供独立对话页面。
 
-```
-用户选择模型 → 输入消息
-    ├── 有 API Key → 真实 OpenAI API 调用
-    │       ├── 携带 MCP 工具定义 (tools 参数)
-    │       ├── LLM 返回 tool_calls → MCP Server 执行 → 结果回传
-    │       └── LLM 返回 content → SSE 逐字推送到前端
-    └── 无 API Key → MCP 语义匹配 + 本地 Mock 流式输出
-            ├── 匹配工具 → 执行 → 格式化结果 → 打字效果输出
-            └── 无匹配 → 通用 Mock 逐字输出
-
-    → Token 消耗自动累加到 ai_models.total_tokens
-    → 对话记录写入 audit_logs (action=CHAT)
-    → /tools 指令可查看所有可用 MCP 工具
-```
-
-**SSE 事件格式**：
-
-```
-data: {"content": "你"}
-data: {"content": "好"}
-data: {"content": "！"}
-...
-data: [DONE]
-event: stats
-data: {"tokens": 42, "mock": false}
-```
-
-**Mock 模式**：当 API Key 未配置时自动回退到本地模拟流式输出，方便开发调试。在对话页顶部会显示当前使用的模型名称和连接状态。
-
-#### 5.4 模型 API 接口
+#### 5.3 模型 API 接口
 
 | 端点 | 说明 |
 |------|------|
@@ -833,7 +839,7 @@ data: {"tokens": 42, "mock": false}
 #### 8.3 MCP 工具调用与 SSE 流式对话
 
 - **LLM Function Calling 模式**（有 API Key）：LLM 收到消息后自主判断是否需要调用工具，调用后基于真实数据生成回复
-- **MCP 语义匹配模式**（无 API Key）：基于 8 个 MCP 工具的名称和描述进行语义评分，自动选择最佳工具执行
+- **MCP 语义匹配模式**（无 API Key）：基于 9 个 MCP 工具的名称和描述进行语义评分，自动选择最佳工具执行
 - **图表注入**：AI 回复中 `[CHART:...]` 标记自动渲染为 ECharts 图表
 - **表格注入**：`[TABLE:...]` 标记自动渲染为 HTML 数据表格
 - **元信息显示**：每条 AI 回复下方显示响应时间(s)和 Token 消耗
@@ -845,9 +851,71 @@ data: {"tokens": 42, "mock": false}
 - 多轮对话：最近 10 条消息自动注入上下文
 - 归属校验：仅对话创建者可查看/删除自己的对话
 
+#### 8.5 语音合成播报（TTS）
+
+v0.4.1 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息提供一键朗读能力。
+
+| 特性 | 说明 |
+|------|------|
+| **引擎** | Microsoft Edge TTS（免费、高质量神经网络语音） |
+| **语音** | 6 种中文语音可选（晓晓/云希/云健/晓伊/云扬/晓晨），默认「晓晓」 |
+| **触发** | 每条 AI 消息气泡下方显示 🔊 播报按钮，点击即可朗读 |
+| **缓存** | 基于文本 MD5 的本地缓存，相同文本不重复生成 |
+| **音频** | MP3 格式，流式返回，支持暂停/恢复 |
+
+**使用方式**：
+1. 在对话页面（`/chat`）发送消息获取 AI 回复
+2. 点击 AI 回复气泡下方的「🔊 播报」按钮
+3. 等待语音合成完成（首次约 1-3 秒，缓存命中秒级响应）
+4. 自动播放音频；再次点击可停止播放
+
+**后端 API**：`POST /api/chat/tts`
+- 参数：`text`（待合成文本，1-4000 字符）、`voice`（可选语音名）
+- 返回：`audio/mpeg` 二进制音频流
+
 ---
 
-### 9. 数字化员工
+### 9. 技能管理
+
+#### 9.1 概述
+
+技能管理（`/admin/skill`）是 v0.5 新增模块，为数字员工提供**可复用的能力增强框架**。每个技能定义后，数字员工创建时可从技能库中勾选组合。
+
+#### 9.2 技能类型
+
+| 类型 | 实现方式 | 效果 |
+|------|----------|------|
+| **Prompt 增强** | 存储一段完整的 prompt 指令模板 | LLM 调用 `load_skill` 后注入系统指令，改变行为 |
+| **Function 调用** | 映射到一个 MCP 工具（如 `search_warehouse`） | LLM 加载后获知可调用对应工具，形成技能→工具链 |
+
+#### 9.3 按需加载架构
+
+```
+用户 @数字员工 提问
+    │
+    ├─ System Prompt 中嵌入「可用技能」列表（仅名称 + 一句话描述）
+    │   例: - 数据搜索: 在数据仓库中按关键词搜索采集结果
+    │        - 数据统计: 生成数据仓库统计报告，含图表标记
+    │
+    └─ LLM 判断需要某技能 → 调用 load_skill(skill_name)
+         │
+         ├─ Prompt 型 → 返回完整指令模板 → LLM 遵循执行
+         └─ Function 型 → 返回 function_name + params → LLM 继续调用对应 MCP 工具
+```
+
+#### 9.4 默认技能（5个）
+
+| 技能 | 类型 | 描述 |
+|------|------|------|
+| 📊 **数据统计** | Prompt | 生成数据仓库统计报告，含图表标记 |
+| 🔍 **数据搜索** | Function | 在数据仓库中按关键词搜索采集结果 |
+| 📰 **新闻摘要** | Prompt | 聚合多源新闻并生成结构化摘要 |
+| 🕷 **深度采集** | Function | 对指定 URL 进行正文深度抓取 |
+| 🌐 **翻译助手** | Prompt | 高质量中英文双向翻译 |
+
+---
+
+### 10. 数字化员工
 
 #### 9.1 概述
 
@@ -855,19 +923,10 @@ data: {"tokens": 42, "mock": false}
 
 | 类型 | 实现方式 | 适用场景 |
 |------|----------|----------|
-| **LLM 型** | 绑定 AI 模型 + 系统提示词 + 技能列表 + 可选 Crawl4ai | 复杂推理、数据分析、文案撰写、深度采集 |
-| **API 型** | HTTP/HTTPS API + 参数模板 + 响应渲染模板 | 天气查询、新闻获取等外部服务调用 |
+| **LLM 型** | 绑定 AI 模型 + 系统提示词 + 技能列表 + MCP 工具调用 + 可选 Crawl4ai | 复杂推理、数据分析、文案撰写、音乐推荐、深度采集 |
+| **API 型** | HTTP/HTTPS API + 参数模板 + 响应渲染模板 | 天气查询等外部服务调用 |
 
-#### 9.2 接口管理联动（Issue #26）
-
-管理侧新增 `/admin/interface` **接口管理模块**，用于维护可复用 API 接口模板：
-
-- 接口模板字段：名称、描述、URL、请求方法、Headers、参数模板、响应渲染模板、接口密钥、启用状态、排序。
-- 支持在接口列表或表单页发起**接口测试**，测试与员工调用统一执行 URL 协议校验、SSRF 防护、DNS 固定解析、禁止自动重定向和 Header CRLF 检测。
-- 创建/编辑 **API 型数字员工** 时可选择接口模板，前端自动填充 URL / Method / Headers / Params / Response Template。
-- 接口密钥使用现有 Fernet 加密能力存储；联动创建员工时在服务端复用，不通过接口列表 API 回显；`Authorization` / `Cookie` / `X-API-Key` 等敏感 Header 在联动 API 与表单中脱敏展示。
-
-#### 9.3 默认数字员工（7个）
+#### 9.2 默认数字员工（8个）
 
 | 员工 | 类型 | 核心能力 |
 |------|------|---------|
@@ -878,15 +937,16 @@ data: {"tokens": 42, "mock": false}
 | ✍️ **文案编写** | LLM | 报告撰写、方案策划、公文起草、宣传文案 |
 | 📰 **新闻聚合** | LLM | 新闻检索、热点追踪、每日简报 |
 | 📚 **科普助手** | LLM | 百科问答、知识科普、概念解释 |
+| 🎵 **随机音乐** | LLM (MCP) | 通过 get_random_music 工具调用 Meting API，从网易云热歌榜随机推荐歌曲并展示音乐卡片 |
 
-#### 9.4 调用方式
+#### 9.3 调用方式
 
 - **后台测试**：`/admin/employee/test` 对话测试页面
 - **后台调用**：`POST /admin/employee/invoke` SSE 流式 API
 - **前台 @ 触发**：用户在输入框中输入 `@天气 成都` 自动匹配并调用
 - **数据仓库注入**：LLM 型员工自动注数据仓库查询结果作为上下文
 
-#### 9.5 LLM 型员工特性
+#### 9.4 LLM 型员工特性
 
 - **模型回退**：员工绑定模型 → 系统默认模型 → 第一个启用模型
 - **工具调用**：自动识别意图（数据仓库查询/统计/深度采集）并执行
@@ -897,9 +957,9 @@ data: {"tokens": 42, "mock": false}
 
 ## API 接口一览
 
-> **基础 URL**: `http://localhost:10010`  
-> **认证方式**: Tornado Secure Cookie（`username` Cookie）  
-> **CSRF**: 所有 POST/PUT/DELETE 请求需携带 `_xsrf` token  
+> **基础 URL**: `http://localhost:10010`
+> **认证方式**: Tornado Secure Cookie（`username` Cookie）
+> **CSRF**: 所有 POST/PUT/DELETE 请求需携带 `_xsrf` token
 > **Content-Type**: 表单提交为 `application/x-www-form-urlencoded`
 
 ### 认证
@@ -966,6 +1026,7 @@ data: {"tokens": 42, "mock": false}
 | GET | `/admin/watch` | 瞭望采集页 + 历史结果（`?keyword=&page=&source_id=`） |
 | POST | `/admin/watch` | 执行采集，返回 JSON（`keyword=&source_ids=&page=`） |
 | POST | `/admin/watch/save` | 保存采集结果到数据仓库 |
+| POST | `/admin/watch/deep-collect` | 一站式深度采集 |
 
 #### 瞭望源管理
 | 方法 | 路径 | 说明 |
@@ -985,6 +1046,7 @@ data: {"tokens": 42, "mock": false}
 | GET | `/admin/warehouse/detail` | 查看详情（`?id=`） |
 | POST | `/admin/warehouse/delete` | 删除单条记录 |
 | POST | `/admin/warehouse/batch-delete` | 批量删除 |
+| POST | `/admin/warehouse/deep-collect` | 深度采集指定记录 |
 
 #### 模型引擎
 | 方法 | 路径 | 说明 |
@@ -997,22 +1059,17 @@ data: {"tokens": 42, "mock": false}
 | POST | `/admin/model/delete` | 删除模型 |
 | POST | `/admin/model/toggle` | 启用/禁用模型 |
 | POST | `/admin/model/default` | 设为默认模型 |
-| POST | `/admin/model/clear-tokens` | Token 消耗清零 |
-| GET | `/admin/model/chat` | 对话页面（`?model_id=`） |
-| POST | `/admin/model/chat/stream` | **SSE 流式对话**（需设置 `Accept: text/event-stream`） |
 | GET | `/admin/api/model/list` | 模型 JSON API（返回已启用模型列表） |
 
 #### 接口管理（Issue #26）
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/admin/interface` | 接口模板列表（`?page=&keyword=`） |
-| GET | `/admin/interface/add` | 新增接口模板页面 |
-| POST | `/admin/interface/add` | 提交新增接口模板 |
-| GET | `/admin/interface/edit` | 编辑接口模板页面（`?id=`） |
-| POST | `/admin/interface/edit` | 提交编辑接口模板 |
+| GET/POST | `/admin/interface/add` | 新增接口模板 |
+| GET/POST | `/admin/interface/edit` | 编辑接口模板（`?id=`） |
 | POST | `/admin/interface/delete` | 删除接口模板 |
 | POST | `/admin/interface/toggle` | 启用/禁用接口模板 |
-| POST | `/admin/interface/test` | 测试接口模板（支持已保存接口或表单草稿配置） |
+| POST | `/admin/interface/test` | 测试接口模板（保存接口或表单草稿） |
 | GET | `/admin/api/interface/list` | 已启用接口模板 JSON API（供 API 型数字员工联动） |
 
 #### 数字化员工（v0.3）
@@ -1041,14 +1098,6 @@ data: {"tokens": 42, "mock": false}
 | POST | `/api/chat/conversation/create` | 创建新对话 |
 | POST | `/api/chat/conversation/delete` | 删除对话 |
 | GET | `/api/chat/conversation/messages` | 获取对话消息（`?id=`） |
-
-#### 多轮对话管理（v0.3）
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/admin/api/conversation/list` | 对话列表 |
-| POST | `/admin/api/conversation/create` | 创建对话 |
-| POST | `/admin/api/conversation/delete` | 删除对话 |
-| GET | `/admin/api/conversation/messages` | 获取对话消息 |
 
 ---
 
@@ -1105,21 +1154,6 @@ erDiagram
         timestamp deep_collected_at
         timestamp created_at
     }
-    api_interfaces {
-        int id PK
-        string name
-        string description
-        string api_url
-        string api_method
-        string api_headers
-        string api_params_template
-        string response_render_template
-        string api_secret
-        int is_enabled
-        int sort_order
-        timestamp created_at
-        timestamp updated_at
-    }
     conversations {
         int id PK
         string username
@@ -1135,6 +1169,20 @@ erDiagram
         string content
         int token_count
         timestamp created_at
+    }
+    api_interfaces {
+        int id PK
+        string name
+        string api_url
+        string api_method
+        string api_headers
+        string api_params_template
+        string response_render_template
+        string api_secret
+        int is_enabled
+        int sort_order
+        timestamp created_at
+        timestamp updated_at
     }
     digital_employees {
         int id PK
@@ -1197,7 +1245,8 @@ erDiagram
 | **CSRF** | Tornado `xsrf_cookies=True` 全局开启 + 模板 `{% module xsrf_form_html() %}` | OWASP A01:2021 |
 | **XSS** | Tornado 模板默认 HTML 转义 + 采集内容清洗（`unescape` + 标签剥离） | OWASP A03:2021 |
 | **SQL 注入** | 全参数化查询（`?` 占位符），0 处字符串拼接 SQL | OWASP A03:2021 |
-| **SSRF** | URL 协议白名单 + 内网 IP 段拦截 + DNS 解析校验 + CRLF 检测 | OWASP A10:2021 |
+| **SSRF** | URL 协议白名单 + 内网 IP 段拦截 + DNS 解析校验 + CRLF 检测；接口管理/ API 型员工调用使用安全 HTTP 客户端固定已校验 IP 且不自动跟随重定向 | OWASP A10:2021 |
+| **接口密钥与 Header** | `api_secret` 加密存储；接口联动 API 不回显密钥，`Authorization` / `Cookie` / `X-API-Key` 等敏感 Header 脱敏展示 | OWASP |
 | **Header 注入** | CR/LF 字符检测（`has_crlf()`），拒绝含 `\r` `\n` 的输入 | OWASP A03:2021 |
 | **安全响应头** | CSP / X-Frame-Options / X-Content-Type-Options / X-XSS-Protection / Referrer-Policy / Permissions-Policy | OWASP |
 | **登录限速** | IP + 用户名维度，5 次失败 / 15 分钟锁定窗口 | OWASP A07:2021 |
@@ -1253,6 +1302,7 @@ Permissions-Policy: camera=(), microphone=(), geolocation=()
 | `PAGE_SIZE` | `20` | 列表默认分页大小 |
 | `LOGIN_MAX_FAILURES` | `5` | 登录失败次数上限（同一 IP + 用户名组合） |
 | `LOGIN_LOCKOUT_SECONDS` | `900` | 登录锁定时间（秒），默认 15 分钟 |
+| `BIND_ADDRESS` | `127.0.0.1` | HTTP 服务监听地址（`0.0.0.0` 监听所有网卡） |
 
 ### 生产环境启动示例
 
@@ -1303,7 +1353,10 @@ python migrate_db.py --status
 | v0.2.5 | 添加 `audit_logs` 表（操作审计日志，含 3 个索引） |
 | v0.2.5 | 添加安全相关索引（`audit_logs.action`、`audit_logs.username`、`audit_logs.created_at`） |
 | v0.2.13 | 添加 `data_warehouse` 独立表（标题/链接/摘要/来源 + URL 去重索引） |
-| v0.4.1 | 添加 `api_interfaces` 表与 `digital_employees.api_interface_id`（接口模板联动 API 型员工） |
+| v0.3.0 | 添加 `conversations` / `conversation_messages` 表（多轮对话持久化） |
+| v0.3.0 | 添加 `digital_employees` 表（数字化员工配置） |
+| v0.3.0 | 添加 `data_warehouse_fts` 虚拟表 + 3 个同步触发器（FTS5 全文检索） |
+| v0.4.0 | 添加 `watch_sources.schedule_interval` 列（定时采集间隔） |
 
 > 迁移脚本具有**幂等性**：重复执行不会破坏已有数据。使用 `ALTER TABLE ADD COLUMN`（列不存在时静默跳过）和 `CREATE TABLE IF NOT EXISTS` 确保安全。
 
@@ -1405,7 +1458,7 @@ python make_admin.py --reset --username admin --password newpassword
 | **角色管理** | 3 | 新增角色+功能授权、系统角色编辑保护（is_system）、系统角色删除保护 |
 | **瞭望采集** | 5 | 关键词采集、瞭望源选择、保存到数据仓库、SSRF 防护（内网地址拦截）、空关键词 |
 | **模型引擎** | 6 | 新增模型、设为默认、Mock 对话（无 API Key）、真实 API 流式对话、Token 统计、审计日志记录 |
-| **接口管理** | 6 | 接口模板 CRUD、安全校验、敏感 Header 脱敏、接口测试、安全 HTTP 调用、API 型数字员工联动创建 |
+| **接口管理** | 6 | 接口模板 CRUD、安全校验、敏感 Header 脱敏、安全 HTTP 调用、接口测试、API 型数字员工联动创建 |
 | **安全测试** | 5 | XSS 注入（采集内容）、SQL 注入（参数化查询验证）、CSRF Token 校验、密码哈希强度、安全响应头存在性 |
 
 ### 运行测试
@@ -1432,14 +1485,29 @@ python -m pytest test/test_login_rate_limiter.py::TestLoginRateLimiter::test_rat
 
 - 🔗 **接口管理模块**：新增 `/admin/interface` 接口模板 CRUD、启用/禁用、列表搜索与接口测试。
 - 🧩 **数字员工联动**：API 型员工表单可选择接口模板，自动填充 URL / Method / Headers / Params / Response Template。
-- 🔐 **密钥安全**：接口密钥加密入库，联动创建员工时服务端复用，不通过接口列表 API 回显。
-- 🛡️ **请求防护**：接口测试与 API 型员工调用共用安全 HTTP 工具，固定已校验 DNS 解析结果、拒绝内网地址、禁止自动重定向并校验 Header CRLF。
-- 🧪 **测试补充**：新增 `test/test_issue26_api_interface.py` 覆盖接口模板、校验、敏感 Header 脱敏和员工关联。
+- 🔐 **密钥安全**：接口密钥加密入库，联动创建员工时服务端复用；敏感 Header 脱敏展示并支持安全恢复。
+- 🛡️ **安全 HTTP 调用**：接口测试与 API 型员工调用共用安全 HTTP 工具，拒绝内网地址、固定已校验 DNS 解析结果、禁止自动重定向并校验 Header/Host。
+- 🧪 **测试补充**：新增 `test/test_issue26_api_interface.py` 覆盖接口模板、校验、安全调用和员工关联。
+
+### v0.4.1 (2026-07-15) — UI 显示修复
+
+- 🐛 **修复员工卡片模型名称显示 "None"**：`model_name` 为 `None` 时模板默认值回退不生效，改用 `or` 运算符确保正确显示"默认模型"
+- 🐛 **修复员工卡片技能标签显示为 dict 字符串**：技能 ID 解析后返回 dict 列表但模板直接渲染为 Python 字面量，改为提取 `name` 字段作为字符串列表
+- 🐛 **修复员工对话中技能名称 join 异常**：`skills_list` 为 int ID 数组时 `"、".join()` 会抛出 TypeError，增加 ID→名称解析逻辑
+
+### v0.4.1 (2026-07) — TTS 语音合成播报
+
+- 🔊 **Edge TTS 语音播报**：AI 回复消息一键朗读，使用 Microsoft Edge 免费 TTS 服务
+- 🎙️ **6 种中文语音**：晓晓/云希/云健/晓伊/云扬/晓晨，默认「晓晓」神经网络语音
+- 💾 **智能缓存**：基于文本 MD5 的本地缓存，相同文本不重复生成
+- ⏯️ **播放控制**：点击播报开始播放，再次点击停止；支持暂停/恢复
+- 🔒 **安全审计**：TTS 调用写入 `audit_logs` 表（`USER_TTS`）
+- 🎨 **前端交互**：气泡下方显示 🔊 播报按钮，加载动画 + 播放状态指示
 
 ### v0.4 (2026-07) — MCP 协议架构重构
 
 - 🔌 **MCP 协议模块**：新增 `app/mcp/` 完整实现（Server / Client / Tools）
-- 🔧 **8 个 MCP 工具**：search_warehouse / get_recent_warehouse_data / get_warehouse_stats / deep_collect_url / collect_web_data / list_digital_employees / list_conversations / get_conversation_messages
+- 🔧 **9 个 MCP 工具**：search_warehouse / get_recent_warehouse_data / get_warehouse_stats / deep_collect_url / collect_web_data / list_digital_employees / get_random_music / list_conversations / get_conversation_messages
 - 🤖 **LLM Function Calling**：有 API Key 时 LLM 自主决策工具调用（Tool → Execute → Reply 闭环，最多 3 轮）
 - 🧠 **MCP 语义匹配**：无 API Key 时基于工具描述的多维语义评分自动路由，替代旧关键词硬匹配
 - 🗑️ **废弃旧代码**：移除 `_detect_intent_and_query` 及 50+ 硬编码关键词意图识别逻辑
@@ -1508,9 +1576,11 @@ python -m pytest test/test_login_rate_limiter.py::TestLoginRateLimiter::test_rat
 
 ---
 
-> 📚 **相关文档**：  
-> - 系统设计：`docs/design.md`  
-> - 需求文档：`docs/requirement.md`  
-> - API 文档：`docs/api.md`  
-> - 开发约束：`docs/constraint.md`  
+> 📚 **相关文档**：
+> - 系统设计：`docs/design.md`
+> - 需求文档：`docs/requirement.md`
+> - API 文档：`docs/api.md`
+> - 开发约束：`docs/constraint.md`
 > - 测试用例：`docs/test_case.md`
+> - 审计报告（修复前）：`docs/audit_report_v1.md`
+> - 安全修复报告（修复后）：`docs/audit_report_v2.md`

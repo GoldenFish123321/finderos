@@ -225,8 +225,8 @@ def test_api_employee_admin_treats_http_error_as_failure(monkeypatch):
     assert "HTTP 500" in dummy.writes[-1]["msg"]
 
 
-def test_api_employee_user_sse_treats_http_error_as_failure(monkeypatch):
-    """前台 @ API 型员工遇到 4xx/5xx 应通过 SSE 返回失败消息。"""
+def test_api_employee_user_sse_treats_http_error_as_fallback(monkeypatch):
+    """前台 @ API 型员工遇到 4xx/5xx 不应按成功处理，应进入远端已有 Mock 回退。"""
     def fake_safe_http_request(*args, **kwargs):
         return SafeHttpResponse(
             status=502,
@@ -260,6 +260,10 @@ def test_api_employee_user_sse_treats_http_error_as_failure(monkeypatch):
         async def flush(self):
             return None
 
+        async def _mock_api_employee_fallback(self, emp, message, start, reason):
+            self.write(f"fallback:{reason}")
+            await self.flush()
+
     dummy = DummyHandler()
     emp = {
         "id": 2602,
@@ -273,8 +277,7 @@ def test_api_employee_user_sse_treats_http_error_as_failure(monkeypatch):
     }
     asyncio.run(user_chat.UserEmployeeInvokeHandler._invoke_api_employee(dummy, emp, "hello"))
     output = "".join(dummy.chunks)
-    assert "HTTP 502" in output
-    assert "[DONE]" in output
+    assert "fallback:HTTP 502" in output
 
 
 def test_api_employee_can_link_api_interface():

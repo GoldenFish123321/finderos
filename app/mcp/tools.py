@@ -11,8 +11,10 @@ app/mcp/tools.py — MCP 工具定义与注册
 工具分类：
 1. 数据仓库类: search_warehouse, get_recent_warehouse_data, get_warehouse_stats
 2. 数据采集类: collect_web_data, deep_collect_url
-3. 数字员工类: list_digital_employees, invoke_digital_employee
-4. 对话管理类: list_conversations, get_conversation_messages
+3. 数字员工类: list_digital_employees
+4. 音乐/娱乐类: get_random_music
+5. 对话管理类: list_conversations, get_conversation_messages
+6. 技能管理类: load_skill (v0.5.0 新增)
 """
 
 import json
@@ -191,6 +193,61 @@ def _list_digital_employees() -> Dict[str, Any]:
     }
 
 
+async def _get_random_music() -> Dict[str, Any]:
+    """随机获取一首歌曲（从网易云音乐热歌榜）。"""
+    import asyncio
+    import random as _random
+    import urllib.request
+    import json as _json
+
+    def _sync_fetch():
+        url = "https://api.injahow.cn/meting/?server=netease&type=playlist&id=3778678"
+        headers = {"User-Agent": "FinderOS/1.0", "Accept": "application/json"}
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                body = resp.read().decode("utf-8", errors="replace")
+                songs = _json.loads(body)
+                if isinstance(songs, list) and len(songs) > 0:
+                    song = _random.choice(songs)
+                    return {
+                        "success": True,
+                        "name": song.get("name", ""),
+                        "artist": song.get("artist", ""),
+                        "cover": song.get("pic", ""),
+                        "url": song.get("url", ""),
+                        "source": "网易云音乐热歌榜",
+                    }
+                return {"success": False, "error": "歌曲列表为空"}
+        except Exception as e:
+            logger.warning(f"get_random_music 调用失败: {e}")
+            # 回退：返回本地 Mock 歌曲
+            mock_songs = [
+                {"name": "晴天", "artist": "周杰伦",
+                 "cover": "https://picsum.photos/seed/music1/160/160",
+                 "url": "https://music.163.com/"},
+                {"name": "夜曲", "artist": "周杰伦",
+                 "cover": "https://picsum.photos/seed/music2/160/160",
+                 "url": "https://music.163.com/"},
+                {"name": "稻香", "artist": "周杰伦",
+                 "cover": "https://picsum.photos/seed/music3/160/160",
+                 "url": "https://music.163.com/"},
+            ]
+            song = _random.choice(mock_songs)
+            return {
+                "success": True,
+                "name": song["name"],
+                "artist": song["artist"],
+                "cover": song["cover"],
+                "url": song["url"],
+                "source": "本地曲库（Mock）",
+                "note": f"API 调用失败: {str(e)[:100]}",
+            }
+
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _sync_fetch)
+
+
 def _list_conversations(username: str = "", limit: int = 20) -> Dict[str, Any]:
     """列出用户的对话历史。"""
     from app.models.conversation import ConversationRepository
@@ -237,6 +294,59 @@ def _get_conversation_messages(conversation_id: int, limit: int = 20,
             for m in messages
         ],
     }
+
+
+def _load_skill(skill_name: str) -> Dict[str, Any]:
+    """加载指定技能的完整指令（v0.5.0 新增）。
+
+    根据技能类型返回不同内容：
+    - prompt 型：返回完整 prompt_template（供 LLM 注入系统指令）
+    - function 型：返回 function_name + function_params（供 LLM 后续调用对应工具）
+    """
+    from app.models.skill import SkillRepository
+    skill = SkillRepository.get_by_name(skill_name.strip())
+    if not skill:
+        return {
+            "success": False,
+            "error": f"技能「{skill_name}」不存在",
+            "hint": "请检查技能名称拼写，或使用 /tools 查看可用工具列表",
+        }
+    if skill.get("is_enabled") != 1:
+        return {
+            "success": False,
+            "error": f"技能「{skill_name}」已被禁用",
+        }
+
+    skill_type = skill.get("skill_type", "prompt")
+    if skill_type == "prompt":
+        return {
+            "success": True,
+            "skill_type": "prompt",
+            "skill_name": skill["name"],
+            "description": skill.get("description", ""),
+            "content": skill.get("prompt_template", ""),
+            "usage": "请将以上 content 作为你的系统指令严格遵循，完成用户的任务。",
+        }
+    else:  # function
+        func_name = skill.get("function_name", "")
+        func_params_str = skill.get("function_params", "{}")
+        try:
+            import json as _json
+            func_params = _json.loads(func_params_str)
+        except Exception:
+            func_params = {}
+        return {
+            "success": True,
+            "skill_type": "function",
+            "skill_name": skill["name"],
+            "description": skill.get("description", ""),
+            "function_name": func_name,
+            "function_params": func_params,
+            "usage": (
+                f"此技能映射到 MCP 工具「{func_name}」。"
+                f"请根据用户需求调用该工具，默认参数: {func_params_str}。"
+            ),
+        }
 
 
 # ============================================================
@@ -361,6 +471,21 @@ ALL_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
         "handler": _list_digital_employees,
     },
 
+    # ── 音乐/娱乐类 ──
+    {
+        "name": "get_random_music",
+        "description": (
+            "随机推荐一首歌曲。从网易云音乐热歌榜中随机选取一首，返回歌曲名、歌手、封面图和试听链接。"
+            "当用户说「来首歌」「随机音乐」「推荐一首歌」「放首歌」「来点音乐」时使用此工具。"
+            "注意：此工具直接返回歌曲数据，调用后应基于数据向用户展示歌曲信息。"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+        "handler": _get_random_music,
+    },
+
     # ── 对话管理类 ──
     {
         "name": "list_conversations",
@@ -410,6 +535,27 @@ ALL_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
             "required": ["conversation_id"],
         },
         "handler": _get_conversation_messages,
+    },
+
+    # ── 技能管理类 (v0.5.0 新增) ──
+    {
+        "name": "load_skill",
+        "description": (
+            "加载指定技能的完整执行指令。"
+            "当系统提示中的「可用技能」列表里存在你需要的技能时，调用此工具获取该技能的详细 prompt 模板或 function 映射。"
+            "不要猜测技能内容，始终通过此工具按需加载。"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "skill_name": {
+                    "type": "string",
+                    "description": "要加载的技能名称（必须与可用技能列表中的名称完全一致）",
+                },
+            },
+            "required": ["skill_name"],
+        },
+        "handler": _load_skill,
     },
 ]
 
