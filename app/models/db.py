@@ -634,15 +634,11 @@ def _seed_default_employees():
                     "GET",
                     json.dumps({"Accept": "application/json", "User-Agent": "FinderOS/1.0"}, ensure_ascii=False),
                     "",
-                    json.dumps({
-                        "type": "music_card",
-                        "title": "{{name}}",
-                        "fields": [
-                            {"label": "歌手", "value": "{{artist}}"},
-                            {"label": "封面", "value": "{{pic}}"},
-                            {"label": "试听", "value": "{{url}}"},
-                        ]
-                    }, ensure_ascii=False),
+                    json.dumps(
+                        "🎵 **{{name}}** — *{{artist}}*\n\n"
+                        "> 💿 来自网易云音乐热歌榜，点击下方卡片试听。\n",
+                        ensure_ascii=False
+                    ),
                     1,
                 ),
             )
