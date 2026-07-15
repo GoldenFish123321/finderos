@@ -59,7 +59,8 @@
 
 ```
 � 智能问数 — 用户前台 AI 对话         — A/B/C/D/E 五区布局 + SSE 流式 + 多轮对话
-🤖 数字员工 — @ 触发智能 Agent         — 天气/采集专员/文案编写/新闻聚合/科普助手/随机音乐等 8 个
+🤖 数字员工 — @ 触发智能 Agent         — 8 个默认员工 + LLM/API 双模式 + MCP 工具权限
+🧰 MCP 工具 — 数据库驱动注册中心       — 18 个内置工具 + 热重载 + 在线测试 + 三色徽章
 🔗 接口管理 — API 模板复用与测试       — API 型数字员工配置一键联动填充
 📊 报表呈现 — ECharts 交互图表         — 柱状图/折线图/饼图/散点图 + 数据表格
 🔊 语音播报 — Edge TTS 语音合成        — AI 回复一键朗读，6 种中文语音可选
@@ -115,7 +116,7 @@
 │  └──────────────────────┬────────────────────────────┘  │
 │                         │                               │
 │                ┌────────┴────────┐                      │
-│                │  SQLite (WAL)   │                      │
+│                │  SQLite (WAL)   │ 16 张表 + FTS5     │
 │                └─────────────────┘                      │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -144,7 +145,7 @@
 | **数据采集** | Python 标准库 `urllib` | 零第三方爬虫依赖 |
 | **HTML 解析** | Python `re` 正则 | 内置解析器，无需 BeautifulSoup |
 | **AI 对话** | OpenAI 范式 SSE + Function Calling | 支持 OpenAI / DeepSeek / 智谱 AI / 百度文心 / 自定义 Provider |
-| **工具协议** | MCP (Model Context Protocol) | 9 个标准化工具，LLM 自主决策调用，语义匹配回退 |
+| **工具协议** | MCP (Model Context Protocol) | 18 个标准化工具，数据库驱动注册中心 + 热重载 + 在线测试 |
 
 ---
 
@@ -220,7 +221,10 @@ DataFinderAgentOS/
 │   │   ├── admin_warehouse.py    # 数据仓库列表/详情/单删/批量删除 + 深度采集
 │   │   ├── admin_model.py        # 模型引擎 CRUD（对话已统一迁移至前台 /chat）
 │   │   ├── admin_conversation.py # 管理侧会话管理（跨用户查看/详情/删除）
-│   │   └── admin_employee.py     # 数字化员工 CRUD + SSE 调用 + 测试页
+│   │   ├── admin_employee.py     # 数字化员工 CRUD + SSE 调用 + 测试页
+│   │   ├── admin_skill.py        # 技能管理 CRUD + MCP 工具绑定（v0.5.0）
+│   │   ├── admin_mcp.py          # MCP 工具管理 CRUD + 测试 + 热重载（v0.4.2）
+│   │   └── admin_interface.py    # 接口管理 CRUD + 测试（v0.4.1）
 │   │
 │   ├── models/                   # 数据模型层（Repository 模式）
 │   │   ├── __init__.py
@@ -233,13 +237,26 @@ DataFinderAgentOS/
 │   │   ├── data_warehouse.py     # DataWarehouseRepository — 数据仓库仓储
 │   │   ├── ai_model.py           # AiModelRepository — AI 模型仓储
 │   │   ├── conversation.py       # ConversationRepository — 对话管理仓储（v0.3）
-│   │   └── digital_employee.py   # DigitalEmployeeRepository — 数字员工仓储（v0.3）
+│   │   ├── digital_employee.py   # DigitalEmployeeRepository — 数字员工仓储（v0.3）
+│   │   ├── skill.py              # SkillRepository — 技能仓储（v0.5.0）
+│   │   ├── mcp_tool.py           # MCPToolRepository — MCP 工具仓储（v0.4.2）
+│   │   └── api_interface.py      # ApiInterfaceRepository — 接口模板仓储（v0.4.1）
 │   │
 │   ├── mcp/                      # MCP 协议模块（v0.4）
 │   │   ├── __init__.py           # 模块入口
 │   │   ├── server.py             # MCP Server（工具注册、MCP/OpenAI 格式互转）
 │   │   ├── client.py             # MCP Client（工具执行、智能语义匹配、上下文注入）
-│   │   └── tools.py              # 9 个 MCP 工具定义 + 处理函数
+│   │   ├── tools.py              # 18 个 MCP 工具定义 + 处理函数（代码回退）
+│   │   ├── registry.py           # 数据库驱动工具注册中心（v0.4.2）
+│   │   └── builtin_tools/        # 按分类组织的工具处理函数（8 个模块）
+│   │       ├── warehouse_tools.py
+│   │       ├── collect_tools.py
+│   │       ├── employee_tools.py
+│   │       ├── model_tools.py
+│   │       ├── chat_tools.py
+│   │       ├── entertainment_tools.py
+│   │       ├── crawl4ai_tools.py
+│   │       └── system_tools.py
 │   │
 │   ├── services/                 # 业务服务层
 │   │   ├── __init__.py
@@ -279,6 +296,10 @@ DataFinderAgentOS/
 │   │       ├── employee_list.html     # 数字员工列表（v0.3）
 │   │       ├── employee_form.html     # 数字员工表单（v0.3）
 │   │       ├── employee_test.html     # 数字员工测试页（v0.3）
+│   │       ├── skill_list.html        # 技能列表（v0.5.0）
+│   │       ├── skill_form.html        # 技能表单（v0.5.0）
+│   │       ├── mcp_tool_list.html     # MCP 工具列表（v0.4.2）
+│   │       ├── mcp_tool_form.html     # MCP 工具表单（v0.4.2）
 │   │       └── change_password.html   # 修改密码
 │   │
 │   └── static/                   # 静态资源
@@ -342,14 +363,14 @@ python main.py
 
 ```
 ==================================================
-  瞭望与问数系统 (DataFinderAgentOS) v0.4.0
+  瞭望与问数系统 (DataFinderAgentOS) v0.4.2
   Server started: http://localhost:10010/
 ==================================================
 ```
 
 > 首次启动时系统会自动：
 > 1. 创建 `database/` 目录和 `finderos.db` 数据库文件
-> 2. 执行 `CREATE TABLE IF NOT EXISTS` 建表（12 张表 + 1 张 FTS5 虚拟表）
+> 2. 执行 `CREATE TABLE IF NOT EXISTS` 建表（16 张表 + 1 张 FTS5 虚拟表）
 > 3. 创建数据库索引（10+ 个索引）
 > 4. 插入种子数据（默认角色、管理员账户、功能菜单）
 
@@ -429,6 +450,9 @@ python migrate_db.py --status
 | v0.3.0 | 添加 `data_warehouse_fts` FTS5 虚拟表 + 同步触发器 |
 | v0.4.0 | 添加 `watch_sources.schedule_interval` 列 |
 | v0.4.1 | 添加 `api_interfaces` 表与 `digital_employees.api_interface_id`（接口管理联动） |
+| v0.4.2 | 添加 `mcp_tools` / `mcp_tool_test_logs` 表（MCP 工具数据库驱动注册中心） |
+| v0.4.2 | 添加 `skills.mcp_tool_id` 列 + `digital_employees.mcp_tool_ids` 列 |
+| v0.4.2 | 种子数据迁移：18 个内置 MCP 工具 + 旧 TAG → Skill ID 迁移 |
 
 > 迁移脚本具有**幂等性**：重复执行不会破坏已有数据。
 
@@ -689,22 +713,21 @@ limiter.clear(client_ip, username)
 
 - **有 API Key**：LLM Function Calling 自主决策工具调用，Tool → Execute → Reply 闭环
 - **无 API Key**：MCP 语义匹配智能回退，基于工具描述自动路由到最佳工具
-- **工具标准化**：9 个 MCP Tool，遵循 `tools/list` + `tools/call` JSON-RPC 协议
+- **工具标准化**：18 个 MCP Tool，数据库驱动注册中心（`mcp_tools` 表），支持热重载和在线测试
 - **OpenAI 兼容**：工具定义自动转换为 OpenAI Function Calling 格式，无缝对接主流 LLM
 
-**MCP 工具列表**：
+**MCP 工具分类（18 个）**：
 
-| 工具名 | 分类 | 功能说明 |
-|--------|------|---------|
-| `search_warehouse` | 数据仓库 | 在数据仓库中按关键词搜索，返回标题/摘要/来源/链接 |
-| `get_recent_warehouse_data` | 数据仓库 | 获取数据仓库最新入库记录 |
-| `get_warehouse_stats` | 数据仓库 | 获取数据仓库统计（总量/深度采集数/来源分布） |
-| `deep_collect_url` | 数据采集 | 对指定 URL 执行深度内容抓取和正文提取 |
-| `collect_web_data` | 数据采集 | 执行全网瞭望采集（从配置的瞭望源搜索关键词） |
-| `list_digital_employees` | 数字员工 | 列出所有可用的数字员工及能力描述 |
-| `list_conversations` | 对话管理 | 获取用户的历史对话列表 |
-| `get_random_music` | 音乐/娱乐 | 从网易云热歌榜随机推荐歌曲（Meting API），返回歌曲名/歌手/封面/试听链接 |
-| `get_conversation_messages` | 对话管理 | 获取指定对话的消息记录 |
+| 分类 | 工具 | 说明 |
+|------|------|------|
+| 🔍 数据仓库 | `search_warehouse`, `get_recent_warehouse_data`, `get_warehouse_stats`, `search_warehouse_fulltext` | 关键词搜索、最新数据、统计、FTS5 全文检索 |
+| 🔭 瞭望采集 | `collect_web_data`, `deep_collect_url`, `list_watch_sources` | 全网采集、深度采集 URL、瞭望源列表 |
+| 🤖 数字员工 | `list_digital_employees`, `invoke_digital_employee` | 员工列表、调用指定员工 |
+| 🧠 AI 模型 | `list_ai_models`, `get_default_model` | 模型列表、获取默认模型 |
+| 💬 对话管理 | `list_conversations`, `get_conversation_messages` | 对话历史、消息查询 |
+| 🎵 娱乐 | `get_random_music` | 随机音乐推荐 |
+| 🕷️ 爬虫增强 | `collect_with_crawl4ai`, `batch_deep_collect` | Crawl4ai 智能/批量采集 |
+| 🔧 系统 | `load_skill`, `get_system_stats` | 技能加载、系统统计 |
 
 **对话流程（有 API Key）**：
 
@@ -852,7 +875,7 @@ limiter.clear(client_ip, username)
 #### 8.3 MCP 工具调用与 SSE 流式对话
 
 - **LLM Function Calling 模式**（有 API Key）：LLM 收到消息后自主判断是否需要调用工具，调用后基于真实数据生成回复
-- **MCP 语义匹配模式**（无 API Key）：基于 9 个 MCP 工具的名称和描述进行语义评分，自动选择最佳工具执行
+- **MCP 语义匹配模式**（无 API Key）：基于 18 个 MCP 工具的名称和描述进行语义评分，自动选择最佳工具执行
 - **图表注入**：AI 回复中 `[CHART:...]` 标记自动渲染为 ECharts 图表
 - **表格注入**：`[TABLE:...]` 标记自动渲染为 HTML 数据表格
 - **元信息显示**：每条 AI 回复下方显示响应时间(s)和 Token 消耗
@@ -1136,6 +1159,8 @@ erDiagram
     watch_sources ||--o{ watch_results : "source_id"
     watch_results ||--o| data_warehouse : "result_id"
     api_interfaces ||--o{ digital_employees : "api_interface_id"
+    mcp_tools ||--o{ digital_employees : "mcp_tool_ids"
+    mcp_tools ||--o| skills : "mcp_tool_id"
     audit_logs {
         int id PK
         string action
@@ -1226,6 +1251,36 @@ erDiagram
         int is_enabled
         timestamp created_at
     }
+    mcp_tools {
+        int id PK
+        string name UK
+        string display_name
+        string description
+        string category
+        string tool_type
+        string handler_module
+        string input_schema
+        int is_enabled
+        int is_system
+        int sort_order
+    }
+    mcp_tool_test_logs {
+        int id PK
+        int tool_id FK
+        string test_params
+        string test_result
+        int is_success
+        int duration_ms
+        timestamp created_at
+    }
+    skills {
+        int id PK
+        string name UK
+        string description
+        string prompt_template
+        int mcp_tool_id FK
+        int is_enabled
+    }
 ```
 
 ### 核心表清单
@@ -1245,6 +1300,9 @@ erDiagram
 | `conversations` | 对话元信息表 | 10 ~ 10000 | `username` |
 | `conversation_messages` | 对话消息表 | 100 ~ 100000 | `conversation_id` (CASCADE) |
 | `digital_employees` | 数字化员工配置表 | 5 ~ 50 | `is_enabled` |
+| `mcp_tools` | MCP 工具注册表（v0.4.2） | 18 ~ 100 | `name`(UNIQUE), `category` |
+| `mcp_tool_test_logs` | MCP 工具测试日志（v0.4.2） | 自动增长 | `tool_id`(CASCADE) |
+| `skills` | 技能库表（v0.5.0） | 5 ~ 100 | `name`(UNIQUE), `mcp_tool_id` |
 
 > 完整 DDL 和字段详细说明请参考 `docs/constraint.md`。
 
@@ -1379,7 +1437,9 @@ python migrate_db.py --status
 | v0.3.0 | 添加 `conversations` / `conversation_messages` 表（多轮对话持久化） |
 | v0.3.0 | 添加 `digital_employees` 表（数字化员工配置） |
 | v0.3.0 | 添加 `data_warehouse_fts` 虚拟表 + 3 个同步触发器（FTS5 全文检索） |
-| v0.4.0 | 添加 `watch_sources.schedule_interval` 列（定时采集间隔） |
+| v0.4.1 | 添加 `api_interfaces` 表与 `digital_employees.api_interface_id`（接口管理联动） |
+| v0.4.2 | 添加 `mcp_tools` / `mcp_tool_test_logs` 表 + `skills.mcp_tool_id` / `digital_employees.mcp_tool_ids` 列 |
+| v0.4.2 | 种子数据迁移：18 个内置 MCP 工具 + 旧 TAG → Skill ID 数据迁移 |
 
 > 迁移脚本具有**幂等性**：重复执行不会破坏已有数据。使用 `ALTER TABLE ADD COLUMN`（列不存在时静默跳过）和 `CREATE TABLE IF NOT EXISTS` 确保安全。
 
@@ -1483,6 +1543,7 @@ python make_admin.py --reset --username admin --password newpassword
 | **模型引擎** | 6 | 新增模型、设为默认、Mock 对话（无 API Key）、真实 API 流式对话、Token 统计、审计日志记录 |
 | **会话管理** | 5 | 跨用户列表、用户筛选、消息详情、管理员删除、用户侧隔离保持 |
 | **接口管理** | 10 | 接口模板 CRUD、安全校验、敏感 Header 脱敏、安全 HTTP 调用、接口测试、API 型数字员工联动创建 |
+| **MCP 重构** | 6 | 工具表查询、CRUD、注册表加载、员工权限、技能关联、测试日志 |
 | **安全测试** | 5 | XSS 注入（采集内容）、SQL 注入（参数化查询验证）、CSRF Token 校验、密码哈希强度、安全响应头存在性 |
 
 ### 运行测试
@@ -1510,6 +1571,17 @@ python -m pytest test/test_login_rate_limiter.py::TestLoginRateLimiter::test_rat
 ---
 
 ## 更新日志
+
+### v0.4.2 (2026-07-15) — MCP 重构完成
+
+- 🔧 **MCP 工具种子数据**：18 个内置工具迁移至数据库驱动，含完整 description 和 input_schema
+- 🏷️ **三色徽章系统**：员工卡片区分 MCP 工具（蓝色 `.mcp-tag`）、Skill（绿色 `.skill-tag`）、旧 TAG（橙黄 `.legacy-tag`）
+- 🗑️ **crawl4ai_enabled 废弃**：改为通过 MCP 工具 `collect_with_crawl4ai` / `batch_deep_collect` 控制
+- 🔗 **Skill 绑定 MCP 工具**：技能表单新增 MCP 工具下拉选择器，`mcp_tool_id` 关联
+- 🔄 **旧 TAG 迁移**：`migrate_legacy_tags_to_skills_v042` 将员工旧格式字符串标签转换为 Skill ID 数组
+- 🔐 **SSRF 防护增强**：crawl4ai 工具新增 `validate_url_safe` URL 安全校验
+- 📋 **员工前端增强**：`UserEmployeeListHandler` API 返回三色徽章数据
+- 🧪 **测试覆盖**：6 项测试全部通过（工具查询/CRUD/注册表/员工权限/技能关联/测试日志）
 
 ### v0.4.1 (2026-07) — 管理侧接口管理（Issue #26）
 
