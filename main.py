@@ -213,7 +213,7 @@ if __name__ == "__main__":
     bind_address = os.environ.get("BIND_ADDRESS", "127.0.0.1")
     app.listen(settings.PORT, bind_address)
     logger.info("=" * 50)
-    logger.info("  瞭望与问数系统 (DataFinderAgentOS) v0.4.0")
+    logger.info("  瞭望与问数系统 (DataFinderAgentOS) v%s", settings.VERSION)
     logger.info("  Server started: http://localhost:%d/", settings.PORT)
     logger.info("=" * 50)
 

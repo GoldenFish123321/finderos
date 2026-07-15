@@ -17,6 +17,12 @@ class BaseHandler(tornado.web.RequestHandler):
     所有需要登录验证的 Handler 都应继承此类。
     """
 
+    def get_template_namespace(self):
+        """注入全局模板变量，包括统一版本号。"""
+        namespace = super().get_template_namespace()
+        namespace["app_version"] = settings.VERSION
+        return namespace
+
     def set_default_headers(self):
         """为所有响应设置 OWASP 推荐的安全响应头。"""
         for header_name, header_value in settings.SECURITY_HEADERS.items():
