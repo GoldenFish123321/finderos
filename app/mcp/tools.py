@@ -561,7 +561,10 @@ ALL_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
 
 
 def register_all_tools(server: Optional[MCPServer] = None) -> MCPServer:
-    """向 MCP Server 注册所有工具。
+    """向 MCP Server 注册所有工具 (v0.6.0: 优先从数据库加载)。
+
+    优先使用 MCPToolRegistry 从数据库加载；
+    如果数据库没有工具记录，回退到代码定义的 ALL_TOOL_DEFINITIONS。
 
     Args:
         server: MCP Server 实例，为 None 时使用全局单例。
@@ -572,6 +575,18 @@ def register_all_tools(server: Optional[MCPServer] = None) -> MCPServer:
     if server is None:
         server = MCPServer.get_instance()
 
+    # 优先从数据库加载
+    try:
+        from app.mcp.registry import MCPToolRegistry
+        registry = MCPToolRegistry.get_instance(server)
+        count = registry.load_all_from_db()
+        if count > 0:
+            logger.info(f"已从数据库注册 {count} 个 MCP 工具")
+            return server
+    except Exception as e:
+        logger.warning(f"从数据库加载工具失败，回退到代码定义: {e}")
+
+    # 回退：代码定义的 ALL_TOOL_DEFINITIONS
     tools = []
     for tool_def in ALL_TOOL_DEFINITIONS:
         tool = MCPTool(
@@ -583,7 +598,7 @@ def register_all_tools(server: Optional[MCPServer] = None) -> MCPServer:
         tools.append(tool)
 
     server.register_tools(tools)
-    logger.info(f"已注册 {len(tools)} 个 MCP 工具: {[t.name for t in tools]}")
+    logger.info(f"已从代码定义注册 {len(tools)} 个 MCP 工具: {[t.name for t in tools]}")
     return server
 
 
