@@ -26,7 +26,7 @@ def test_random_music_employee_exists():
     assert emp["name"] == "随机音乐", f"员工名称应为'随机音乐'，实际: {emp['name']}"
     assert emp["employee_type"] == "api", f"员工类型应为'api'，实际: {emp['employee_type']}"
     assert emp["is_enabled"] == 1, "随机音乐员工应默认启用"
-    assert "api.uomg.com" in emp.get("api_url", ""), f"API URL 应包含 uomg，实际: {emp['api_url']}"
+    assert "api.injahow.cn" in emp.get("api_url", ""), f"API URL 应包含 injahow (Meting API)，实际: {emp['api_url']}"
     print(f"  ✅ 随机音乐员工存在: ID={emp['id']}, 类型={emp['employee_type']}")
     print(f"     API URL: {emp['api_url']}")
 
@@ -78,19 +78,16 @@ def test_build_music_card_logic():
     assert card["data"]["url"] == "https://example.com/music.mp3"
     print(f"  ✅ 音乐卡片构建正确: type={card['type']}, song={card['data']['name']}")
 
-    # 模拟平铺格式的 API 响应（非 uomg 风格）
-    flat_response = {
-        "name": "平铺歌曲",
-        "artistsname": "平铺歌手",
-        "coverurl": "https://example.com/cover2.jpg",
-        "url": "https://example.com/music2.mp3",
-    }
-
-    card2 = _build_employee_card(emp, flat_response, "来首歌")
+    # 模拟 Meting 播放列表格式：[{name, artist, url, pic, lrc}, ...]
+    meting_response = [
+        {"name": "测试歌曲B", "artist": "测试歌手B", "url": "https://example.com/play.mp3", "pic": "https://example.com/cover_b.jpg", "lrc": "..."},
+        {"name": "测试歌曲C", "artist": "测试歌手C", "url": "https://example.com/play2.mp3", "pic": "https://example.com/cover_c.jpg", "lrc": "..."},
+    ]
+    card2 = _build_employee_card(emp, meting_response, "来首歌")
     assert card2 is not None
     assert card2["type"] == "music"
-    assert card2["data"]["name"] == "平铺歌曲"
-    print(f"  ✅ 平铺格式音乐卡片构建正确: song={card2['data']['name']}")
+    assert card2["data"]["name"] in ["测试歌曲B", "测试歌曲C"]
+    print(f"  ✅ Meting 列表格式音乐卡片构建正确: song={card2['data']['name']}")
 
 
 def test_music_card_security():

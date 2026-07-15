@@ -161,13 +161,28 @@ def _build_employee_card(emp: dict, api_data: dict, user_message: str = "") -> d
             }
         return card
 
-    # 音乐类员工：识别音乐数据（支持 api.uomg.com 等随机音乐 API）
+    # 音乐类员工：识别音乐数据（支持 Meting API 列表格式和 dict 格式）
     if ("音乐" in emp_name or "music" in emp_name.lower() or
             "song" in str(api_data).lower() or "music" in str(api_data).lower() or
-            (isinstance(api_data, dict) and ("artistsname" in api_data or "coverurl" in api_data))):
+            (isinstance(api_data, dict) and ("artistsname" in api_data or "coverurl" in api_data)) or
+            (isinstance(api_data, list) and len(api_data) > 0 and isinstance(api_data[0], dict) and "name" in api_data[0])):
+        import random as _random
         card = {"type": "music", "title": f"{emp_name} · 随机音乐", "data": {}}
+
+        # Meting 播放列表格式：[{name, artist, url, pic, lrc}, ...] — 随机选取一首
+        if isinstance(api_data, list) and len(api_data) > 0:
+            song = _random.choice(api_data)
+            if isinstance(song, dict):
+                card["data"] = {
+                    "name": song.get("name", song.get("title", "未知歌曲")),
+                    "artist": song.get("artist", song.get("artistsname", song.get("singer", "未知歌手"))),
+                    "cover": song.get("pic", song.get("coverurl", song.get("cover", ""))),
+                    "url": song.get("url", song.get("play_url", song.get("music_url", ""))),
+                }
+                return card
+
+        # Dict 格式（api.uomg.com 等）
         if isinstance(api_data, dict):
-            # 支持 api.uomg.com 的 rand.music 接口返回格式
             if "data" in api_data and isinstance(api_data["data"], dict):
                 inner = api_data["data"]
                 card["data"] = {
@@ -1386,15 +1401,25 @@ class UserEmployeeInvokeHandler(BaseHandler):
                     data_obj = json.loads(body)
                 except (json.JSONDecodeError, TypeError):
                     data_obj = {"raw": body}
+
+                # 列表格式响应（如 Meting 播放列表）：随机选取一条
+                song_obj = None
+                if isinstance(data_obj, list) and len(data_obj) > 0:
+                    import random as _random2
+                    song_obj = _random2.choice(data_obj)
+                    if isinstance(song_obj, dict):
+                        data_obj = song_obj  # 用选中的歌曲条目替代原列表
+
                 # 扁平化：支持嵌套 data 字段（如 uomg rand.music API 返回 {code, data:{name, artistsname, ...}}）
                 flat_data = {}
-                for key, value in data_obj.items():
-                    if isinstance(value, str):
-                        flat_data[key] = value
-                    elif isinstance(value, dict):
-                        for sub_key, sub_val in value.items():
-                            if isinstance(sub_val, str):
-                                flat_data[sub_key] = sub_val
+                if isinstance(data_obj, dict):
+                    for key, value in data_obj.items():
+                        if isinstance(value, str):
+                            flat_data[key] = value
+                        elif isinstance(value, dict):
+                            for sub_key, sub_val in value.items():
+                                if isinstance(sub_val, str):
+                                    flat_data[sub_key] = sub_val
                 for key, value in flat_data.items():
                     # HTML-escape 第三方 API 返回值，防止 XSS 注入
                     rendered = rendered.replace("{{" + key + "}}", html.escape(value))
