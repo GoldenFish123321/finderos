@@ -92,6 +92,7 @@
 | TC-CHAT-08 | 对话历史管理 | C 区创建/切换/删除对话 | 对话列表正确更新 |
 | TC-CHAT-09 | 快捷指令 /tools | 输入 `/tools` | 显示可用 MCP 工具列表 |
 | TC-CHAT-10 | 消息元信息 | 查看 AI 回复底部 | 显示响应时间和 Token 消耗 |
+| TC-CHAT-11 | 模型 API 配置入口 | 拥有 `/admin/model/config` 权限的用户查看 B 区模型选择器或欢迎页快捷操作 | 展示“配置模型 API”链接，跳转 `/admin/model/config` |
 
 ## 7b. 管理侧会话管理（Issue #17）
 
@@ -133,13 +134,14 @@
 
 | 编号 | 测试项 | 步骤 | 预期结果 |
 |------|--------|------|----------|
-| TC-MCP-PERM-01 | 普通用户默认模型 API 配置权限 | 初始化种子数据并创建 role_id=2 用户 | 用户拥有 `/admin` 与 `/admin/model/config`，可进入模型 API 快速配置 |
+| TC-MCP-PERM-01 | 普通用户默认模型 API 配置权限 | 初始化种子数据并创建 role_id=2 用户 | 用户默认仅拥有 `/admin/model/config` 等最小后台入口，可进入模型 API 快速配置 |
 | TC-MCP-PERM-02 | MCP 管理默认不开放 | 检查 role_id=2 用户功能路由 | 默认不包含 `/admin/mcp/tool`，需管理员额外授权 |
 | TC-MCP-PERM-03 | 后台路由级权限 | 访问 `/admin/model/add`、`/admin/mcp/reload` 等子路由 | 子路由解析到对应功能路由，未授权功能返回 403 |
 | TC-MCP-PERM-04 | MCP 页面使用说明 | 打开 `/admin/mcp/tool` 与新增/编辑页 | 页面展示启用、测试、热重载、员工授权和 API 工具示例 |
 | TC-MCP-PERM-05 | 禁用子路由隔离 | 禁用 `/admin/watch/log` 后解析该路径 | 仍要求 `/admin/watch/log` 权限，不回退到 `/admin/watch` |
 | TC-MCP-PERM-06 | Registry 重绑定 | 先加载旧 MCPServer，再传入新 MCPServer 加载工具 | 工具注册到新 server，`tools/list` 不为空 |
 | TC-MCP-PERM-07 | 模型快速配置入口 | 加载 `/admin/model/config` 路由与模板 | 路由存在，模板可解析 |
+| TC-MCP-PERM-08 | Chat 页配置入口 | 加载 `user_chat.html` 模板 | 模板按 `can_config_model_api` 控制侧边栏与欢迎页“配置模型 API”链接 |
 
 自动化覆盖：`test/test_mcp_user_default_permissions.py`。
 

@@ -25,6 +25,7 @@ from app.models.digital_employee import DigitalEmployeeRepository
 from app.models.data_warehouse import DataWarehouseRepository
 from app.models.skill import SkillRepository
 from app.models.mcp_tool import MCPToolRepository
+from app.models.user import UserRepository
 from app.utils.security import has_crlf, write_audit_log
 from app.utils.safe_http import SafeHttpError, safe_http_request
 
@@ -336,6 +337,8 @@ class UserChatPageHandler(BaseHandler):
             username=self.current_user, limit=50
         )
         employees = DigitalEmployeeRepository.get_enabled()
+        user_routes = set(UserRepository.get_user_function_routes(self.current_user))
+        can_config_model_api = "/admin/model/config" in user_routes
 
         self.render(
             "user_chat.html",
@@ -345,6 +348,7 @@ class UserChatPageHandler(BaseHandler):
             selected=selected_model,
             conversations=conversations,
             employees=employees,
+            can_config_model_api=can_config_model_api,
             xsrf_token=(
                 self.xsrf_token.decode()
                 if isinstance(self.xsrf_token, bytes)
