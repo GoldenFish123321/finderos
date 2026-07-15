@@ -192,7 +192,7 @@ if __name__ == "__main__":
     # 创建应用
     app = make_app()
 
-    # 启动定时采集调度器 (v0.6.0)
+    # 启动定时采集调度器 (v0.4.0)
     scheduler = CollectionScheduler(app, check_interval_ms=60000)
     scheduler.start()
 
@@ -200,7 +200,7 @@ if __name__ == "__main__":
     bind_address = os.environ.get("BIND_ADDRESS", "127.0.0.1")
     app.listen(settings.PORT, bind_address)
     logger.info("=" * 50)
-    logger.info("  瞭望与问数系统 (DataFinderAgentOS) v0.4")
+    logger.info("  瞭望与问数系统 (DataFinderAgentOS) v0.4.0")
     logger.info("  Server started: http://localhost:%d/", settings.PORT)
     logger.info("=" * 50)
 
