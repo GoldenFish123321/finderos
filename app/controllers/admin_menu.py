@@ -12,6 +12,7 @@ import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
 from app.models.role import RoleRepository
 from app.models.function import FunctionRepository
+from app.utils.security import sanitize_html
 
 
 class MenuHandler(AdminBaseHandler):
@@ -45,9 +46,9 @@ class MenuHandler(AdminBaseHandler):
                 if row["id"] in func_ids and row["is_enabled"] == 1:
                     func_map[row["id"]] = {
                         "id": row["id"],
-                        "title": row["name"],
-                        "icon": row["icon"],
-                        "href": row["route_path"],
+                        "title": sanitize_html(row["name"]),
+                        "icon": sanitize_html(row["icon"]),
+                        "href": sanitize_html(row["route_path"]),
                         "sort": row["sort_order"],
                         "parent_id": row["parent_id"],
                         "children": [],

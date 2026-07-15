@@ -4,6 +4,7 @@ function.py - Functions table repository (Repository pattern)
 Tree-structured (2-level) via parent_id self-reference.
 """
 from app.models.db import get_db
+from app.utils.security import sanitize_html
 
 
 class FunctionRepository:
@@ -79,7 +80,7 @@ class FunctionRepository:
         for row in all_funcs:
             node = {
                 "id": row["id"],
-                "title": f'<i class="layui-icon {row["icon"]}"></i> {row["name"]}',
+                "title": f'<i class="layui-icon {sanitize_html(row["icon"])}"></i> {sanitize_html(row["name"])}',
                 "spread": True,
                 "checked": row["id"] in checked_ids,
                 "children": [],

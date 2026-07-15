@@ -158,9 +158,9 @@
 
     function initDashboardCharts() {
         var isDark = document.body.classList.contains('dark-theme');
-        // 从后端注入 JSON 数据（控制器已序列化）
-        var collectTrend = {% raw collect_trend %};
-        var sourceDist = {% raw source_distribution %};
+        // 从后端注入 JSON 数据（通过 json_encode 安全序列化）
+        var collectTrend = {% raw json_encode(collect_trend) %};
+        var sourceDist = {% raw json_encode(source_distribution) %};
 
         // 采集趋势柱状图
         var trendDom = document.getElementById('chart-collect-trend');

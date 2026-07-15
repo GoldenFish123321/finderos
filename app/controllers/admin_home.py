@@ -3,7 +3,6 @@ admin_home.py — 管理后台 Dashboard 控制器
 
 后台首页展示概览数据、统计卡片和 ECharts 趋势图表。
 """
-import json
 import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
 from app.models.user import UserRepository
@@ -14,6 +13,7 @@ from app.models.watch_result import WatchResultRepository
 from app.models.data_warehouse import DataWarehouseRepository
 from app.models.ai_model import AiModelRepository
 from app.models.db import get_db
+from app.utils.security import sanitize_html
 
 
 class AdminIndexHandler(AdminBaseHandler):
@@ -31,9 +31,9 @@ class AdminIndexHandler(AdminBaseHandler):
         result_stats = WatchResultRepository.get_stats()
         model_stats = AiModelRepository.get_stats()
 
-        # ── ECharts 图表数据（已在控制器序列化为 JSON 字符串）──
-        source_distribution = json.dumps(self._get_source_distribution(), ensure_ascii=False)
-        collect_trend = json.dumps(self._get_collect_trend(), ensure_ascii=False)
+        # ── ECharts 图表数据（传递 Python 对象，模板中使用 json_encode 序列化）──
+        source_distribution = self._get_source_distribution()
+        collect_trend = self._get_collect_trend()
         deep_stats = DataWarehouseRepository.get_stats()
 
         self.render(
@@ -64,7 +64,7 @@ class AdminIndexHandler(AdminBaseHandler):
                 "WHERE source_name != '' GROUP BY source_name "
                 "ORDER BY cnt DESC LIMIT 8"
             ).fetchall()
-            return [{"name": r["source_name"] or "未知", "value": r["cnt"]} for r in rows]
+            return [{"name": sanitize_html(r["source_name"] or "未知"), "value": r["cnt"]} for r in rows]
 
     @staticmethod
     def _get_collect_trend() -> dict:
