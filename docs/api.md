@@ -18,7 +18,7 @@
 ### POST /register — 用户注册
 - **Content-Type**: `application/x-www-form-urlencoded`
 - **参数**: `username`, `password`, `confirm_password`
-- **成功**: 自动登录并 302 跳转（管理员→/admin，普通用户→/chat）
+- **成功**: 自动登录并 302 跳转（管理员→/admin，普通用户→/index）
 - **失败**: 渲染注册页 + 错误提示（用户名已存在 / 密码不一致 / 密码强度不足等）
 
 ### GET /logout — 登出
