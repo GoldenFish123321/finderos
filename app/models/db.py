@@ -18,10 +18,19 @@ DB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))
 DB_PATH = settings.DB_PATH if os.path.isabs(settings.DB_PATH) else os.path.join(DB_DIR, os.path.basename(settings.DB_PATH))
 
 
+def _dict_factory(cursor, row):
+    """Row factory that returns dicts instead of sqlite3.Row.
+
+    Dicts support .get() with default values, which sqlite3.Row does not.
+    This prevents AttributeError: 'sqlite3.Row' object has no attribute 'get'.
+    """
+    return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+
+
 def get_connection() -> sqlite3.Connection:
     """Get a new database connection. Caller is responsible for closing."""
     conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn.row_factory = _dict_factory
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=5000")  # 5秒超时，避免并发写入 SQLITE_BUSY
@@ -150,7 +159,7 @@ def init_db():
 
         # 兼容旧表迁移：为已存在的 ai_models 表添加 total_tokens 列
         try:
-            cols = {row[1] for row in conn.execute("PRAGMA table_info(ai_models)").fetchall()}
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(ai_models)").fetchall()}
             if "total_tokens" not in cols:
                 conn.execute("ALTER TABLE ai_models ADD COLUMN total_tokens INTEGER DEFAULT 0")
                 logger.info("Database migration: added total_tokens column to ai_models")
@@ -159,7 +168,7 @@ def init_db():
 
         # 兼容旧表迁移：为已存在的 watch_sources 表添加 schedule_interval 列 (v0.6)
         try:
-            cols = {row[1] for row in conn.execute("PRAGMA table_info(watch_sources)").fetchall()}
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(watch_sources)").fetchall()}
             if "schedule_interval" not in cols:
                 conn.execute("ALTER TABLE watch_sources ADD COLUMN schedule_interval INTEGER DEFAULT 0")
                 logger.info("Database migration: added schedule_interval column to watch_sources")
@@ -302,7 +311,7 @@ def init_db():
 
         # 兼容旧表迁移：为已存在的 digital_employees 表添加 api_interface_id 列
         try:
-            cols = {row[1] for row in conn.execute("PRAGMA table_info(digital_employees)").fetchall()}
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(digital_employees)").fetchall()}
             if "api_interface_id" not in cols:
                 conn.execute("ALTER TABLE digital_employees ADD COLUMN api_interface_id INTEGER DEFAULT NULL")
                 logger.info("Database migration: added api_interface_id column to digital_employees")
@@ -392,7 +401,7 @@ def init_db():
 
         # ── v0.10 skills 表新增 mcp_tool_id 列 ──
         try:
-            cols = {row[1] for row in conn.execute("PRAGMA table_info(skills)").fetchall()}
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(skills)").fetchall()}
             if "mcp_tool_id" not in cols:
                 conn.execute("ALTER TABLE skills ADD COLUMN mcp_tool_id INTEGER DEFAULT NULL REFERENCES mcp_tools(id) ON DELETE SET NULL")
                 logger.info("Database migration: added mcp_tool_id column to skills")
@@ -401,7 +410,7 @@ def init_db():
 
         # ── v0.10 digital_employees 表新增 mcp_tool_ids 列 ──
         try:
-            cols = {row[1] for row in conn.execute("PRAGMA table_info(digital_employees)").fetchall()}
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(digital_employees)").fetchall()}
             if "mcp_tool_ids" not in cols:
                 conn.execute("ALTER TABLE digital_employees ADD COLUMN mcp_tool_ids TEXT DEFAULT '[]'")
                 logger.info("Database migration: added mcp_tool_ids column to digital_employees")

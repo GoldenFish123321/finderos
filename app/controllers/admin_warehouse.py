@@ -136,7 +136,6 @@ class WarehouseDetailHandler(AdminBaseHandler):
             return
 
         # 解析深度采集内容供模板使用
-        # sqlite3.Row 不支持 .get()，使用方括号 + try/except
         deep_content = ""
         try:
             raw_data = result["raw_data"] or ""
@@ -205,7 +204,7 @@ class WarehouseDeepCollectHandler(AdminBaseHandler):
             self.write({"code": 1, "msg": "记录不存在"})
             return
 
-        # 解析深度采集内容（sqlite3.Row 不支持 .get()，使用方括号）
+        # 解析深度采集内容
         deep_content = ""
         try:
             raw_data = record["raw_data"] or ""
