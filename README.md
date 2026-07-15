@@ -1464,3 +1464,5 @@ python -m pytest test/test_login_rate_limiter.py::TestLoginRateLimiter::test_rat
 > - API 文档：`docs/api.md`  
 > - 开发约束：`docs/constraint.md`  
 > - 测试用例：`docs/test_case.md`
+> - 审计报告（修复前）：`docs/audit_report_v1.md`
+> - 安全修复报告（修复后）：`docs/audit_report_v2.md`
