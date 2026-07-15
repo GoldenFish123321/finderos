@@ -8,13 +8,16 @@ app/mcp/tools.py — MCP 工具定义与注册
 - inputSchema: JSON Schema 参数定义
 - handler: 实际执行函数
 
-工具分类：
-1. 数据仓库类: search_warehouse, get_recent_warehouse_data, get_warehouse_stats
-2. 数据采集类: collect_web_data, deep_collect_url
-3. 数字员工类: list_digital_employees
-4. 音乐/娱乐类: get_random_music
-5. 对话管理类: list_conversations, get_conversation_messages
-6. 技能管理类: load_skill (v0.7 新增)
+工具分类（共 18 个工具，v0.10 补齐）：
+1. 数据仓库类: search_warehouse, get_recent_warehouse_data, get_warehouse_stats, search_warehouse_fulltext
+2. 数据采集类: collect_web_data, deep_collect_url, list_watch_sources
+3. 数字员工类: list_digital_employees, invoke_digital_employee
+4. AI 模型类: list_ai_models, get_default_model
+5. Crawl4ai 增强类: collect_with_crawl4ai, batch_deep_collect
+6. 音乐/娱乐类: get_random_music
+7. 对话管理类: list_conversations, get_conversation_messages
+8. 技能管理类: load_skill
+9. 系统管理类: get_system_stats
 """
 
 import json
@@ -22,6 +25,14 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from app.mcp.server import MCPServer, MCPTool
+
+# v0.10: 从 builtin_tools 导入新增的 handler（避免在 tools.py 中重复定义）
+from app.mcp.builtin_tools.warehouse_tools import _search_warehouse_fulltext
+from app.mcp.builtin_tools.collect_tools import _list_watch_sources
+from app.mcp.builtin_tools.employee_tools import _invoke_digital_employee
+from app.mcp.builtin_tools.model_tools import _list_ai_models, _get_default_model
+from app.mcp.builtin_tools.crawl4ai_tools import _collect_with_crawl4ai, _batch_deep_collect
+from app.mcp.builtin_tools.system_tools import _get_system_stats
 
 logger = logging.getLogger(__name__)
 
@@ -386,6 +397,30 @@ ALL_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
         },
         "handler": _get_warehouse_stats,
     },
+    {
+        "name": "search_warehouse_fulltext",
+        "description": (
+            "使用 FTS5 全文检索在数据仓库中搜索内容（v0.10 新增）。"
+            "相比 search_warehouse 的关键词搜索，全文检索更准确，支持多词组合和短语搜索。"
+            "当需要精确搜索或 search_warehouse 返回结果不理想时使用此工具。"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "全文检索查询词（支持多词组合）",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "返回结果数量上限，默认10",
+                    "default": 10,
+                },
+            },
+            "required": ["query"],
+        },
+        "handler": _search_warehouse_fulltext,
+    },
 
     # ── 数据采集类 ──
     {
@@ -431,6 +466,19 @@ ALL_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
         },
         "handler": _collect_web_data,
     },
+    {
+        "name": "list_watch_sources",
+        "description": (
+            "列出系统中所有启用的瞭望采集源（v0.10 新增）。"
+            "返回每个瞭望源的名称、描述和 URL 模板，方便了解当前可用的数据采集渠道。"
+            "当用户询问「有哪些采集源」「可以从哪些网站采集数据」时使用。"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+        "handler": _list_watch_sources,
+    },
 
     # ── 数字员工类 ──
     {
@@ -444,6 +492,57 @@ ALL_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
             "properties": {},
         },
         "handler": _list_digital_employees,
+    },
+    {
+        "name": "invoke_digital_employee",
+        "description": (
+            "调用指定数字员工执行任务（v0.10 新增）。"
+            "支持按名称或 ID 查找员工，支持 LLM 型（通过对话系统调用）和 API 型（直接 HTTP 调用）。"
+            "当用户明确要求「让XX员工帮我做XX」「调用XX员工」「@XX」时使用。"
+            "不确定有哪些员工时请先使用 list_digital_employees。"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "employee_name": {
+                    "type": "string",
+                    "description": "要调用的数字员工名称或 ID",
+                },
+                "message": {
+                    "type": "string",
+                    "description": "发送给该员工的指令或消息",
+                },
+            },
+            "required": ["employee_name", "message"],
+        },
+        "handler": _invoke_digital_employee,
+    },
+
+    # ── AI 模型类 (v0.10 新增) ──
+    {
+        "name": "list_ai_models",
+        "description": (
+            "列出系统中所有可用的 AI 大语言模型（v0.10 新增）。"
+            "返回每个模型的名称、提供商、模型标识和分类信息。"
+            "当用户询问「有哪些AI模型」「可以用哪些模型」「XX模型还能用吗」时使用。"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+        "handler": _list_ai_models,
+    },
+    {
+        "name": "get_default_model",
+        "description": (
+            "获取当前系统设置的默认 AI 模型信息（v0.10 新增）。"
+            "当用户询问「默认模型是什么」「当前用的是什么模型」时使用。"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+        "handler": _get_default_model,
     },
 
     # ── 音乐/娱乐类 ──
@@ -512,6 +611,58 @@ ALL_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
         "handler": _get_conversation_messages,
     },
 
+    # ── Crawl4ai 增强类 (v0.10 新增) ──
+    {
+        "name": "collect_with_crawl4ai",
+        "description": (
+            "使用 Crawl4ai 对指定 URL 进行智能深度采集（v0.10 新增）。"
+            "相比普通 deep_collect_url，Crawl4ai 能更好地处理 JavaScript 渲染页面和复杂网页结构。"
+            "Crawl4ai 不可用时自动回退到标准深度采集。"
+            "当用户要求「用Crawl4ai采集」「智能抓取XX网站」时使用。"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "要采集的目标网页 URL（必须是完整 HTTP/HTTPS 链接）",
+                },
+                "extract_mode": {
+                    "type": "string",
+                    "description": "提取模式：auto（自动）、text（纯文本）、html（HTML），默认 auto",
+                    "default": "auto",
+                },
+            },
+            "required": ["url"],
+        },
+        "handler": _collect_with_crawl4ai,
+    },
+    {
+        "name": "batch_deep_collect",
+        "description": (
+            "批量对多个 URL 进行深度采集（v0.10 新增）。"
+            "一次性处理多个链接，返回每个链接的采集结果。"
+            "当用户提供多个 URL 要求「批量采集」「把这些链接都抓取」时使用。"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "urls": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "要批量采集的 URL 列表（每个必须是完整 HTTP/HTTPS 链接）",
+                },
+                "extract_mode": {
+                    "type": "string",
+                    "description": "提取模式：auto（自动）、text（纯文本）、html（HTML），默认 auto",
+                    "default": "auto",
+                },
+            },
+            "required": ["urls"],
+        },
+        "handler": _batch_deep_collect,
+    },
+
     # ── 技能管理类 (v0.7 新增) ──
     {
         "name": "load_skill",
@@ -531,6 +682,21 @@ ALL_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
             "required": ["skill_name"],
         },
         "handler": _load_skill,
+    },
+
+    # ── 系统管理类 (v0.10 新增) ──
+    {
+        "name": "get_system_stats",
+        "description": (
+            "获取系统统计概览（v0.10 新增），包括用户数、数据仓库记录数、数字员工数、"
+            "AI 模型数和对话数等关键指标。"
+            "当用户询问「系统状态」「有多少用户」「系统概况」时使用。"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+        "handler": _get_system_stats,
     },
 ]
 
