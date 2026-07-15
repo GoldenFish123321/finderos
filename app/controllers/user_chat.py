@@ -1574,3 +1574,147 @@ class UserEmployeeInvokeHandler(BaseHandler):
             detail=f"mock_fallback, reason={fail_reason}, elapsed={elapsed}s, tokens={tokens}",
             client_ip=self.request.remote_ip or "",
         )
+
+
+# ============================================================
+# TTS: Edge TTS 语音合成播报（Issue #27）
+# ============================================================
+
+# TTS 缓存目录
+import hashlib
+import os as _os
+import tempfile as _tempfile
+
+_TTS_CACHE_DIR = _os.path.join(_tempfile.gettempdir(), "finderos_tts")
+
+# 可用的 Edge TTS 中文语音列表
+_TTS_VOICES = {
+    "zh-CN-XiaoxiaoNeural": "晓晓（女，活泼）",
+    "zh-CN-YunxiNeural": "云希（男，青年）",
+    "zh-CN-YunjianNeural": "云健（男，中年）",
+    "zh-CN-XiaoyiNeural": "晓伊（女，温柔）",
+    "zh-CN-YunyangNeural": "云扬（男，新闻）",
+    "zh-CN-XiaochenNeural": "晓晨（女，自然）",
+}
+
+
+class UserChatTTSHandler(BaseHandler):
+    """TTS 语音合成 API — 使用 Microsoft Edge TTS 将文本转为 MP3 音频。
+
+    POST /api/chat/tts
+    参数:
+        text:  要合成的文本（1-4000 字符）
+        voice: 可选，语音名称（默认 zh-CN-XiaoxiaoNeural）
+
+    返回: audio/mpeg 二进制音频流
+    """
+
+    @tornado.web.authenticated
+    async def post(self):
+        text = self.get_body_argument("text", "").strip()
+
+        # ── 参数校验 ──
+        if not text:
+            self.set_status(400)
+            self.write({"code": 1, "msg": "文本不能为空"})
+            return
+        if len(text) > 4000:
+            self.set_status(400)
+            self.write({"code": 1, "msg": "文本过长（最多4000字符）"})
+            return
+
+        voice = self.get_body_argument("voice", "zh-CN-XiaoxiaoNeural").strip()
+        if voice not in _TTS_VOICES:
+            logger.warning(f"TTS: 不支持的语音 {voice}，回退到默认")
+            voice = "zh-CN-XiaoxiaoNeural"
+
+        # ── 缓存键：基于文本+语音的 MD5 ──
+        cache_key = hashlib.md5((text + voice).encode("utf-8")).hexdigest()
+        _os.makedirs(_TTS_CACHE_DIR, exist_ok=True)
+        cache_file = _os.path.join(_TTS_CACHE_DIR, f"{cache_key}.mp3")
+
+        try:
+            # ── 检查缓存 ──
+            was_cached = _os.path.exists(cache_file)
+            if not was_cached:
+                # 使用锁文件防止并发写入同一缓存文件
+                lock_file = cache_file + ".lock"
+                lock_acquired = False
+                try:
+                    # Windows 上使用排他创建作为简单锁
+                    fd = _os.open(lock_file, _os.O_CREAT | _os.O_EXCL | _os.O_RDWR)
+                    _os.close(fd)
+                    lock_acquired = True
+                except FileExistsError:
+                    # 另一个请求正在生成此文件，等待并重试
+                    import time as _time_module
+                    for _ in range(30):  # 最多等待 30 秒
+                        await asyncio.sleep(1)
+                        if _os.path.exists(cache_file):
+                            was_cached = True
+                            break
+                    if not was_cached:
+                        # 超时：尝试自己生成（锁可能已过期）
+                        try:
+                            _os.remove(lock_file)
+                        except Exception:
+                            pass
+                        fd = _os.open(lock_file, _os.O_CREAT | _os.O_EXCL | _os.O_RDWR)
+                        _os.close(fd)
+                        lock_acquired = True
+
+                if lock_acquired:
+                    try:
+                        logger.info(
+                            f"TTS: 生成音频 text_len={len(text)}, voice={voice}, "
+                            f"user={self.current_user}"
+                        )
+                        import edge_tts
+                        communicate = edge_tts.Communicate(text, voice)
+                        await communicate.save(cache_file)
+                    finally:
+                        # 释放锁
+                        try:
+                            _os.remove(lock_file)
+                        except Exception:
+                            pass
+            else:
+                logger.info(
+                    f"TTS: 命中缓存 text_len={len(text)}, voice={voice}"
+                )
+
+            # ── 返回音频流 ──
+            file_size = _os.path.getsize(cache_file)
+            self.set_header("Content-Type", "audio/mpeg")
+            self.set_header("Content-Length", str(file_size))
+            self.set_header("Cache-Control", "public, max-age=86400")
+            self.set_header("X-TTS-Voice", voice)
+            self.set_header("X-TTS-Cached", "true" if was_cached else "false")
+
+            with open(cache_file, "rb") as f:
+                self.write(f.read())
+            await self.flush()
+
+            # ── 审计日志 ──
+            write_audit_log(
+                action="USER_TTS",
+                username=self.current_user,
+                target=f"tts:{voice}",
+                detail=f"text_len={len(text)}, file_size={file_size}",
+                client_ip=self.request.remote_ip or "",
+            )
+
+        except ImportError:
+            logger.error("TTS: edge-tts 库未安装")
+            self.set_status(500)
+            self.write({"code": 1, "msg": "TTS 服务不可用：edge-tts 库未安装。请运行 pip install edge-tts"})
+        except Exception as e:
+            logger.error(f"TTS: 语音合成失败 - {e}", exc_info=True)
+            # 清理可能损坏的缓存文件
+            if _os.path.exists(cache_file):
+                try:
+                    _os.remove(cache_file)
+                except Exception:
+                    pass
+            self.set_status(500)
+            self.write({"code": 1, "msg": f"语音合成失败: {str(e)}"})

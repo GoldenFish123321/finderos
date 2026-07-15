@@ -1,4 +1,4 @@
-# 瞭望与问数系统 (DataFinderAgentOS) — 设计文档 v0.4.0
+# 瞭望与问数系统 (DataFinderAgentOS) — 设计文档 v0.4.1
 
 ## 1. 项目概述
 
@@ -135,6 +135,49 @@ audit_logs (独立审计)
 - 基于 Tornado PeriodicCallback 的轻量级调度器
 - 支持按瞭望源独立配置 schedule_interval
 - 专用线程池执行采集任务，不阻塞 IOLoop
+
+### 3.7 TTS 语音合成播报（v0.4.1）
+
+**设计目标**：为每条 AI 回复消息提供一键语音朗读功能，使用 Microsoft Edge TTS 免费服务。
+
+**流程**：
+```
+用户点击 🔊 播报按钮
+  → POST /api/chat/tts (text=AI回复内容, voice=zh-CN-XiaoxiaoNeural)
+  → 后端计算 text+voice 的 MD5 作为缓存键
+  → 检查 TTS 缓存目录 (~/tmp/finderos_tts/)
+  ├─ 命中缓存 → 直接返回 MP3 文件
+  └─ 未命中 → edge-tts.Communicate(text, voice) → 生成 MP3 → 缓存 → 返回
+  → 前端收到 audio/mpeg 流 → HTML5 Audio 播放
+  → 写入 audit_logs (USER_TTS)
+```
+
+**技术选型**：
+| 方案 | 优点 | 缺点 | 选择 |
+|------|------|------|------|
+| 浏览器 Web Speech API | 零后端依赖、即时响应 | 语音质量取决于浏览器/OS，不可控 | ❌ |
+| Edge TTS (Python) | 高质量神经网络语音、中文支持好、免费 | 需网络请求、首次有延迟 | ✅ |
+
+**语音列表**（6 种中文）：
+| 语音 ID | 名称 | 风格 |
+|---------|------|------|
+| `zh-CN-XiaoxiaoNeural` | 晓晓 | 女声，活泼 |
+| `zh-CN-YunxiNeural` | 云希 | 男声，青年 |
+| `zh-CN-YunjianNeural` | 云健 | 男声，中年 |
+| `zh-CN-XiaoyiNeural` | 晓伊 | 女声，温柔 |
+| `zh-CN-YunyangNeural` | 云扬 | 男声，新闻播报 |
+| `zh-CN-XiaochenNeural` | 晓晨 | 女声，自然 |
+
+**缓存策略**：
+- 缓存目录：系统临时目录 `/finderos_tts/`
+- 缓存键：`MD5(text + voice)` → `.mp3` 文件
+- 不设过期时间，相同文本永久复用（文本内容不变则音频不变）
+- 生成失败时自动清理损坏的缓存文件
+
+**安全措施**：
+- 文本长度限制：1-4000 字符
+- 语音参数白名单校验（仅允许 6 种已知语音）
+- 审计日志记录所有 TTS 调用
 
 ## 4. 安全设计
 

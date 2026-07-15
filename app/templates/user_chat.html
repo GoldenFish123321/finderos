@@ -336,6 +336,41 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
     }
     .chat-msg.user .msg-meta { justify-content: flex-end; }
 
+    /* TTS 语音播报按钮 */
+    .btn-tts {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        background: none;
+        border: 1px solid var(--border-subtle);
+        color: var(--text-muted);
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        vertical-align: middle;
+    }
+    .btn-tts:hover {
+        border-color: var(--accent-blue);
+        color: var(--accent-blue);
+        background: rgba(94,163,255,0.08);
+    }
+    .btn-tts.loading {
+        opacity: 0.6;
+        cursor: wait;
+        animation: tts-pulse 1s ease-in-out infinite;
+    }
+    .btn-tts.playing {
+        border-color: var(--accent-purple);
+        color: var(--accent-purple);
+        background: rgba(167,139,250,0.12);
+    }
+    @keyframes tts-pulse {
+        0%, 100% { opacity: 0.6; }
+        50% { opacity: 1; }
+    }
+
     /* 打字指示器 */
     .typing-indicator {
         display: flex; gap: 4px; padding: 8px 0;
@@ -1006,6 +1041,28 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
                         aiMeta.innerHTML = '⏱ ' + elapsed + 's · 🔤 ~' + tokenEstimate + ' tokens';
                     }
 
+                    // 存储原始文本用于 TTS，并添加播报按钮
+                    var bubbleEl = aiContent.closest('.bubble');
+                    if (bubbleEl && totalContent) {
+                        bubbleEl.setAttribute('data-raw-content', totalContent);
+                        // 添加 TTS 按钮（如果还没有）
+                        if (!bubbleEl.querySelector('.btn-tts')) {
+                            var metaEl = bubbleEl.querySelector('.msg-meta');
+                            if (metaEl) {
+                                var ttsBtn = document.createElement('span');
+                                ttsBtn.className = 'btn-tts';
+                                ttsBtn.innerHTML = '🔊 播报';
+                                ttsBtn.title = '点击播报此消息';
+                                ttsBtn.onclick = function(e) {
+                                    e.stopPropagation();
+                                    playTTS(ttsBtn);
+                                };
+                                metaEl.appendChild(document.createTextNode(' '));
+                                metaEl.appendChild(ttsBtn);
+                            }
+                        }
+                    }
+
                     refreshTaskList();
                     return;
                 }
@@ -1050,6 +1107,10 @@ function appendMessage(role, content, tokens, elapsed, isPlaceholder) {
 
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
+    // 存储原始文本（用于 TTS 语音播报）
+    if (content && role === 'assistant') {
+        bubble.setAttribute('data-raw-content', content);
+    }
 
     const contentDiv = document.createElement('div');
     contentDiv.className = 'bubble-content';
@@ -1067,6 +1128,19 @@ function appendMessage(role, content, tokens, elapsed, isPlaceholder) {
         } else {
             metaDiv.innerHTML = '🔤 ' + tokens + ' tokens';
         }
+    }
+    // AI 消息添加 TTS 语音播报按钮
+    if (role === 'assistant' && !isPlaceholder) {
+        const ttsBtn = document.createElement('span');
+        ttsBtn.className = 'btn-tts';
+        ttsBtn.innerHTML = '🔊 播报';
+        ttsBtn.title = '点击播报此消息';
+        ttsBtn.onclick = function(e) {
+            e.stopPropagation();
+            playTTS(ttsBtn);
+        };
+        metaDiv.appendChild(document.createTextNode(' '));
+        metaDiv.appendChild(ttsBtn);
     }
 
     bubble.appendChild(metaDiv);
@@ -1540,6 +1614,193 @@ function exportConversation(format) {
         printWindow2.document.close();
         setTimeout(function() { printWindow2.print(); }, 500);
     }
+}
+
+// ============================================================
+// TTS 语音合成播报（Edge TTS）
+// ============================================================
+var currentTTSAudio = null;   // 当前正在播放的 Audio 对象
+var currentTTSAudioUrl = null; // 当前音频的 Blob URL（用于清理）
+var currentTTSBtn = null;     // 当前激活的播报按钮
+
+/**
+ * 剥离 Markdown 和图表标记，提取纯文本用于 TTS 朗读
+ */
+function stripMarkdownForTTS(text) {
+    if (!text) return text;
+    var cleaned = text;
+    // 移除 [CHART:...] 和 [TABLE:...] 标记（含嵌套 JSON）
+    cleaned = cleaned.replace(/\[CHART:[\s\S]*?\]/g, '');
+    cleaned = cleaned.replace(/\[TABLE:[\s\S]*?\]/g, '');
+    // 移除 Markdown 链接格式: [text](url)
+    cleaned = cleaned.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+    // 移除 Markdown 图片: ![alt](url)
+    cleaned = cleaned.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
+    // 移除粗体/斜体标记
+    cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, '$1');
+    cleaned = cleaned.replace(/__([^_]+)__/g, '$1');
+    cleaned = cleaned.replace(/\*([^*]+)\*/g, '$1');
+    cleaned = cleaned.replace(/_([^_]+)_/g, '$1');
+    // 移除行内代码标记
+    cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
+    // 移除代码块标记
+    cleaned = cleaned.replace(/```[\s\S]*?```/g, '');
+    // 移除标题标记
+    cleaned = cleaned.replace(/^#{1,6}\s+/gm, '');
+    // 移除水平线
+    cleaned = cleaned.replace(/^[-*_]{3,}\s*$/gm, '');
+    // 移除引用标记
+    cleaned = cleaned.replace(/^>\s*/gm, '');
+    // 移除列表标记
+    cleaned = cleaned.replace(/^[\s]*[-*+]\s+/gm, '');
+    cleaned = cleaned.replace(/^[\s]*\d+\.\s+/gm, '');
+    // 移除多余空行
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+    return cleaned.trim();
+}
+
+function playTTS(btn) {
+    // Bug #1 修复: 加载中不允许重复点击
+    if (btn.classList.contains('loading')) return;
+
+    // 如果正在播放同一个按钮的音频，则停止
+    if (currentTTSBtn === btn && currentTTSAudio && !currentTTSAudio.paused) {
+        currentTTSAudio.pause();
+        currentTTSAudio.currentTime = 0;
+        btn.classList.remove('playing');
+        btn.innerHTML = '🔊 播报';
+        // Bug #2 修复: 清理 Blob URL
+        if (currentTTSAudioUrl) {
+            URL.revokeObjectURL(currentTTSAudioUrl);
+            currentTTSAudioUrl = null;
+        }
+        currentTTSAudio = null;
+        currentTTSBtn = null;
+        return;
+    }
+
+    // 停止之前的播放
+    if (currentTTSAudio) {
+        currentTTSAudio.pause();
+        currentTTSAudio.currentTime = 0;
+        if (currentTTSBtn) {
+            currentTTSBtn.classList.remove('playing');
+            currentTTSBtn.innerHTML = '🔊 播报';
+        }
+        // Bug #2 修复: 清理之前的 Blob URL
+        if (currentTTSAudioUrl) {
+            URL.revokeObjectURL(currentTTSAudioUrl);
+            currentTTSAudioUrl = null;
+        }
+    }
+
+    // 获取原始文本
+    var bubble = btn.closest('.bubble');
+    if (!bubble) return;
+    var rawText = bubble.getAttribute('data-raw-content');
+    if (!rawText) {
+        // 回退：从 bubble-content 提取纯文本
+        var contentEl = bubble.querySelector('.bubble-content');
+        rawText = contentEl ? contentEl.textContent.trim() : '';
+    }
+    if (!rawText || rawText.length < 2) {
+        if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('没有可播报的文本内容'); });
+        return;
+    }
+
+    // Bug #3 修复: 剥离 Markdown 和图表标记后朗读
+    rawText = stripMarkdownForTTS(rawText);
+    if (!rawText || rawText.length < 2) {
+        if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('文本内容为空（仅含标记）'); });
+        return;
+    }
+
+    // 限制文本长度（后端限制 4000 字符）
+    if (rawText.length > 4000) {
+        rawText = rawText.substring(0, 4000);
+    }
+
+    // 标记按钮为加载状态
+    btn.classList.add('loading');
+    btn.innerHTML = '⏳ 生成中...';
+    currentTTSBtn = btn;
+
+    // 请求 TTS API
+    var formData = new URLSearchParams();
+    formData.append('_xsrf', XSRF);
+    formData.append('text', rawText);
+
+    fetch('/api/chat/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            return response.json().then(function(d) {
+                throw new Error(d.msg || 'TTS 请求失败');
+            });
+        }
+        return response.blob();
+    })
+    .then(function(blob) {
+        btn.classList.remove('loading');
+        btn.classList.add('playing');
+        btn.innerHTML = '⏸ 停止';
+
+        // Bug #2 修复: 先清理旧 URL 再创建新的
+        if (currentTTSAudioUrl) {
+            URL.revokeObjectURL(currentTTSAudioUrl);
+        }
+        var audioUrl = URL.createObjectURL(blob);
+        currentTTSAudioUrl = audioUrl;
+
+        var audio = new Audio(audioUrl);
+        currentTTSAudio = audio;
+
+        audio.onended = function() {
+            btn.classList.remove('playing');
+            btn.innerHTML = '🔊 播报';
+            if (currentTTSAudioUrl) {
+                URL.revokeObjectURL(currentTTSAudioUrl);
+                currentTTSAudioUrl = null;
+            }
+            currentTTSAudio = null;
+            currentTTSBtn = null;
+        };
+
+        audio.onerror = function() {
+            btn.classList.remove('playing', 'loading');
+            btn.innerHTML = '🔊 播报';
+            if (currentTTSAudioUrl) {
+                URL.revokeObjectURL(currentTTSAudioUrl);
+                currentTTSAudioUrl = null;
+            }
+            currentTTSAudio = null;
+            currentTTSBtn = null;
+            if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('音频播放失败，请重试'); });
+        };
+
+        audio.play().catch(function(err) {
+            btn.classList.remove('playing', 'loading');
+            btn.innerHTML = '🔊 播报';
+            if (currentTTSAudioUrl) {
+                URL.revokeObjectURL(currentTTSAudioUrl);
+                currentTTSAudioUrl = null;
+            }
+            currentTTSAudio = null;
+            currentTTSBtn = null;
+            console.error('TTS 播放失败:', err);
+            if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('音频播放失败: ' + err.message); });
+        });
+    })
+    .catch(function(err) {
+        btn.classList.remove('loading');
+        btn.innerHTML = '🔊 播报';
+        currentTTSBtn = null;
+        console.error('TTS 请求失败:', err);
+        if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('语音合成失败: ' + err.message); });
+    });
 }
 </script>
 {% end %}
