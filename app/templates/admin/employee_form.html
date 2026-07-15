@@ -76,21 +76,36 @@
                 </div>
 
                 <div class="layui-form-item">
-                    <label class="layui-form-label">技能标签</label>
+                    <label class="layui-form-label">选择技能</label>
                     <div class="layui-input-block">
-                        <div style="display:flex;gap:8px;">
-                            <input type="text" id="skill-input" class="layui-input" placeholder="输入技能后按回车添加"
-                                   style="flex:1;">
-                            <button type="button" id="add-skill-btn" class="layui-btn layui-btn-sm">添加</button>
-                        </div>
-                        {% set skills = [] %}
-                        {% if employee %}{% try %}{% set skills = __import__('json').loads(employee.get('skills','[]')) %}{% except %}{% end %}{% end %}
-                        <div class="skill-tags" id="skill-tags">
-                            {% for s in skills %}
-                            <span class="skill-tag">{{ s }}<span class="remove-skill" onclick="this.parentElement.remove()">×</span></span>
+                        {% if skills_library %}
+                        <div style="max-height:240px;overflow-y:auto;border:1px solid var(--border-subtle);border-radius:8px;padding:12px;">
+                            {% for sk in skills_library %}
+                            <div style="display:inline-block;margin:4px 8px 4px 0;">
+                                <input type="checkbox" name="skill_ids" value="{{ sk['id'] }}"
+                                       id="skill-cb-{{ sk['id'] }}" lay-skin="primary"
+                                       title="{{ sk['name'] }}"
+                                       {% if employee %}
+                                           {% try %}
+                                               {% set emp_skills = __import__('json').loads(employee.get('skills','[]')) %}
+                                               {% if sk['id'] in emp_skills %}checked{% end %}
+                                           {% except %}{% end %}
+                                       {% end %}>
+                            </div>
                             {% end %}
                         </div>
-                        <input type="hidden" name="skills" id="skills-hidden" value='{{ employee.get("skills", "[]") if employee else "[]" }}'>
+                        <div class="layui-form-mid layui-word-aux" style="float:none;margin-left:0;">
+                            {% if skills_library %}
+                            💡 勾选员工可加载的技能。LLM 在对话中会按需通过 <code>load_skill</code> 工具获取完整指令。
+                            {% else %}
+                            ⚠️ 技能库为空，请先在「技能管理」中添加技能。
+                            {% end %}
+                        </div>
+                        {% else %}
+                        <div style="padding:12px;color:var(--text-muted);border:1px dashed var(--border-subtle);border-radius:8px;">
+                            ⚠️ 技能库为空，请先在「<a href="/admin/skill" target="_blank">技能管理</a>」中添加技能。
+                        </div>
+                        {% end %}
                     </div>
                 </div>
 
@@ -177,48 +192,6 @@ layui.use(['form'], function(){
             document.querySelector('.llm-fields').classList.toggle('active', this.value === 'llm');
             document.querySelector('.api-fields').classList.toggle('active', this.value === 'api');
         });
-    });
-
-    // 技能标签管理
-    var skillInput = document.getElementById('skill-input');
-    var skillTags = document.getElementById('skill-tags');
-    var skillsHidden = document.getElementById('skills-hidden');
-
-    function updateSkillsHidden(){
-        var tags = skillTags.querySelectorAll('.skill-tag');
-        var skills = [];
-        tags.forEach(function(tag){
-            skills.push(tag.textContent.replace('×','').trim());
-        });
-        skillsHidden.value = JSON.stringify(skills);
-    }
-
-    function addSkill(name){
-        name = name.trim();
-        if (!name) return;
-        var existing = skillTags.querySelectorAll('.skill-tag');
-        for (var i = 0; i < existing.length; i++){
-            if (existing[i].textContent.replace('×','').trim() === name) return;
-        }
-        var tag = document.createElement('span');
-        tag.className = 'skill-tag';
-        tag.innerHTML = name + '<span class="remove-skill" onclick="this.parentElement.remove();updateSkillsHidden();">×</span>';
-        skillTags.appendChild(tag);
-        updateSkillsHidden();
-    }
-
-    document.getElementById('add-skill-btn').addEventListener('click', function(){
-        addSkill(skillInput.value);
-        skillInput.value = '';
-        skillInput.focus();
-    });
-
-    skillInput.addEventListener('keypress', function(e){
-        if (e.key === 'Enter'){
-            e.preventDefault();
-            addSkill(skillInput.value);
-            skillInput.value = '';
-        }
     });
 
     // 初始化类型显示

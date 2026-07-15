@@ -14,6 +14,7 @@ migrate_db.py — 数据库迁移脚本
   v0.3.0  — 添加 digital_employees 表
   v0.3.0  — 添加 data_warehouse_fts 虚拟表 + 同步触发器
   v0.4.0  — 添加 watch_sources.schedule_interval 列
+  v0.5.0  — 添加 skills 技能库表
 
 Usage:
   python migrate_db.py              # 执行待处理迁移
@@ -208,6 +209,24 @@ def run_migrations():
             "name": "add_watch_sources_schedule_interval",
             "sql": "ALTER TABLE watch_sources ADD COLUMN schedule_interval INTEGER DEFAULT 0",
             "check": lambda c: _column_exists(c, "watch_sources", "schedule_interval"),
+        },
+        # v0.5.0: 技能库表
+        {
+            "name": "create_skills",
+            "sql": """
+                CREATE TABLE IF NOT EXISTS skills (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name            TEXT UNIQUE NOT NULL,
+                    description     TEXT DEFAULT '',
+                    skill_type      TEXT NOT NULL DEFAULT 'prompt',
+                    prompt_template TEXT DEFAULT '',
+                    function_name   TEXT DEFAULT '',
+                    function_params TEXT DEFAULT '{}',
+                    is_enabled      INTEGER DEFAULT 1,
+                    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """,
+            "check": lambda c: _table_exists(c, "skills"),
         },
     ]
 

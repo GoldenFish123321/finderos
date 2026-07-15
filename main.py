@@ -48,6 +48,9 @@ from app.controllers.admin_employee import (
     EmployeeToggleHandler, EmployeeInvokeHandler, EmployeeApiListHandler,
     EmployeeTestPageHandler,
 )
+from app.controllers.admin_skill import (
+    SkillListHandler, SkillFormHandler, SkillDeleteHandler, SkillToggleHandler,
+)
 from app.controllers.user_chat import (
     UserChatPageHandler, UserModelListHandler, UserEmployeeListHandler,
     UserConversationListHandler, UserConversationCreateHandler,
@@ -152,6 +155,14 @@ def make_app() -> tornado.web.Application:
             (r"/admin/api/employee/list", EmployeeApiListHandler),
             # 员工测试对话页
             (r"/admin/employee/test", EmployeeTestPageHandler),
+
+            # ========== v0.5.0 新增模块 ==========
+            # 技能管理
+            (r"/admin/skill", SkillListHandler),
+            (r"/admin/skill/add", SkillFormHandler),
+            (r"/admin/skill/edit", SkillFormHandler),
+            (r"/admin/skill/delete", SkillDeleteHandler),
+            (r"/admin/skill/toggle", SkillToggleHandler),
 
             # ========== v0.3.0 用户前台-智能问数 ==========
             # 前台对话主页
