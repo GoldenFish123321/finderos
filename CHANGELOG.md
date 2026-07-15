@@ -4,6 +4,13 @@
 
 ---
 
+## v1.0.1-beta (2026-07-15) — MCP Fallback 工具补齐
+
+- 🐛 **修复 #47**：`ALL_TOOL_DEFINITIONS` fallback 路径缺失 8 个工具定义，现已补齐为 18 个（与 `builtin_tools/` 导出完全一致）
+- 🧪 **测试增强**：新增 `TestAllToolDefinitions` 测试类，验证 18 个工具完整性、handler 可调用性、schema 规范性（3 项测试）
+
+---
+
 ## v1.0.0-beta (2026-07-15) — 版本号统一
 
 - 📌 **版本号体系修正**：统一代码、文档、模板中所有版本引用，建立清晰的语义化版本体系
