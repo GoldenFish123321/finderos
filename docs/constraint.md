@@ -219,7 +219,8 @@
 | model_id | INTEGER DEFAULT NULL FK | 绑定模型（LLM 型），`FOREIGN KEY REFERENCES ai_models(id) ON DELETE SET NULL` |
 | system_prompt | TEXT DEFAULT '' | 系统提示词（LLM 型） |
 | skills | TEXT DEFAULT '[]' | 技能列表 JSON（LLM 型） |
-| crawl4ai_enabled | INTEGER DEFAULT 0 | 启用深度采集（LLM 型） |
+| mcp_tool_ids | TEXT DEFAULT '[]' | MCP 工具权限列表 JSON，[v0.6.1] 深度采集通过此字段控制 |
+| crawl4ai_enabled | INTEGER DEFAULT 0 | [v0.6.1 废弃] 改用 mcp_tool_ids 控制 |
 | api_url | TEXT DEFAULT '' | API 地址（API 型） |
 | api_method | TEXT DEFAULT 'GET' | HTTP 方法（API 型） |
 | api_headers | TEXT DEFAULT '{}' | 请求头 JSON（API 型） |

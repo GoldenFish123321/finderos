@@ -109,13 +109,8 @@
                     </div>
                 </div>
 
-                <div class="layui-form-item">
-                    <label class="layui-form-label">Crawl4ai</label>
-                    <div class="layui-input-block">
-                        <input type="checkbox" name="crawl4ai_enabled" value="1" title="启用 Crawl4ai 网页采集能力"
-                               {% if employee and employee.get('crawl4ai_enabled') == 1 %}checked{% end %}>
-                    </div>
-                </div>
+                <!-- v0.6.1: Crawl4ai 已迁移至 MCP 工具权限体系 -->
+                <!-- 旧 crawl4ai_enabled 复选框已移除，请在下方 MCP 工具权限中勾选「Crawl4ai 智能采集」和「批量深度采集」 -->
 
                 <!-- v0.6.1: MCP 工具权限选择 -->
                 <div class="layui-form-item">

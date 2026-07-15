@@ -160,7 +160,8 @@ class EmployeeFormHandler(AdminBaseHandler):
         model_id_str = self.get_body_argument("model_id", "").strip()
         model_id = int(model_id_str) if model_id_str else None
         system_prompt = self.get_body_argument("system_prompt", "").strip()
-        crawl4ai_enabled = 1 if self.get_body_argument("crawl4ai_enabled", "0") == "1" else 0
+        # v0.6.1: crawl4ai_enabled 已废弃，crawl4ai 能力通过 mcp_tool_ids 控制
+        crawl4ai_enabled = 0
 
         # 解析技能选择（v0.5.0: 从技能库多选，存储技能 ID 数组）
         skill_ids = self.get_body_arguments("skill_ids")
@@ -537,7 +538,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             skills_list = json.loads(emp.get("skills", "[]"))
         except (json.JSONDecodeError, TypeError):
             pass
-        crawl4ai_on = emp.get("crawl4ai_enabled", 0) == 1
+        # v0.6.1: crawl4ai_enabled 已废弃，深度采集能力通过 MCP 工具权限控制
 
         # 1. 执行工具调用：根据意图自动查询数据仓库 / 触发采集
         if tool_results is None:
@@ -552,8 +553,8 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             lines.append(f"📊 在数据仓库中搜索「{tool_results.get('keyword', message)}」...\n")
         elif intent == "warehouse_list":
             lines.append("📋 获取数据仓库最新内容...\n")
-        elif intent == "deep_collect" and crawl4ai_on:
-            lines.append("🕷️ 正在通过 Crawl4ai 深度采集网页内容...\n")
+        elif intent == "deep_collect":
+            lines.append("🕷️ 正在深度采集网页内容...\n")
         elif intent == "warehouse_stats":
             lines.append("📈 数据仓库统计信息...\n")
 
@@ -602,13 +603,9 @@ class EmployeeInvokeHandler(AdminBaseHandler):
                 skill_names = [str(s) for s in skills_list] if skills_list else []
             skills_text = "、".join(skill_names) if skill_names else "通用助手"
             lines.append(f"🔧 我的技能: {skills_text}")
-            if crawl4ai_on:
-                lines.append(f"🕷️ Crawl4ai 网页采集: 已启用")
             lines.append(f"\n💡 试试这些指令:")
             lines.append(f"  • 「查看数据仓库」— 列出最新采集数据")
             lines.append(f"  • 「搜索 AI」— 在数据仓库中搜索关键词")
-            if crawl4ai_on:
-                lines.append(f"  • 「深度采集 https://...」— 抓取网页正文")
             lines.append(f"\n⚠️ 当前为本地智能模式。配置 API Key 后将启用 AI 大模型对话。")
 
         full_reply = "\n".join(lines)
@@ -628,7 +625,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         """根据用户消息意图执行对应的工具调用。返回工具执行结果字典。"""
         result = {"intent": "general"}
         msg_lower = message.lower().strip()
-        crawl4ai_on = emp.get("crawl4ai_enabled", 0) == 1
+        # v0.6.1: crawl4ai_enabled 已废弃，深度采集能力通过 MCP 工具权限控制
 
         # 意图: 搜索数据仓库
         search_keywords = ["搜索", "查找", "查询", "找", "search", "数据仓库里有", "有没有"]
@@ -637,7 +634,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         crawl_keywords = ["深度采集", "抓取", "采集网页", "爬取", "crawl", "fetch"]
 
         # 检测意图（crawl 需同时有关键词+URL，否则继续匹配其他意图）
-        if any(kw in msg_lower for kw in crawl_keywords) and crawl4ai_on:
+        if any(kw in msg_lower for kw in crawl_keywords):
             # 提取 URL
             import re
             url_match = re.search(r'https?://[^\s]+', message)
@@ -680,7 +677,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
                     ).fetchone()["cnt"]
                 result["warehouse_stats"] = {"total": total, "deep_collected": deep}
 
-            if result["intent"] == "deep_collect" and crawl4ai_on:
+            if result["intent"] == "deep_collect":
                 url = result.get("url", "")
                 if url:
                     from app.utils.security import validate_url_safe

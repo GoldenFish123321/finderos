@@ -732,11 +732,11 @@ def _seed_default_employees():
                     1,
                 ),
             )
-            # 采集专员 — LLM 型数字员工（带 Crawl4ai 深度采集）
+            # 采集专员 — LLM 型数字员工（通过 MCP 工具权限使用 Crawl4ai 深度采集）
             conn.execute(
                 "INSERT INTO digital_employees (id, name, employee_type, description, "
-                "model_id, system_prompt, skills, crawl4ai_enabled, is_enabled) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     4, "采集专员", "llm",
                     "专注于数据采集与信息提取的AI助手，支持关键词搜索、深度采集、数据整理",
@@ -748,7 +748,8 @@ def _seed_default_employees():
                     "4. 生成结构化的数据报告\n"
                     "请高效、准确地完成采集任务，输出清晰的结构化结果。",
                     json.dumps(["数据搜索", "深度采集", "内容提取", "数据整理"], ensure_ascii=False),
-                    1,
+                    0,  # v0.6.1: crawl4ai_enabled 已废弃，改用 mcp_tool_ids
+                    json.dumps([15, 16], ensure_ascii=False),  # collect_with_crawl4ai + batch_deep_collect
                     1,
                 ),
             )
