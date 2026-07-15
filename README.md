@@ -49,7 +49,7 @@
 
 **瞭望与问数系统 (DataFinderAgentOS)** 是一个面向中小团队的智能数据采集与 AI 问数一体化平台。它将 **Web 数据采集（瞭望）** 和 **大语言模型对话（问数）** 两大核心能力整合于统一的 Web 管理后台中，并配备完整的 RBAC 权限体系。
 
-系统采用 **轻量依赖**设计理念：核心功能基于 Python 标准库实现（`sqlite3`、`urllib`、`hashlib`、`ssl`、`re` 等），仅引入少量必要的外部依赖（Tornado Web 框架、Fernet 加密库、Brotli 解压支持）。
+系统采用 **轻量依赖**设计理念：核心功能基于 Python 标准库实现（`sqlite3`、`urllib`、`hashlib`、`ssl`、`re` 等），仅引入少量必要的外部依赖（Tornado Web 框架、cryptography 加密库、Brotli 解压支持）。
 
 ### 核心能力
 
@@ -160,7 +160,8 @@ DataFinderAgentOS/
 │   ├── requirement.md            # 需求文档
 │   ├── api.md                    # API 接口文档
 │   ├── constraint.md             # 全局开发约束（DDL、安全规范等）
-│   └── test_case.md              # 测试用例清单（27 项）
+│   ├── test_case.md              # 测试用例清单（58 项）
+│   └── v0.3_gap_analysis_and_plan.md  # v0.3 差距分析与规划（已归档）
 │
 ├── test/                         # 单元测试与 Bug 回归测试
 │   ├── __init__.py
