@@ -15,6 +15,7 @@ from app.models.digital_employee import (
     DigitalEmployeeRepository, EMPLOYEE_TYPES,
 )
 from app.models.ai_model import AiModelRepository
+from app.models.skill import SkillRepository
 from app.models.data_warehouse import DataWarehouseRepository
 from app.utils.security import write_audit_log
 
@@ -47,13 +48,20 @@ class EmployeeListHandler(AdminBaseHandler):
         total_pages = max(1, (total + 12 - 1) // 12)
         stats = DigitalEmployeeRepository.get_stats()
 
-        # 预解析 skills JSON（避免模板中使用 __import__ 反模式）
+        # 预解析 skills（v0.5.0: 存储技能 ID 数组，需从技能库解析名称；
+        # 兼容旧格式：字符串标签数组）
         import json as _json
         for emp in rows:
             try:
-                emp["skills_list"] = _json.loads(emp.get("skills", "[]"))
+                raw_skills = _json.loads(emp.get("skills", "[]"))
             except (_json.JSONDecodeError, TypeError):
-                emp["skills_list"] = []
+                raw_skills = []
+            emp["skills_list"] = SkillRepository.resolve_by_ids(raw_skills) if raw_skills and isinstance(raw_skills[0], int) else []
+            # 兼容旧格式（字符串标签）
+            if not emp["skills_list"] and raw_skills and isinstance(raw_skills[0], str):
+                emp["skills_list"] = SkillRepository.resolve_by_names(raw_skills)
+                # 标记为旧格式（模板中可区分显示）
+                emp["skills_legacy"] = True
             # JS 安全转义员工名称（用于 confirm 对话框）
             emp["name_js"] = _json.dumps(emp.get("name", ""), ensure_ascii=False)
 
@@ -93,6 +101,9 @@ class EmployeeFormHandler(AdminBaseHandler):
         models, _ = AiModelRepository.get_all(page=1, page_size=50)
         enabled_models = [m for m in models if m.get("is_enabled") == 1]
 
+        # 获取启用的技能库（供技能选择器使用）
+        skills_library = SkillRepository.get_enabled()
+
         self.render(
             "admin/employee_form.html",
             title="编辑员工" if emp else "新增员工",
@@ -100,6 +111,7 @@ class EmployeeFormHandler(AdminBaseHandler):
             employee=emp,
             employee_types=EMPLOYEE_TYPES,
             models=enabled_models,
+            skills_library=skills_library,
         )
 
     @tornado.web.authenticated
@@ -113,16 +125,14 @@ class EmployeeFormHandler(AdminBaseHandler):
         model_id_str = self.get_body_argument("model_id", "").strip()
         model_id = int(model_id_str) if model_id_str else None
         system_prompt = self.get_body_argument("system_prompt", "").strip()
-        skills_raw = self.get_body_argument("skills", "[]").strip()
         crawl4ai_enabled = 1 if self.get_body_argument("crawl4ai_enabled", "0") == "1" else 0
 
-        # 解析 skills（支持 JSON 数组 或 逗号分隔 或 换行分隔）
+        # 解析技能选择（v0.5.0: 从技能库多选，存储技能 ID 数组）
+        skill_ids = self.get_body_arguments("skill_ids")
         try:
-            skills = json.loads(skills_raw)
-            if not isinstance(skills, list):
-                skills = [s.strip() for s in skills_raw.replace("\n", ",").split(",") if s.strip()]
-        except (json.JSONDecodeError, TypeError):
-            skills = [s.strip() for s in skills_raw.replace("\n", ",").split(",") if s.strip()]
+            skills = [int(sid) for sid in skill_ids if sid.strip()]
+        except (ValueError, TypeError):
+            skills = []
         skills_json = json.dumps(skills, ensure_ascii=False)
 
         # API 型字段

@@ -1232,6 +1232,35 @@ class UserEmployeeInvokeHandler(BaseHandler):
         total_tokens = 0
         api_success = False
 
+        # ── v0.5.0: 解析员工技能，构建技能摘要（供 LLM 按需加载）──
+        from app.models.skill import SkillRepository
+        skills_ctx = ""
+        try:
+            raw_skills = json.loads(emp.get("skills", "[]"))
+        except (json.JSONDecodeError, TypeError):
+            raw_skills = []
+        if raw_skills:
+            # 兼容新旧格式：ID 数组 vs 名称数组
+            if isinstance(raw_skills[0], int):
+                skill_summaries = SkillRepository.get_skill_summaries(skill_ids=raw_skills)
+            else:
+                skill_summaries = SkillRepository.get_skill_summaries(skill_names=raw_skills)
+            if skill_summaries:
+                lines = [
+                    "\n[可用技能]",
+                    f"你作为「{emp_name}」配备了以下技能。当任务需要对应能力时，",
+                    "请调用 load_skill 工具加载技能以获取详细执行指令：",
+                    "",
+                ]
+                for s in skill_summaries:
+                    desc = s.get("description", "") or "（无描述）"
+                    lines.append(f"- {s['name']}: {desc}")
+                skills_ctx = "\n".join(lines)
+                logger.info(
+                    f"员工 {emp_name} 加载了 {len(skill_summaries)} 个技能: "
+                    f"{[s['name'] for s in skill_summaries]}"
+                )
+
         warehouse_ctx = ""
         if tool_ctx:
             result_data = tool_ctx.get("result", {})
@@ -1260,7 +1289,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
                         warehouse_ctx += f"共 {len(items)} 条结果。请基于以上真实数据回答。"
 
         messages = []
-        full_system = _build_system_prompt(system_prompt) + warehouse_ctx
+        full_system = _build_system_prompt(system_prompt) + skills_ctx + warehouse_ctx
         messages.append({"role": "system", "content": full_system})
         messages.append({"role": "user", "content": message})
 
