@@ -1130,6 +1130,14 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 | GET | `/admin/conversation` | 所有用户会话列表，支持 `?username=&keyword=&page=&id=` 筛选/查看详情 |
 | POST | `/admin/conversation/delete` | 管理员删除任意会话及其消息 |
 
+#### 管理侧消息管理（Issue #18）
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/message` | 跨会话逐条消息管理，支持 `?username=&keyword=&role=&is_sensitive=&review_status=&date_from=&date_to=&page=` 多维筛选 |
+| POST | `/admin/message/delete` | 删除单条消息 |
+| POST | `/admin/message/mark` | 标记消息（敏感标记 `toggle_sensitive` / 审核状态 `set_review`） |
+| POST | `/admin/message/batch` | 批量操作（批量删除/标记敏感/审核通过） |
+
 #### 接口管理（Issue #26）
 | 方法 | 路径 | 说明 |
 |------|------|------|

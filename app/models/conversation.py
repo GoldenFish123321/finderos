@@ -186,3 +186,137 @@ class ConversationRepository:
         """获取对话最近 N 条消息，返回 (role, content) 列表。"""
         messages = ConversationRepository.get_messages(conv_id, limit)
         return [{"role": m["role"], "content": m["content"]} for m in messages]
+
+    # ════════════════════════════════════════════════════════════
+    # Issue #18: 独立消息管理（管理员逐条管理跨会话消息）
+    # ════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def get_all_messages_admin(
+        page: int = 1,
+        page_size: int = 30,
+        username: str = "",
+        keyword: str = "",
+        role: str = "",
+        is_sensitive: str = "",
+        review_status: str = "",
+        date_from: str = "",
+        date_to: str = "",
+    ) -> tuple:
+        """管理侧：分页查询所有跨会话消息，支持多维筛选。返回 (rows, total)。"""
+        page = max(1, int(page or 1))
+        page_size = max(1, min(int(page_size or 30), 100))
+
+        conditions = []
+        params = []
+
+        if username:
+            conditions.append("c.username = ?")
+            params.append(username)
+        if keyword:
+            conditions.append("cm.content LIKE ?")
+            params.append(f"%{keyword}%")
+        if role:
+            conditions.append("cm.role = ?")
+            params.append(role)
+        if is_sensitive:
+            conditions.append("cm.is_sensitive = ?")
+            params.append(1 if is_sensitive == "1" else 0)
+        if review_status:
+            conditions.append("cm.review_status = ?")
+            params.append(review_status)
+        if date_from:
+            conditions.append("cm.created_at >= ?")
+            params.append(date_from)
+        if date_to:
+            conditions.append("cm.created_at <= ?")
+            params.append(date_to + " 23:59:59")
+
+        where = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+        with get_db() as conn:
+            total = conn.execute(
+                f"""SELECT COUNT(*) as cnt FROM conversation_messages cm
+                    LEFT JOIN conversations c ON cm.conversation_id = c.id
+                    {where}""",
+                params,
+            ).fetchone()["cnt"]
+
+            rows = conn.execute(
+                f"""SELECT cm.*, c.username, c.title as conversation_title
+                    FROM conversation_messages cm
+                    LEFT JOIN conversations c ON cm.conversation_id = c.id
+                    {where}
+                    ORDER BY cm.id DESC
+                    LIMIT ? OFFSET ?""",
+                (*params, page_size, (page - 1) * page_size),
+            ).fetchall()
+        return [dict(r) for r in rows], total
+
+    @staticmethod
+    def delete_message(msg_id: int) -> bool:
+        """删除单条消息。"""
+        with get_db() as conn:
+            cur = conn.execute(
+                "DELETE FROM conversation_messages WHERE id = ?", (msg_id,)
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    @staticmethod
+    def mark_message_sensitive(msg_id: int, is_sensitive: int = 1) -> bool:
+        """标记/取消标记消息为敏感内容。"""
+        with get_db() as conn:
+            cur = conn.execute(
+                "UPDATE conversation_messages SET is_sensitive = ? WHERE id = ?",
+                (is_sensitive, msg_id),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    @staticmethod
+    def mark_message_reviewed(msg_id: int, review_status: str = "reviewed") -> bool:
+        """更新消息审核状态。"""
+        valid_statuses = {"pending", "reviewed", "flagged", "cleared"}
+        if review_status not in valid_statuses:
+            review_status = "reviewed"
+        with get_db() as conn:
+            cur = conn.execute(
+                "UPDATE conversation_messages SET review_status = ? WHERE id = ?",
+                (review_status, msg_id),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    @staticmethod
+    def get_message_usernames() -> list:
+        """获取有消息记录的用户列表（用于筛选下拉）。"""
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT c.username FROM conversation_messages cm "
+                "LEFT JOIN conversations c ON cm.conversation_id = c.id "
+                "WHERE c.username IS NOT NULL AND c.username != '' "
+                "ORDER BY c.username ASC"
+            ).fetchall()
+        return [r["username"] for r in rows]
+
+    @staticmethod
+    def get_message_stats() -> dict:
+        """获取消息管理统计。"""
+        with get_db() as conn:
+            total = conn.execute("SELECT COUNT(*) as cnt FROM conversation_messages").fetchone()["cnt"]
+            sensitive = conn.execute(
+                "SELECT COUNT(*) as cnt FROM conversation_messages WHERE is_sensitive = 1"
+            ).fetchone()["cnt"]
+            pending = conn.execute(
+                "SELECT COUNT(*) as cnt FROM conversation_messages WHERE review_status = 'pending'"
+            ).fetchone()["cnt"]
+            flagged = conn.execute(
+                "SELECT COUNT(*) as cnt FROM conversation_messages WHERE review_status = 'flagged'"
+            ).fetchone()["cnt"]
+        return {
+            "total": total,
+            "sensitive": sensitive,
+            "pending": pending,
+            "flagged": flagged,
+        }
