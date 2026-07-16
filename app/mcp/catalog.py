@@ -33,6 +33,8 @@ def canonical_tool_names() -> set[str]:
 def upsert_builtin_tools(conn) -> int:
     """Fill partial catalogs and normalize behavior-bearing metadata by name."""
     records = canonical_tool_records()
+    canonical_names = {record["name"] for record in records}
+
     for record in records:
         conn.execute(
             "INSERT INTO mcp_tools "
@@ -46,4 +48,26 @@ def upsert_builtin_tools(conn) -> int:
              record["category"], record["handler_module"],
              json.dumps(record["input_schema"], ensure_ascii=False), record["sort_order"]),
         )
+
+    # 清理残留的内置工具记录：仅删除 handler_module 指向 builtin_tools 包
+    # 但函数名已不存在的记录（如函数重命名后的旧自动发现残留）。
+    # 保留用户自定义工具（无 handler_module 或指向其他路径）。
+    stale_rows = conn.execute(
+        "SELECT name FROM mcp_tools WHERE tool_type='builtin'"
+        " AND handler_module LIKE 'app.mcp.builtin_tools.%'"
+        " AND name NOT IN ({})".format(",".join("?" for _ in canonical_names)),
+        list(canonical_names) if canonical_names else [""],
+    ).fetchall()
+    stale = {row["name"] for row in stale_rows}
+    if stale:
+        import logging
+        logger = logging.getLogger(__name__)
+        for name in sorted(stale):
+            conn.execute(
+                "DELETE FROM mcp_tools WHERE name=? AND tool_type='builtin'"
+                " AND handler_module LIKE 'app.mcp.builtin_tools.%'",
+                (name,),
+            )
+            logger.info(f"已清理残留内置工具记录: {name}")
+
     return len(records)
