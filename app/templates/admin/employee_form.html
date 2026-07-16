@@ -163,7 +163,7 @@
                     </label>
                     <div class="layui-input-block">
                         <select name="mcp_tool_id" id="mcp-tool-select" lay-filter="mcpToolSelect">
-                            <option value="">-- 手动配置 HTTP（旧模式） --</option>
+                            <option value="">-- 手动配置 HTTP（已弃用，建议选 MCP 工具） --</option>
                             {% for tool in mcp_tools_all %}
                             <option value="{{ tool['id'] }}"
                                 {% if employee and employee.get('mcp_tool_id') == tool['id'] %}selected{% end %}>
@@ -173,14 +173,17 @@
                             {% end %}
                         </select>
                         <div class="layui-form-mid layui-word-aux">
-                            💡 选择 MCP 工具后，API 员工将委托该工具处理请求，下方 HTTP 配置将被忽略。
-                            未选择时使用旧的 HTTP 直连模式。
+                            💡 推荐选择 MCP 工具统一管理 API 调用（可在 MCP 工具管理中测试和监控）。
+                            未选择时使用下方 HTTP 直连模式（已弃用，后续版本将移除）。
                         </div>
                     </div>
                 </div>
 
-                <!-- 旧 HTTP 配置区域（选择 MCP 工具后隐藏） -->
+                <!-- 旧 HTTP 配置区域（选择 MCP 工具后隐藏；已弃用，后续版本将移除） -->
                 <div id="api-http-fields" style="{{ 'display:none;' if employee and employee.get('mcp_tool_id') else '' }}">
+                <div style="background:rgba(255,184,0,0.1);border:1px solid rgba(255,184,0,0.3);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#FFB800;">
+                    ⚠️ 以下为旧版 HTTP 直连配置，已弃用。建议在上方选择一个 MCP 工具替代。
+                </div>
                 <div class="layui-form-item">
                     <label class="layui-form-label">接口模板</label>
                     <div class="layui-input-block">

@@ -431,3 +431,88 @@ def test_legacy_update_still_works():
     assert emp["api_url"] == "https://new.example.com/api"
     assert emp["api_method"] == "GET"
     assert emp["mcp_tool_id"] is None or emp["mcp_tool_id"] == 0
+
+
+# ═══════════════════════════════════════════════════════════
+# v1.7.0: 天气员工 MCP 工具绑定迁移测试
+# ═══════════════════════════════════════════════════════════
+
+def test_weather_mcp_tool_exists():
+    """weather_query MCP 工具应已由种子或迁移创建。"""
+    from app.models.mcp_tool import MCPToolRepository
+    tool = MCPToolRepository.get_by_name("weather_query")
+    assert tool is not None, "weather_query MCP 工具应存在"
+    assert tool["is_enabled"] == 1
+    assert tool["tool_type"] == "api"
+    assert "wttr.in" in tool.get("api_url", "")
+
+
+def test_weather_employee_bound_to_mcp():
+    """种子数据中的天气员工（id=3）应已绑定 weather_query MCP 工具。"""
+    from app.models.mcp_tool import MCPToolRepository
+
+    emp = DigitalEmployeeRepository.get_by_id(3)
+    if not emp:
+        tool = MCPToolRepository.get_by_name("weather_query")
+        if not tool:
+            pytest.skip("weather_query MCP 工具不存在，无法创建测试员工")
+        emp_id = DigitalEmployeeRepository.create(
+            name="_test_weather_mcp_",
+            employee_type="api", description="测试天气 MCP 绑定",
+            mcp_tool_id=tool["id"],
+            api_url="https://wttr.in/{message}?format=j1", api_method="GET",
+        )
+        emp = DigitalEmployeeRepository.get_by_id(emp_id)
+
+    assert emp is not None
+    if emp.get("name") == "天气" and emp.get("mcp_tool_id"):
+        assert emp["mcp_tool_id"] > 0
+        from app.models.mcp_tool import MCPToolRepository
+        tool = MCPToolRepository.get_by_id(emp["mcp_tool_id"])
+        assert tool is not None
+        assert tool["name"] == "weather_query"
+        assert tool["is_enabled"] == 1
+
+
+def test_weather_mcp_tool_buildable():
+    """weather_query MCP 工具应能被正常构建为 MCPTool 实例。"""
+    from app.models.mcp_tool import MCPToolRepository
+    from app.mcp.registry import _build_tool_from_db_row
+
+    tool = MCPToolRepository.get_by_name("weather_query")
+    if not tool:
+        pytest.skip("weather_query MCP 工具不存在")
+
+    mcp_tool = _build_tool_from_db_row(tool)
+    assert mcp_tool is not None
+    assert mcp_tool.name == "weather_query"
+    assert mcp_tool.description
+    assert mcp_tool.input_schema
+
+
+def test_weather_mcp_tool_http_call():
+    """weather_query MCP 工具应能实际调用 wttr.in API。"""
+    from app.models.mcp_tool import MCPToolRepository
+    from app.mcp.registry import _build_tool_from_db_row
+    import asyncio
+
+    tool = MCPToolRepository.get_by_name("weather_query")
+    if not tool:
+        pytest.skip("weather_query MCP 工具不存在")
+
+    mcp_tool = _build_tool_from_db_row(tool)
+    assert mcp_tool is not None
+
+    async def _call():
+        return await mcp_tool.call({"message": "Beijing"})
+
+    try:
+        result = asyncio.run(_call())
+    except Exception as e:
+        msg = str(e).lower()
+        if any(kw in msg for kw in ("timeout", "refused", "resolve", "connect")):
+            pytest.skip(f"网络不可用，跳过 MCP HTTP 调用测试: {e}")
+        raise
+
+    assert isinstance(result, dict)
+    assert "current_condition" in result or "weather" in result

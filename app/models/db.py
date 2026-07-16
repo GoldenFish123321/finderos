@@ -473,6 +473,46 @@ def init_db():
         except Exception as e:
             logger.error(f"Database migration failed (digital_employees.mcp_tool_id): {e}", exc_info=True)
 
+        # ── v1.7.0 已有天气员工绑定 MCP 工具（迁移旧 HTTP 直连到 MCP 代理）──
+        try:
+            import json as _json
+            # 确保 weather_query MCP 工具存在
+            existing_tool = conn.execute(
+                "SELECT id FROM mcp_tools WHERE name = ?", ("weather_query",)
+            ).fetchone()
+            if not existing_tool:
+                cur = conn.execute(
+                    "INSERT INTO mcp_tools (name, display_name, description, category, tool_type, "
+                    "api_url, api_method, api_headers, input_schema, is_enabled, is_system, sort_order) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    ("weather_query", "天气查询",
+                     "通过 wttr.in 免费 API 查询指定城市的实时天气信息，返回温度、天气状况、湿度、风力等数据。",
+                     "general", "api",
+                     "https://wttr.in/{message}?format=j1", "GET",
+                     _json.dumps({"Accept": "application/json"}, ensure_ascii=False),
+                     _json.dumps({
+                         "type": "object",
+                         "properties": {"message": {"type": "string", "description": "城市名称，如 Beijing、成都、London"}},
+                         "required": ["message"]
+                     }, ensure_ascii=False),
+                     1, 0, 99),
+                )
+                weather_tool_id = cur.lastrowid
+                logger.info("Database migration: created weather_query MCP tool")
+            else:
+                weather_tool_id = existing_tool["id"]
+
+            # 更新已有天气员工绑定 MCP 工具
+            updated = conn.execute(
+                "UPDATE digital_employees SET mcp_tool_id = ? "
+                "WHERE employee_type = 'api' AND name = ? AND mcp_tool_id IS NULL",
+                (weather_tool_id, "天气")
+            ).rowcount
+            if updated:
+                logger.info(f"Database migration: bound weather employee to MCP tool (weather_query), updated {updated} row(s)")
+        except Exception as e:
+            logger.error(f"Database migration failed (weather employee MCP binding): {e}", exc_info=True)
+
         # ── v0.11 系统配置表 (key-value) ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS system_config (
@@ -952,15 +992,47 @@ def _seed_default_employees():
                     1,
                 ),
             )
-            # 天气查询 — API 型数字员工（免费天气 API）
+            # ── v1.7.0: 创建天气 MCP API 型工具，替代旧 HTTP 直连 ──
+            weather_tool_id = conn.execute(
+                "SELECT id FROM mcp_tools WHERE name = ?", ("weather_query",)
+            ).fetchone()
+            if not weather_tool_id:
+                cur = conn.execute(
+                    "INSERT INTO mcp_tools (name, display_name, description, category, tool_type, "
+                    "api_url, api_method, api_headers, input_schema, is_enabled, is_system, sort_order) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        "weather_query", "天气查询",
+                        "通过 wttr.in 免费 API 查询指定城市的实时天气信息，返回温度、天气状况、湿度、风力等数据。",
+                        "general", "api",
+                        "https://wttr.in/{message}?format=j1",
+                        "GET",
+                        json.dumps({"Accept": "application/json"}, ensure_ascii=False),
+                        json.dumps({
+                            "type": "object",
+                            "properties": {
+                                "message": {"type": "string", "description": "城市名称，如 Beijing、成都、London"}
+                            },
+                            "required": ["message"]
+                        }, ensure_ascii=False),
+                        1, 0, 99,
+                    ),
+                )
+                weather_tool_id = cur.lastrowid
+                print("[种子] 天气 MCP API 工具已创建（weather_query）")
+            else:
+                weather_tool_id = weather_tool_id["id"]
+
+            # 天气查询 — API 型数字员工（v1.7.0: 绑定 MCP 工具替代旧 HTTP 直连）
             conn.execute(
                 "INSERT INTO digital_employees (id, name, employee_type, description, "
-                "api_url, api_method, api_headers, api_params_template, response_render_template, api_interface_id, is_enabled) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "api_url, api_method, api_headers, api_params_template, response_render_template, "
+                "api_interface_id, mcp_tool_id, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     3, "天气", "api",
                     "查询指定城市的天气信息，返回温度、天气状况、风力等",
-                    "https://wttr.in/{message}?format=j1",
+                    "https://wttr.in/{message}?format=j1",  # 保留用于旧架构兼容
                     "GET",
                     json.dumps({"Accept": "application/json"}, ensure_ascii=False),
                     "",
@@ -976,6 +1048,7 @@ def _seed_default_employees():
                         ]
                     }, ensure_ascii=False),
                     weather_interface_id,
+                    weather_tool_id,  # v1.7.0: 绑定 MCP 工具
                     1,
                 ),
             )
