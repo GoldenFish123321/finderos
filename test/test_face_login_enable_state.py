@@ -6,7 +6,7 @@ from app.models.user import UserRepository
 
 
 def test_face_login_enabled_migration_and_repository(tmp_path):
-    """人脸登录必须有后端持久化开关，默认关闭，用户确认后才开启。"""
+    """人脸登录必须有独立的后端持久化开关，默认关闭，可独立启停。"""
     old_setting = settings.DB_PATH
     old_module = db_module.DB_PATH
     db_path = tmp_path / "legacy-face.db"

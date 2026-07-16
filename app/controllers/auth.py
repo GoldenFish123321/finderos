@@ -316,16 +316,16 @@ class FaceLoginHandler(BaseHandler):
             self.write({"code": 1, "msg": "用户不存在或已被禁用"})
             return
 
-        # 检查该用户是否已注册人脸
-        from app.services.face_auth import has_face as face_has_image, recognize_face
-        if not face_has_image(username):
-            self.write({"code": 1, "msg": "该用户未注册人脸，请先用密码登录后在账户设置中注册"})
-            return
-
-        # 必须由用户在账户设置中明确确认启用后，才允许人脸登录。
+        # 启用开关与人脸录入是两个独立状态：未启用则先提示启用。
         # 不能信任前端 localStorage 或登录请求参数，否则换浏览器/清缓存会绕过暂停状态。
         if not UserRepository.is_face_login_enabled(username):
-            self.write({"code": 1, "msg": "该用户尚未启用人脸登录，请先用密码登录后在账户设置中勾选确认"})
+            self.write({"code": 1, "msg": "该用户尚未启用人脸识别登录，请先用密码登录后在账户设置中启用"})
+            return
+
+        # 已启用但尚未录入时，明确提示缺少人脸信息。
+        from app.services.face_auth import has_face as face_has_image, recognize_face
+        if not face_has_image(username):
+            self.write({"code": 1, "msg": "该用户尚未录入人脸信息，请先用密码登录后在账户设置中拍照录入"})
             return
 
         # 接收上传的图片
@@ -369,7 +369,7 @@ class UserAccountHandler(BaseHandler):
     def get(self):
         from app.services.face_auth import has_face as face_has_image
         has_face = face_has_image(self.current_user)
-        face_enabled = has_face and UserRepository.is_face_login_enabled(self.current_user)
+        face_enabled = UserRepository.is_face_login_enabled(self.current_user)
         self.render(
             "user_account.html",
             title="账户设置 — 瞭望与问数系统",
@@ -389,7 +389,7 @@ class UserAccountHandler(BaseHandler):
 
         def render_page(msg="", error=""):
             current_has_face = face_has_image(self.current_user)
-            current_face_enabled = current_has_face and UserRepository.is_face_login_enabled(self.current_user)
+            current_face_enabled = UserRepository.is_face_login_enabled(self.current_user)
             self.render(
                 "user_account.html",
                 title="账户设置 — 瞭望与问数系统",
@@ -427,13 +427,10 @@ class UserAccountHandler(BaseHandler):
             ok = register_face(self.current_user, image_bytes)
             if not ok:
                 return self.redirect("/account?error=未检测到人脸，请正对镜头重试")
-            UserRepository.set_face_login_enabled(self.current_user, False)
             write_audit_log("FACE_REGISTER", self.current_user, "", "用户注册人脸")
-            return self.redirect("/account?msg=人脸注册成功，请勾选确认后再启用人脸识别登录")
+            return self.redirect("/account?msg=人脸录入成功，可按需启用或关闭人脸识别登录")
 
         elif action == "face_toggle":
-            if not face_has_image(self.current_user):
-                return self.write({"code": 1, "msg": "请先注册人脸数据"})
             enabled = self.get_body_argument("enabled", "0") == "1"
             if not UserRepository.set_face_login_enabled(self.current_user, enabled):
                 return self.write({"code": 1, "msg": "保存失败，请重试"})

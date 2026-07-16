@@ -55,17 +55,17 @@ def test_face_registration_stops_camera_after_preview_and_before_unload():
 
 
 
-def test_face_toggle_disabled_until_face_is_registered():
-    """流程应是先拍照录入人脸数据，注册成功后用户再决定是否启用登录。"""
+def test_face_toggle_is_independent_from_face_registration():
+    """启用开关和人脸录入是独立状态：未录入也能先启用，登录时再提示缺少人脸。"""
     html = _account_template()
     match = re.search(r'<input[^>]+id="face-toggle"[^>]*>', html, flags=re.S)
     assert match, "缺少人脸登录开关"
-    assert "{{ 'disabled' if not face_registered else '' }}" in match.group(0)
+    assert "disabled' if not face_registered" not in match.group(0)
     assert "data-face-registered" in match.group(0)
     assert "FACE_REGISTERED" in html
     assert "localStorage" not in html, "人脸登录启用状态不能只保存在浏览器本地"
-    assert "拍照录入人脸数据" in html
-    assert "注册成功后再由你决定是否启用人脸识别登录" in html
+    assert "启用开关以后端持久化状态为准" in html
+    assert "已启用；尚未录入人脸信息" in html
 
 
 def test_face_toggle_requires_server_confirmation_and_persistence():
@@ -78,14 +78,17 @@ def test_face_toggle_requires_server_confirmation_and_persistence():
     assert "formData.append('enabled', checked ? '1' : '0')" in account_html
     assert "fetch('/account'" in account_html
     assert "FACE_ENABLED" in account_html
-    assert "勾选确认后才能使用人脸登录" in account_html
+    assert "启用开关以后端持久化状态为准" in account_html
 
     assert "face_login_enabled" not in login_html
     assert "localStorage" not in login_html
     assert "UserRepository.is_face_login_enabled(username)" in auth_py
     assert 'get_body_argument("face_login_enabled"' not in auth_py
+    assert auth_py.index("UserRepository.is_face_login_enabled(username)") < auth_py.index("face_has_image(username)")
     assert 'action == "face_toggle"' in auth_py
     assert "set_face_login_enabled" in auth_py
+    assert "请先注册人脸数据" not in auth_py
+    assert "set_face_login_enabled(self.current_user, False)" not in auth_py
     assert 'error=self.get_query_argument("error", "")' in auth_py
 
 
