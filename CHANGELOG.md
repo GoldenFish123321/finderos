@@ -1,10 +1,14 @@
 # Changelog
 
-## v1.3.1-beta (2026-07-16) — Bug 修复
+## v1.3.1-beta (2026-07-16) — Bug 修复 + 代码清理
 
 - 🐛 **修复**：`/admin/dashboard` 数智大屏页面因缺少 `xsrf_token` 模板变量导致 500 错误（`NameError: name 'xsrf_token' is not defined`）
 - 🐛 **修复**：`/admin/sentiment` 舆情大屏页面同样缺少 `xsrf_token`（同类问题，一并修复）
 - ✅ **测试**：新增 `test_render_passes_xsrf_token` 回归测试，确保 Handler 的 `render()` 调用包含 `xsrf_token`
+- 🧹 **清理 #105**：移除 `app/mcp/tools.py` 中约 360 行死代码 `ALL_TOOL_DEFINITIONS`（已被 `discover_builtin_tool_definitions()` 取代）
+- 📝 **文档修正**：`register_all_tools()` 文档准确描述回退机制为自动发现 builtin_tools/
+- 🧪 **测试更新**：`TestAllToolDefinitions` 迁移至使用 `discover_builtin_tool_definitions()`，工具数 18→20
+- 🐛 **附带修复**：`test_issues_41_50_mcp_seed.py` 工具计数从 18 修正为 20
 
 ## v1.3.0-beta (2026-07-16) — 多模态 AI 媒体生成 + 数智大屏 + 舆情大屏 + 手势交互
 

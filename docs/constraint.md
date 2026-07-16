@@ -32,7 +32,7 @@
 |------|------|---------|
 | `app/controllers/` | Controller 层，一个业务一个文件 | 新增业务需新建文件 |
 | `app/models/` | Model 层，Repository 模式 | 每个表一个文件 |
-| `app/mcp/` | MCP 协议模块（Server/Client/Tools） | MCP 工具变更需同时更新 tools.py |
+| `app/mcp/` | MCP 协议模块（Server/Client/Tools） | 新增工具在 builtin_tools/ 添加 handler，自动发现注册 |
 | `app/services/` | 业务服务层（采集/深度采集/调度） | 独立可复用组件 |
 | `app/templates/` | Tornado 原生模板 | 按模块分目录 |
 | `app/templates/admin/` | 管理后台模板 | 继承 `base_layout.html` |
