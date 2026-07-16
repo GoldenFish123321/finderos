@@ -796,6 +796,7 @@ def seed_default_data():
     _seed_default_sources()
     _seed_default_models()
     _seed_default_mcp_tools()
+    _seed_script_tools()
     skills_created = _seed_default_skills()
     _seed_default_interfaces()
     employees_created = _seed_default_employees()
@@ -1476,6 +1477,121 @@ def _seed_default_mcp_tools():
             tools_data,
         )
         print("[种子] 默认 MCP 工具已创建（18个工具，覆盖7个分类）")
+
+
+def _seed_script_tools():
+    """v2.0 种子: script 型 MCP 工具。按名称动态查询 api_interfaces 获取 interface_id。"""
+    import json
+    with get_db() as conn:
+        # 按名称查询接口ID，不硬编码
+        weather_iface = conn.execute(
+            "SELECT id FROM api_interfaces WHERE name='天气查询接口' AND interface_type='external'"
+        ).fetchone()
+        music_iface = conn.execute(
+            "SELECT id FROM api_interfaces WHERE name='网易云音乐热歌榜' AND interface_type='external'"
+        ).fetchone()
+
+        if not weather_iface or not music_iface:
+            logger.warning("[种子] 外部接口未就绪，跳过 script 工具种子")
+            return
+
+        weather_id = weather_iface["id"]
+        music_id = music_iface["id"]
+
+        tools = [
+            # ── 天气 script 型工具 ──
+            {
+                "name": "weather_script",
+                "display_name": "天气查询 (脚本)",
+                "description": "通过 wttr.in 免费 API 查询指定城市的实时天气信息。脚本型工具。",
+                "category": "data_warehouse",
+                "tool_type": "script",
+                "input_schema": json.dumps({
+                    "type": "object",
+                    "properties": {
+                        "city": {"type": "string", "description": "城市名称，如 Beijing、成都、London"}
+                    },
+                    "required": ["city"]
+                }, ensure_ascii=False),
+                "data_sources": json.dumps([{
+                    "interface_id": weather_id,
+                    "param_mapping": {"city": "message"}
+                }], ensure_ascii=False),
+                "transform_script": (
+                    "def transform(data_sources):\n"
+                    "    import json\n"
+                    "    try:\n"
+                    "        w = data_sources[0]['data']\n"
+                    "        cur = w.get('current_condition', [{}])[0]\n"
+                    "        loc = w.get('nearest_area', [{}])[0]\n"
+                    "        city = loc.get('areaName', [{}])[0].get('value', '未知')\n"
+                    "        country = loc.get('country', [{}])[0].get('value', '')\n"
+                    "        temp = cur.get('temp_C', '?')\n"
+                    "        desc = cur.get('weatherDesc', [{}])[0].get('value', '未知')\n"
+                    "        humidity = cur.get('humidity', '?')\n"
+                    "        wind = cur.get('winddir16Point', '?') + ' ' + cur.get('windspeedKmph', '?') + 'km/h'\n"
+                    "        return f'{city}, {country} 当前天气: {desc}, 温度 {temp}°C, 湿度 {humidity}%, 风向风速 {wind}'\n"
+                    "    except Exception as e:\n"
+                    "        return f'天气数据解析失败: {e}, 原始数据: {json.dumps(data_sources)[:500]}'"
+                ),
+                "script_enabled": 1,
+                "is_enabled": 1,
+                "sort_order": 98,
+            },
+            # ── 音乐 script 型工具 ──
+            {
+                "name": "music_script",
+                "display_name": "随机音乐推荐 (脚本)",
+                "description": "从网易云音乐热歌榜随机推荐一首歌曲。脚本型工具。",
+                "category": "entertainment",
+                "tool_type": "script",
+                "input_schema": json.dumps({
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }, ensure_ascii=False),
+                "data_sources": json.dumps([{
+                    "interface_id": music_id,
+                    "param_mapping": {}
+                }], ensure_ascii=False),
+                "transform_script": (
+                    "def transform(data_sources):\n"
+                    "    import json, random\n"
+                    "    try:\n"
+                    "        songs = data_sources[0].get('data', [])\n"
+                    "        if isinstance(songs, list) and len(songs) > 0:\n"
+                    "            song = random.choice(songs)\n"
+                    "            return f'🎵 {song.get(\"name\",\"?\")} — {song.get(\"artist\",\"?\")}'\n"
+                    "        return '未找到歌曲'\n"
+                    "    except Exception as e:\n"
+                    "        return f'音乐数据解析失败: {e}'"
+                ),
+                "script_enabled": 1,
+                "is_enabled": 1,
+                "sort_order": 99,
+            },
+        ]
+
+        inserted = 0
+        for t in tools:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO mcp_tools "
+                "(name, display_name, description, category, tool_type, "
+                "input_schema, data_sources, transform_script, "
+                "script_enabled, is_enabled, sort_order) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (t["name"], t["display_name"], t["description"], t["category"],
+                 t["tool_type"], t["input_schema"], t["data_sources"],
+                 t["transform_script"], t["script_enabled"],
+                 t["is_enabled"], t["sort_order"]),
+            )
+            if cur.rowcount > 0:
+                inserted += 1
+        conn.commit()
+        if inserted > 0:
+            print(f"[种子] script 型 MCP 工具已创建（{inserted}个工具：weather_script + music_script）")
+        else:
+            print("[种子] script 型 MCP 工具已存在，跳过")
 
 
 def _synchronize_default_capabilities(skills_created: bool, employees_created: bool):
