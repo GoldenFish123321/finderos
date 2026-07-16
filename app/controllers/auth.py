@@ -241,4 +241,104 @@ class RegisterHandler(BaseHandler):
             samesite="Lax",
             secure=is_https,
         )
+<<<<<<< HEAD
+        self.redirect("/index?msg=注册成功，欢迎使用瞭望与问数系统！")
+
+
+class FaceRegisterHandler(BaseHandler):
+    """人脸注册 — 保存 128 维特征描述符到用户记录"""
+
+    @tornado.web.authenticated
+    def post(self):
+        try:
+            descriptor_str = self.get_body_argument("descriptor", "")
+        except Exception:
+            self.write({"code": 1, "msg": "参数错误"})
+            return
+        if not descriptor_str:
+            self.write({"code": 1, "msg": "人脸数据不能为空"})
+            return
+        import json
+        try:
+            descriptor = json.loads(descriptor_str)
+        except (json.JSONDecodeError, TypeError):
+            self.write({"code": 1, "msg": "人脸数据格式错误"})
+            return
+        if not isinstance(descriptor, list) or len(descriptor) != 128:
+            self.write({"code": 1, "msg": "人脸数据维度错误（需要 128 维）"})
+            return
+        ok = UserRepository.save_face_descriptor(self.current_user, descriptor)
+        if ok:
+            write_audit_log("FACE_REGISTER", self.current_user, "", "人脸注册成功",
+                            self.request.remote_ip or "")
+            self.write({"code": 0, "msg": "人脸注册成功"})
+        else:
+            self.write({"code": 1, "msg": "保存失败"})
+
+
+class FaceLoginHandler(BaseHandler):
+    """人脸登录 — 上传人脸特征，匹配后自动登录"""
+
+    def post(self):
+        if self.current_user:
+            self.write({"code": 0, "msg": "已登录", "redirect": "/index"})
+            return
+
+        client_ip = self.request.remote_ip or "0.0.0.0"
+        allowed, rate_limit_error = login_limiter.check(client_ip, "*face*")
+        if not allowed:
+            self.write({"code": 1, "msg": rate_limit_error})
+            return
+
+        try:
+            descriptor_str = self.get_body_argument("descriptor", "")
+        except Exception:
+            self.write({"code": 1, "msg": "参数错误"})
+            return
+        if not descriptor_str:
+            self.write({"code": 1, "msg": "人脸数据不能为空"})
+            return
+
+        import json
+        try:
+            descriptor = json.loads(descriptor_str)
+        except (json.JSONDecodeError, TypeError):
+            self.write({"code": 1, "msg": "人脸数据格式错误"})
+            return
+        if not isinstance(descriptor, list) or len(descriptor) != 128:
+            self.write({"code": 1, "msg": "人脸数据维度错误（需要 128 维）"})
+            return
+
+        username = UserRepository.match_face(descriptor)
+        if not username:
+            login_limiter.record_failure(client_ip, "*face*")
+            write_audit_log("FACE_LOGIN_FAIL", "", "", "人脸匹配失败", client_ip)
+            self.write({"code": 1, "msg": "人脸识别失败，请重试或使用密码登录"})
+            return
+
+        user = UserRepository.get_user_by_username(username)
+        if not user or user.get("is_enabled") == 0:
+            self.write({"code": 1, "msg": "账户已被禁用"})
+            return
+
+        login_limiter.clear(client_ip, "*face*")
+        login_limiter.clear(client_ip, username)
+        is_https = self.request.protocol == "https"
+        self.set_secure_cookie(
+            "username", username,
+            httponly=True, samesite="Lax", secure=is_https,
+        )
+        write_audit_log("FACE_LOGIN_SUCCESS", username, "", "人脸登录成功", client_ip)
+
+        role = UserRepository.get_user_role(username)
+        if role:
+            routes = [r for r in UserRepository.get_user_function_routes(username)
+                      if r.startswith("/admin")]
+            redirect = "/admin" if "/admin" in routes else (routes[0] if routes else "/index")
+        else:
+            redirect = "/index"
+
+        self.write({"code": 0, "msg": "登录成功", "redirect": redirect})
+=======
         self.redirect("/chat")
+>>>>>>> a94f0df28c2a08e446c3e48a91289f487914fa1c

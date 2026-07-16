@@ -170,7 +170,8 @@ body.dark-theme { background: #080a1a !important; }
         <h1>🛡️ 舆情大屏</h1>
         <div class="header-actions">
             <span id="update-time">更新中...</span>
-            <button class="btn-glass danger" onclick="triggerScan()">🔍 立即扫描</button>
+            <button class="btn-glass danger" onclick="triggerScan()">🔍 扫描</button>
+            <button class="btn-glass" onclick="triggerAnalyze()">🤖 AI风析</button>
             <button class="btn-glass" onclick="refreshSentiment()">⟳ 刷新</button>
             <a href="/admin" class="btn-glass">✕ 返回</a>
         </div>
@@ -406,7 +407,36 @@ body.dark-theme { background: #080a1a !important; }
     };
 
     // 扫描
+<<<<<<< HEAD
+    // AI 风析
+    window.triggerAnalyze = function() {
+        document.getElementById('update-time').textContent = '🤖 分析中...';
+        var formData = new URLSearchParams();
+        formData.append('_xsrf', '{{ xsrf_token }}');
+        formData.append('limit', '20');
+        fetch('/admin/api/sentiment/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.code === 0) {
+                if (typeof layui !== 'undefined') layui.use(['layer'], function(l){
+                    l.layer.msg('AI 风析完成: ' + d.msg, {time: 2000});
+                });
+                refreshSentiment();
+            }
+        })
+        .catch(function() {
+            document.getElementById('update-time').textContent = '❌ 分析失败';
+        });
+    };
+
+    window.triggerScan = function() {
+=======
     window.triggerScan = function(event) {
+>>>>>>> a94f0df28c2a08e446c3e48a91289f487914fa1c
         var btn = event && event.target ? event.target : document.querySelector('.btn-glass.danger');
         btn.textContent = '⏳ 扫描中...';
         btn.disabled = true;

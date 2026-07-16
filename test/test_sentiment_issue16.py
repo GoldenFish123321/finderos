@@ -62,6 +62,8 @@ class TestSensitiveWordModel:
             "get_alerts", "get_recent_alerts", "get_alert_stats",
             "update_alert_status", "get_alert_detail",
             "add", "delete",
+            "analyze_alert_with_ai", "_local_analyze",
+            "analyze_pending_alerts", "scan_and_analyze_all",
         ]
         for m in methods:
             assert hasattr(SensitiveWordRepository, m), f"缺少方法 {m}"
@@ -127,6 +129,32 @@ class TestSentimentTemplate:
         assert "stat-total" in c
         assert "stat-pending" in c
         assert "stat-high" in c
+
+
+class TestAIAnalysis:
+    """验证 AI 语义分析功能"""
+
+    def test_local_analyze_returns_dict(self):
+        from app.models.sensitive_word import SensitiveWordRepository
+        result = SensitiveWordRepository._local_analyze(
+            "测试银行卡密码转账内容", "诈骗", "warehouse"
+        )
+        import json
+        parsed = json.loads(result)
+        assert "risk_level" in parsed
+        assert "analysis" in parsed
+        assert "suggestion" in parsed
+
+    def test_scan_and_analyze(self):
+        from app.models.sensitive_word import SensitiveWordRepository
+        result = SensitiveWordRepository.scan_and_analyze_all()
+        assert "scan" in result
+        assert "analysis_count" in result
+
+    def test_analyze_pending(self):
+        from app.models.sensitive_word import SensitiveWordRepository
+        results = SensitiveWordRepository.analyze_pending_alerts(limit=5)
+        assert isinstance(results, list)
 
 
 class TestRoutesAndMenu:

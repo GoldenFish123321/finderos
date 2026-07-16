@@ -409,3 +409,219 @@ class SensitiveWordRepository:
                             result["full_content"] = "[脱敏] 无权查看完整内容"
                     result["conversation_id"] = conv_id
             return result
+
+    # ════════════════════════════════════════════════════════════
+    # AI 语义分析
+    # ════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def analyze_alert_with_ai(alert_id: int) -> dict:
+        """调用 AI 模型对预警上下文进行深度语义分析。
+
+        分析流程：
+        1. 获取预警详情（含完整原文）
+        2. 使用系统默认 AI 模型进行风析
+        3. 将分析结果写入 ai_analysis + 更新状态
+        4. 返回分析结果
+        """
+        detail = SensitiveWordRepository.get_alert_detail(alert_id)
+        if not detail:
+            return {"error": "预警不存在"}
+
+        full_content = detail.get("full_content", detail.get("content_preview", ""))
+        matched_word = detail.get("matched_word", "")
+        source_type = detail.get("source_type", "")
+
+        if not full_content:
+            return {"error": "无可分析的原文内容"}
+
+        try:
+            from app.models.ai_model import AiModelRepository
+            model = AiModelRepository.get_default(include_api_key=True)
+            if not model or not model.get("api_key"):
+                # 无 API Key 时使用关键词匹配增强的本地分析
+                analysis = SensitiveWordRepository._local_analyze(
+                    full_content, matched_word, source_type
+                )
+                SensitiveWordRepository.update_alert_status(
+                    alert_id, "analyzed", analysis
+                )
+                return {"analyzed": True, "content": analysis, "mode": "local"}
+
+            # ── 构建 AI 分析 Prompt ──
+            prompt_text = (
+                f"你是一个专业的舆情安全分析系统。请对以下内容进行安全风险评估，"
+                f"要求输出 JSON 格式（只输出 JSON，不要其他文字）。\n\n"
+                f"## 原文内容\n{full_content[:2000]}\n\n"
+                f"## 匹配的敏感词\n{matched_word}\n\n"
+                f"## 来源类型\n{source_type}\n\n"
+                f"请输出以下 JSON 字段：\n"
+                f'{{"risk_level": "high/medium/low", "analysis": "分析说明（50-200字）", '
+                f'"suggestion": "建议操作"}}'
+            )
+
+            # ── 调用 LLM API ──
+            from app.utils.safe_http import safe_http_request
+            import json as _json
+
+            api_base = (model.get("api_base") or "https://api.openai.com/v1").rstrip("/")
+            api_key = model.get("api_key", "")
+            model_name = model.get("model_name") or model.get("name")
+
+            payload = {
+                "model": model_name,
+                "messages": [
+                    {"role": "system", "content": "你是一个舆情安全分析专家。始终以 JSON 格式输出。"},
+                    {"role": "user", "content": prompt_text},
+                ],
+                "temperature": 0.3,
+                "max_tokens": 1024,
+            }
+
+            payload_bytes = _json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            safe_url = api_base.rstrip("/") + "/chat/completions"
+            safe_headers = {
+                "Content-Type": "application/json; charset=utf-8",
+                "Authorization": f"Bearer {api_key}",
+            }
+
+            response = safe_http_request(
+                safe_url, method="POST", headers=safe_headers,
+                body=payload_bytes, timeout=30, max_bytes=256 * 1024,
+            )
+
+            if response.status >= 400:
+                raise Exception(f"API 返回 HTTP {response.status}")
+
+            raw = response.body.decode("utf-8", errors="replace")
+            resp_data = _json.loads(raw)
+            content = resp_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+            # 尝试从回复中提取 JSON（支持嵌套花括号和 markdown 代码块）
+            analysis_json = None
+            content_clean = content.strip()
+            try:
+                analysis_json = _json.loads(content_clean)
+            except (_json.JSONDecodeError, TypeError):
+                import re as _re
+                # 先剥离 markdown 代码块标记
+                code_match = _re.search(
+                    r'```(?:json)?\s*\n?(.*?)```', content_clean, _re.DOTALL
+                )
+                if code_match:
+                    candidate = code_match.group(1).strip()
+                    try:
+                        analysis_json = _json.loads(candidate)
+                    except (_json.JSONDecodeError, TypeError):
+                        pass
+                # 括号计数法提取最外层 JSON
+                if analysis_json is None:
+                    brace_depth = 0
+                    start = -1
+                    for i, ch in enumerate(content_clean):
+                        if ch == '{':
+                            if start == -1:
+                                start = i
+                            brace_depth += 1
+                        elif ch == '}':
+                            brace_depth -= 1
+                            if brace_depth == 0 and start != -1:
+                                try:
+                                    analysis_json = _json.loads(
+                                        content_clean[start:i + 1]
+                                    )
+                                except (_json.JSONDecodeError, TypeError):
+                                    pass
+                                start = -1
+                                if analysis_json:
+                                    break
+
+            if analysis_json:
+                risk = str(analysis_json.get("risk_level", "medium")).lower()
+                analysis_text = analysis_json.get("analysis", content[:500])
+                suggestion = analysis_json.get("suggestion", "")
+                structured = _json.dumps({
+                    "risk_level": risk, "analysis": analysis_text,
+                    "suggestion": suggestion,
+                }, ensure_ascii=False)
+                # 根据 AI 风险评估更新严重级别
+                severity_map = {"high": 3, "medium": 2, "low": 1}
+                new_severity = severity_map.get(risk, 2)
+                with get_db() as conn:
+                    conn.execute(
+                        "UPDATE sentiment_alerts SET ai_analysis = ?, severity = ?, "
+                        "status = 'analyzed' WHERE id = ?",
+                        (structured, new_severity, alert_id),
+                    )
+                return {"analyzed": True, "content": structured, "mode": "ai"}
+            else:
+                analysis = f"[AI分析] 匹配敏感词「{matched_word}」，AI 未能结构化解析。原始回复: {content[:500]}"
+                SensitiveWordRepository.update_alert_status(alert_id, "analyzed", analysis)
+                return {"analyzed": True, "content": analysis, "mode": "ai_raw"}
+
+        except Exception as e:
+            logger.warning(f"AI 分析预警 {alert_id} 失败: {e}")
+            # 回退到本地分析
+            analysis = SensitiveWordRepository._local_analyze(
+                full_content, matched_word, source_type
+            )
+            SensitiveWordRepository.update_alert_status(alert_id, "analyzed", analysis)
+            return {"analyzed": True, "content": analysis, "mode": "local_fallback"}
+
+    @staticmethod
+    def _local_analyze(full_content: str, matched_word: str, source_type: str) -> str:
+        """本地规则分析（无 API Key 时的回退方案）。"""
+        import json as _json
+        content_lower = full_content.lower()
+
+        # 高风险关键词扩展
+        high_risk_signals = ["银行卡", "密码", "转账", "验证码", "身份证",
+                             "手机号", "住址", "账号", "登录密码", "支付密码"]
+        low_risk_signals = ["举报", "投诉", "反馈", "建议", "咨询", "请问"]
+
+        high_hits = sum(1 for s in high_risk_signals if s in content_lower)
+        low_hits = sum(1 for s in low_risk_signals if s in content_lower)
+
+        if high_hits >= 2:
+            risk_level = "high"
+            note = f"上下文包含 {high_hits} 个敏感信号词，建议人工复核"
+        elif high_hits >= 1:
+            risk_level = "medium"
+            note = f"上下文含 {high_hits} 个敏感信号词，需关注"
+        else:
+            risk_level = "low"
+            note = "上下文未发现额外敏感信号，常规提醒"
+
+        return _json.dumps({
+            "risk_level": risk_level,
+            "analysis": f"匹配敏感词「{matched_word}」，来源 {source_type}。{note}",
+            "suggestion": "建议查看原文后判断" if risk_level != "low" else "可标记为已处理",
+        }, ensure_ascii=False)
+
+    @staticmethod
+    def analyze_pending_alerts(limit: int = 10) -> list:
+        """批量分析所有未分析的预警。返回分析结果列表。"""
+        results = []
+        with get_db() as conn:
+            alerts = conn.execute(
+                "SELECT id FROM sentiment_alerts WHERE status = 'pending' "
+                "ORDER BY severity DESC, id DESC LIMIT ?", (limit,)
+            ).fetchall()
+        for alert in alerts:
+            try:
+                r = SensitiveWordRepository.analyze_alert_with_ai(alert["id"])
+                results.append({"alert_id": alert["id"], **r})
+            except Exception as e:
+                logger.warning(f"批量分析预警 {alert['id']} 异常: {e}")
+        return results
+
+    @staticmethod
+    def scan_and_analyze_all() -> dict:
+        """全量扫描 + AI 自动分析。"""
+        scan = SensitiveWordRepository.scan_all()
+        analysis = SensitiveWordRepository.analyze_pending_alerts(limit=20)
+        return {
+            "scan": scan,
+            "analysis_count": len(analysis),
+            "analysis": analysis,
+        }
