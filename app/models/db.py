@@ -1521,6 +1521,58 @@ def _seed_script_tools():
         else:
             music_id = music_iface["id"]
 
+        # ── 确保 collect_web_data 依赖的接口存在 (local_handler='collect/web') ──
+        collect_web_iface = conn.execute(
+            "SELECT id FROM api_interfaces WHERE local_handler='collect/web' AND interface_type='local'"
+        ).fetchone()
+        if not collect_web_iface:
+            cur = conn.execute(
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 0)",
+                ("网页数据采集", "采集指定网页的数据（HTTP抓取+解析）。", "collect/web"),
+            )
+            collect_web_id = cur.lastrowid
+        else:
+            collect_web_id = collect_web_iface["id"]
+
+        # ── 确保 deep_collect_url 依赖的接口存在 (local_handler='collect/deep') ──
+        deep_collect_iface = conn.execute(
+            "SELECT id FROM api_interfaces WHERE local_handler='collect/deep' AND interface_type='local'"
+        ).fetchone()
+        if not deep_collect_iface:
+            cur = conn.execute(
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 0)",
+                ("深度网页采集", "对单条URL执行深度网页内容采集。", "collect/deep"),
+            )
+            deep_collect_id = cur.lastrowid
+        else:
+            deep_collect_id = deep_collect_iface["id"]
+
+        # ── 确保 batch_deep_collect 依赖的接口存在 (local_handler='crawl4ai/batch') ──
+        batch_collect_iface = conn.execute(
+            "SELECT id FROM api_interfaces WHERE local_handler='crawl4ai/batch' AND interface_type='local'"
+        ).fetchone()
+        if not batch_collect_iface:
+            cur = conn.execute(
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 0)",
+                ("Crawl4ai批量", "使用Crawl4ai引擎批量采集多个URL。", "crawl4ai/batch"),
+            )
+            batch_collect_id = cur.lastrowid
+        else:
+            batch_collect_id = batch_collect_iface["id"]
+
+        # ── 确保 collect_with_crawl4ai 依赖的接口存在 (local_handler='crawl4ai/collect') ──
+        crawl4ai_collect_iface = conn.execute(
+            "SELECT id FROM api_interfaces WHERE local_handler='crawl4ai/collect' AND interface_type='local'"
+        ).fetchone()
+        if not crawl4ai_collect_iface:
+            cur = conn.execute(
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 0)",
+                ("Crawl4ai采集", "使用Crawl4ai引擎采集网页内容。", "crawl4ai/collect"),
+            )
+            crawl4ai_collect_id = cur.lastrowid
+        else:
+            crawl4ai_collect_id = crawl4ai_collect_iface["id"]
+
         tools = [
             # ── 天气 script 型工具 ──
             {
@@ -1600,6 +1652,143 @@ def _seed_script_tools():
                 "is_enabled": 1,
                 "sort_order": 99,
             },
+            # ── collect_web_data script 型工具 ──
+            {
+                "name": "collect_web_data",
+                "display_name": "全网数据采集",
+                "description": "按关键词和瞭源ID采集全网数据。脚本型工具。",
+                "category": "data_warehouse",
+                "tool_type": "script",
+                "input_schema": json.dumps({
+                    "type": "object",
+                    "properties": {
+                        "keyword": {"type": "string", "description": "搜索关键词"},
+                        "source_ids": {"type": "string", "description": "瞭源ID列表，逗号分隔"}
+                    },
+                    "required": ["keyword"]
+                }, ensure_ascii=False),
+                "data_sources": json.dumps([{
+                    "interface_id": collect_web_id,
+                    "param_mapping": {"keyword": "keyword", "source_ids": "source_ids"}
+                }], ensure_ascii=False),
+                "transform_script": (
+                    "def transform(data_sources):\n"
+                    "    if not data_sources or not data_sources[0].get('success'):\n"
+                    '        return json.dumps({"error": "全网采集数据源调用失败", "detail": str(data_sources)}, ensure_ascii=False)\n'
+                    "    result = data_sources[0]['data']\n"
+                    "    if 'items' in result:\n"
+                    "        for item in result['items']:\n"
+                    "            if 'summary' in item and len(item.get('summary', '')) > 200:\n"
+                    "                item['summary'] = item['summary'][:200]\n"
+                    "    return json.dumps(result, ensure_ascii=False)"
+                ),
+                "script_enabled": 1,
+                "is_enabled": 1,
+                "sort_order": 100,
+            },
+            # ── deep_collect_url script 型工具 ──
+            {
+                "name": "deep_collect_url",
+                "display_name": "深度网页采集",
+                "description": "对单条URL执行深度网页内容采集。脚本型工具。",
+                "category": "data_warehouse",
+                "tool_type": "script",
+                "input_schema": json.dumps({
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string", "description": "目标网页URL"}
+                    },
+                    "required": ["url"]
+                }, ensure_ascii=False),
+                "data_sources": json.dumps([{
+                    "interface_id": deep_collect_id,
+                    "param_mapping": {"url": "url"}
+                }], ensure_ascii=False),
+                "transform_script": (
+                    "def transform(data_sources):\n"
+                    "    if not data_sources or not data_sources[0].get('success'):\n"
+                    '        return json.dumps({"success": False, "error": "深度采集数据源调用失败", "detail": str(data_sources)}, ensure_ascii=False)\n'
+                    "    result = data_sources[0]['data']\n"
+                    "    if isinstance(result, dict) and 'content' in result:\n"
+                    "        content = result.get('content', '')\n"
+                    "        if isinstance(content, str) and len(content) > 3000:\n"
+                    "            result['content'] = content[:3000]\n"
+                    "    return json.dumps(result, ensure_ascii=False)"
+                ),
+                "script_enabled": 1,
+                "is_enabled": 1,
+                "sort_order": 101,
+            },
+            # ── batch_deep_collect script 型工具 ──
+            {
+                "name": "batch_deep_collect",
+                "display_name": "批量深度采集",
+                "description": "使用Crawl4ai引擎批量采集多个URL。脚本型工具。",
+                "category": "data_warehouse",
+                "tool_type": "script",
+                "input_schema": json.dumps({
+                    "type": "object",
+                    "properties": {
+                        "urls": {"type": "string", "description": "目标URL列表，逗号或换行分隔"},
+                        "extract_mode": {"type": "string", "description": "提取模式: markdown/cleaned_html/full"}
+                    },
+                    "required": ["urls"]
+                }, ensure_ascii=False),
+                "data_sources": json.dumps([{
+                    "interface_id": batch_collect_id,
+                    "param_mapping": {"urls": "urls", "extract_mode": "extract_mode"}
+                }], ensure_ascii=False),
+                "transform_script": (
+                    "def transform(data_sources):\n"
+                    "    if not data_sources or not data_sources[0].get('success'):\n"
+                    '        return json.dumps({"error": "批量采集数据源调用失败", "detail": str(data_sources)}, ensure_ascii=False)\n'
+                    "    result = data_sources[0]['data']\n"
+                    "    if isinstance(result, dict) and 'results' in result:\n"
+                    "        for r in result['results']:\n"
+                    "            if isinstance(r, dict) and 'content' in r:\n"
+                    "                content = r.get('content', '')\n"
+                    "                if isinstance(content, str) and len(content) > 5000:\n"
+                    "                    r['content'] = content[:5000]\n"
+                    "    return json.dumps(result, ensure_ascii=False)"
+                ),
+                "script_enabled": 1,
+                "is_enabled": 1,
+                "sort_order": 102,
+            },
+            # ── collect_with_crawl4ai script 型工具 ──
+            {
+                "name": "collect_with_crawl4ai",
+                "display_name": "Crawl4ai采集",
+                "description": "使用Crawl4ai引擎采集网页内容。脚本型工具。",
+                "category": "data_warehouse",
+                "tool_type": "script",
+                "input_schema": json.dumps({
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string", "description": "目标网页URL"},
+                        "extract_mode": {"type": "string", "description": "提取模式: markdown/cleaned_html/full"}
+                    },
+                    "required": ["url"]
+                }, ensure_ascii=False),
+                "data_sources": json.dumps([{
+                    "interface_id": crawl4ai_collect_id,
+                    "param_mapping": {"url": "url", "extract_mode": "extract_mode"}
+                }], ensure_ascii=False),
+                "transform_script": (
+                    "def transform(data_sources):\n"
+                    "    if not data_sources or not data_sources[0].get('success'):\n"
+                    '        return json.dumps({"success": False, "error": "Crawl4ai采集数据源调用失败", "detail": str(data_sources)}, ensure_ascii=False)\n'
+                    "    result = data_sources[0]['data']\n"
+                    "    if isinstance(result, dict) and 'content' in result:\n"
+                    "        content = result.get('content', '')\n"
+                    "        if isinstance(content, str) and len(content) > 5000:\n"
+                    "            result['content'] = content[:5000]\n"
+                    "    return json.dumps(result, ensure_ascii=False)"
+                ),
+                "script_enabled": 1,
+                "is_enabled": 1,
+                "sort_order": 103,
+            },
         ]
 
         # ──────────────────────────────────────────────
@@ -1638,13 +1827,137 @@ def _seed_script_tools():
             ),
         )
 
+        # collect_web_data → script 型
+        conn.execute(
+            "UPDATE mcp_tools SET "
+            "tool_type='script', "
+            "data_sources=?, "
+            "transform_script=?, "
+            "script_enabled=1, "
+            "api_url='', api_method='', api_headers='{}', api_params_template='', "
+            "category='data_warehouse', "
+            "is_enabled=1 "
+            "WHERE name='collect_web_data'",
+            (
+                tools[2]["data_sources"],
+                tools[2]["transform_script"],
+            ),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO mcp_tools "
+            "(name, display_name, description, category, tool_type, "
+            "api_url, api_method, api_headers, input_schema, "
+            "data_sources, transform_script, script_enabled, "
+            "is_enabled, is_system, sort_order) "
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 0, ?)",
+            (
+                tools[2]["name"], tools[2]["display_name"], tools[2]["description"],
+                tools[2]["category"], tools[2]["input_schema"],
+                tools[2]["data_sources"], tools[2]["transform_script"],
+                tools[2]["script_enabled"], tools[2]["sort_order"],
+            ),
+        )
+
+        # deep_collect_url → script 型
+        conn.execute(
+            "UPDATE mcp_tools SET "
+            "tool_type='script', "
+            "data_sources=?, "
+            "transform_script=?, "
+            "script_enabled=1, "
+            "api_url='', api_method='', api_headers='{}', api_params_template='', "
+            "category='data_warehouse', "
+            "is_enabled=1 "
+            "WHERE name='deep_collect_url'",
+            (
+                tools[3]["data_sources"],
+                tools[3]["transform_script"],
+            ),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO mcp_tools "
+            "(name, display_name, description, category, tool_type, "
+            "api_url, api_method, api_headers, input_schema, "
+            "data_sources, transform_script, script_enabled, "
+            "is_enabled, is_system, sort_order) "
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 0, ?)",
+            (
+                tools[3]["name"], tools[3]["display_name"], tools[3]["description"],
+                tools[3]["category"], tools[3]["input_schema"],
+                tools[3]["data_sources"], tools[3]["transform_script"],
+                tools[3]["script_enabled"], tools[3]["sort_order"],
+            ),
+        )
+
+        # batch_deep_collect → script 型
+        conn.execute(
+            "UPDATE mcp_tools SET "
+            "tool_type='script', "
+            "data_sources=?, "
+            "transform_script=?, "
+            "script_enabled=1, "
+            "api_url='', api_method='', api_headers='{}', api_params_template='', "
+            "category='data_warehouse', "
+            "is_enabled=1 "
+            "WHERE name='batch_deep_collect'",
+            (
+                tools[4]["data_sources"],
+                tools[4]["transform_script"],
+            ),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO mcp_tools "
+            "(name, display_name, description, category, tool_type, "
+            "api_url, api_method, api_headers, input_schema, "
+            "data_sources, transform_script, script_enabled, "
+            "is_enabled, is_system, sort_order) "
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 0, ?)",
+            (
+                tools[4]["name"], tools[4]["display_name"], tools[4]["description"],
+                tools[4]["category"], tools[4]["input_schema"],
+                tools[4]["data_sources"], tools[4]["transform_script"],
+                tools[4]["script_enabled"], tools[4]["sort_order"],
+            ),
+        )
+
+        # collect_with_crawl4ai → script 型
+        conn.execute(
+            "UPDATE mcp_tools SET "
+            "tool_type='script', "
+            "data_sources=?, "
+            "transform_script=?, "
+            "script_enabled=1, "
+            "api_url='', api_method='', api_headers='{}', api_params_template='', "
+            "category='data_warehouse', "
+            "is_enabled=1 "
+            "WHERE name='collect_with_crawl4ai'",
+            (
+                tools[5]["data_sources"],
+                tools[5]["transform_script"],
+            ),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO mcp_tools "
+            "(name, display_name, description, category, tool_type, "
+            "api_url, api_method, api_headers, input_schema, "
+            "data_sources, transform_script, script_enabled, "
+            "is_enabled, is_system, sort_order) "
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 0, ?)",
+            (
+                tools[5]["name"], tools[5]["display_name"], tools[5]["description"],
+                tools[5]["category"], tools[5]["input_schema"],
+                tools[5]["data_sources"], tools[5]["transform_script"],
+                tools[5]["script_enabled"], tools[5]["sort_order"],
+            ),
+        )
+
         # 清理历史残留的 weather_script / music_script 记录（如果有）
         conn.execute(
             "DELETE FROM mcp_tools WHERE name IN ('weather_script', 'music_script')"
         )
 
         conn.commit()
-        print(f"[种子] script 型 MCP 工具已更新（weather_query + get_random_music → script 型）")
+        print(f"[种子] script 型 MCP 工具已更新（weather_query + get_random_music + collect_web_data + deep_collect_url + batch_deep_collect + collect_with_crawl4ai → script 型）")
 
 
 def _synchronize_default_capabilities(skills_created: bool, employees_created: bool):
