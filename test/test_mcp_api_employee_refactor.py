@@ -300,6 +300,43 @@ class TestMCPInvokeIntegration:
 
     @pytest.mark.asyncio
     @patch("app.controllers.admin_employee.MCPToolRepository")
+    @patch("app.mcp.server.MCPServer")
+    async def test_admin_invoke_maps_message_to_generic_required_parameter(
+        self, mock_server_cls, mock_repo
+    ):
+        """管理侧 API 员工应把用户输入映射到 city 等非标准必填参数。"""
+        mock_tool = AsyncMock()
+        mock_tool.call.return_value = {"current_condition": [], "nearest_area": []}
+        mock_server = MagicMock()
+        mock_server.get_tool.return_value = mock_tool
+        mock_server_cls.get_instance.return_value = mock_server
+        mock_repo.get_by_id.return_value = {
+            "id": 22, "name": "weather_query", "display_name": "天气查询",
+            "tool_type": "script", "is_enabled": 1,
+            "input_schema": json.dumps({
+                "type": "object",
+                "properties": {"city": {"type": "string"}},
+                "required": ["city"],
+            }),
+        }
+
+        from app.controllers.admin_employee import EmployeeInvokeHandler
+        handler = EmployeeInvokeHandler.__new__(EmployeeInvokeHandler)
+        handler.write = MagicMock()
+        handler.current_user = "test_admin"
+        handler.request = MagicMock()
+        handler.request.remote_ip = "127.0.0.1"
+        emp = {
+            "id": 3, "name": "天气", "employee_type": "api",
+            "mcp_tool_id": 22, "response_render_template": "",
+        }
+
+        await handler._invoke_api_via_mcp(emp, "北京", 22)
+
+        mock_tool.call.assert_awaited_once_with({"city": "北京"})
+
+    @pytest.mark.asyncio
+    @patch("app.controllers.admin_employee.MCPToolRepository")
     async def test_invoke_via_mcp_tool_not_found(self, mock_repo):
         """绑定的 MCP 工具不存在时应返回错误。"""
         from app.controllers.admin_employee import EmployeeInvokeHandler
@@ -448,8 +485,8 @@ def test_weather_mcp_tool_exists():
     assert tool.get("data_sources")
     schema = json.loads(tool["input_schema"])
     sources = json.loads(tool["data_sources"])
-    assert schema["required"] == ["message"]
-    assert sources[0]["param_mapping"] == {"message": "message"}
+    assert schema["required"] == ["city"]
+    assert sources[0]["param_mapping"] == {"city": "message"}
 
 
 def test_weather_employee_bound_to_mcp():
@@ -542,14 +579,14 @@ def test_weather_mcp_tool_proxy_pipeline(monkeypatch):
     assert mcp_tool is not None
 
     async def _call():
-        return await mcp_tool.call({"message": "北京"})
+        return await mcp_tool.call({"city": "北京"})
 
     result = asyncio.run(_call())
 
     assert isinstance(result, dict)
     assert "error" not in result
-    assert result["city"] == "Beijing"
-    assert result["weather"] == "Sunny"
-    assert result["temperature"] == "28"
+    assert result["nearest_area"][0]["areaName"][0]["value"] == "Beijing"
+    assert result["current_condition"][0]["weatherDesc"][0]["value"] == "Sunny"
+    assert result["current_condition"][0]["temp_C"] == "28"
     assert "%E5%8C%97%E4%BA%AC" in requested["url"]
     assert "{message}" not in requested["url"]

@@ -797,6 +797,12 @@ class EmployeeInvokeHandler(AdminBaseHandler):
                 arguments = {"keyword": message}
             elif "prompt" in props:
                 arguments = {"prompt": message}
+            else:
+                required = input_schema.get("required", [])
+                if required and required[0] in props:
+                    arguments = {required[0]: message}
+                elif props:
+                    arguments = {next(iter(props)): message}
             # 如果 schema 定义了额外必填字段，尝试给默认值
             for key, prop in props.items():
                 if key not in arguments and "default" in prop:

@@ -1584,13 +1584,13 @@ def _seed_script_tools():
                 "input_schema": json.dumps({
                     "type": "object",
                     "properties": {
-                        "message": {"type": "string", "description": "城市名称，如 Beijing、成都、London"}
+                        "city": {"type": "string", "description": "城市名称，如 Beijing、成都、London"}
                     },
-                    "required": ["message"]
+                    "required": ["city"]
                 }, ensure_ascii=False),
                 "data_sources": json.dumps([{
                     "interface_id": weather_id,
-                    "param_mapping": {"message": "message"}
+                    "param_mapping": {"city": "message"}
                 }], ensure_ascii=False),
                 "transform_script": (
                     "def transform(data_sources):\n"
