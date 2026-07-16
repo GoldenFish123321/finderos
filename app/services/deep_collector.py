@@ -27,7 +27,8 @@ from app.utils.security import validate_url_safe
 try:
     import crawl4ai  # noqa: F401
     _HAS_CRAWL4AI = True
-except ImportError:
+except Exception as e:
+    logging.getLogger(__name__).warning("crawl4ai unavailable, fallback to standard collector: %s", e)
     _HAS_CRAWL4AI = False
 
 logger = logging.getLogger(__name__)
