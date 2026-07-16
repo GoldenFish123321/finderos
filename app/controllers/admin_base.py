@@ -21,6 +21,10 @@ ADMIN_ROUTE_PERMISSION_ALIASES = {
     "/admin/api/interface/list": "/admin/interface",
     "/admin/api/employee/list": "/admin/employee",
     "/admin/api/dashboard": "/admin/dashboard",
+    "/admin/api/sentiment": "/admin/sentiment",
+    "/admin/api/sentiment/scan": "/admin/sentiment",
+    "/admin/api/sentiment/detail": "/admin/sentiment",
+    "/admin/api/sentiment/resolve": "/admin/sentiment",
     "/admin/mcp/reload": "/admin/mcp/tool",
 }
 

@@ -431,6 +431,10 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_system_config_key ON system_config(key)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_system_config_category ON system_config(category)")
 
+        # ── v1.2.0 舆情大屏（敏感词 + 预警） ──
+        from app.models.sensitive_word import SensitiveWordRepository
+        SensitiveWordRepository.init_table()
+
         conn.commit()
         logger.info(f"Database initialized: {DB_PATH}")
 
@@ -516,6 +520,8 @@ def seed_default_data():
                 (20, "常规设置", "layui-icon-set-fill", "/admin/config", 3, 2, 1),
                 # 数智大屏 (v1.2.0 新增)
                 (21, "数智大屏", "layui-icon-screen-full", "/admin/dashboard", None, 3, 1),
+                # 舆情大屏 (v1.2.0 新增)
+                (22, "舆情大屏", "layui-icon-log", "/admin/sentiment", None, 14, 1),
             ]
             conn.executemany(
                 "INSERT INTO functions (id, name, icon, route_path, parent_id, sort_order, is_enabled) "
@@ -534,6 +540,7 @@ def seed_default_data():
             ("模型 API 配置", "layui-icon-set", "/admin/model/config", None, 8),
             ("常规设置", "layui-icon-set-fill", "/admin/config", 3, 2),
             ("数智大屏", "layui-icon-screen-full", "/admin/dashboard", None, 3),
+            ("舆情大屏", "layui-icon-log", "/admin/sentiment", None, 14),
         ):
             func = conn.execute(
                 "SELECT id FROM functions WHERE route_path = ?", (route_path,)
@@ -615,6 +622,10 @@ def seed_default_data():
     skills_created = _seed_default_skills()
     _seed_default_interfaces()
     employees_created = _seed_default_employees()
+
+    # ── v1.2.0 舆情大屏：默认敏感词 ──
+    from app.models.sensitive_word import SensitiveWordRepository
+    SensitiveWordRepository.seed_default()
     _synchronize_default_capabilities(skills_created, employees_created)
 
 

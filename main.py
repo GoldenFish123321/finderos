@@ -61,6 +61,11 @@ from app.controllers.admin_skill import (
     SkillListHandler, SkillFormHandler, SkillDeleteHandler, SkillToggleHandler,
 )
 from app.controllers.admin_config import SystemConfigHandler
+from app.controllers.admin_sentiment import (
+    AdminSentimentHandler, AdminSentimentApiHandler,
+    AdminSentimentScanHandler, AdminSentimentAlertDetailHandler,
+    AdminSentimentResolveHandler,
+)
 from app.controllers.admin_mcp import (
     MCPToolListHandler, MCPToolFormHandler, MCPToolDeleteHandler,
     MCPToolToggleHandler, MCPToolTestHandler, MCPToolReloadHandler,
@@ -74,7 +79,7 @@ from app.controllers.user_chat import (
     UserChatTTSHandler,
 )
 from app.models.db import init_db, seed_default_data
-from app.services.scheduler import CollectionScheduler
+from app.services.scheduler import CollectionScheduler, SentimentScanner
 
 # 配置结构化日志
 logging.basicConfig(
@@ -204,6 +209,13 @@ def make_app() -> tornado.web.Application:
             (r"/admin/dashboard", AdminDashboardHandler),
             (r"/admin/api/dashboard", AdminDashboardApiHandler),
 
+            # ========== v1.2.0 舆情大屏 ==========
+            (r"/admin/sentiment", AdminSentimentHandler),
+            (r"/admin/api/sentiment", AdminSentimentApiHandler),
+            (r"/admin/api/sentiment/scan", AdminSentimentScanHandler),
+            (r"/admin/api/sentiment/detail", AdminSentimentAlertDetailHandler),
+            (r"/admin/api/sentiment/resolve", AdminSentimentResolveHandler),
+
             # ========== v0.10 MCP 工具管理 ==========
             (r"/admin/mcp/tool", MCPToolListHandler),
             (r"/admin/mcp/tool/add", MCPToolFormHandler),
@@ -266,6 +278,10 @@ if __name__ == "__main__":
     # 启动定时采集调度器 (v0.6)
     scheduler = CollectionScheduler(app, check_interval_ms=60000)
     scheduler.start()
+
+    # 启动定时舆情扫描器 (v1.2.0) — 每5分钟
+    _sentiment_scanner = SentimentScanner(check_interval_ms=300000)
+    _sentiment_scanner.start()
 
     # 启动 HTTP 服务器
     bind_address = os.environ.get("BIND_ADDRESS", "127.0.0.1")

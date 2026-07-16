@@ -19,6 +19,42 @@ from app.utils.security import write_audit_log, validate_url_safe
 logger = logging.getLogger(__name__)
 
 
+class SentimentScanner:
+    """定时舆情扫描器：定期扫描数据仓库和对话中的敏感词。"""
+
+    def __init__(self, check_interval_ms: int = 300000):
+        """
+        :param check_interval_ms: 扫描间隔（毫秒），默认 5 分钟
+        """
+        self._check_interval_ms = check_interval_ms
+        self._callback = None
+        self._running = False
+
+    def start(self):
+        if self._running:
+            return
+        self._running = True
+        self._callback = PeriodicCallback(self._tick, self._check_interval_ms)
+        self._callback.start()
+        logger.info(f"舆情扫描器已启动（间隔: {self._check_interval_ms // 1000}s）")
+
+    def stop(self):
+        self._running = False
+        if self._callback:
+            self._callback.stop()
+            self._callback = None
+
+    def _tick(self):
+        try:
+            from app.models.sensitive_word import SensitiveWordRepository
+            result = SensitiveWordRepository.scan_all()
+            if result["total"] > 0:
+                logger.info(f"舆情扫描: 发现 {result['total']} 条新预警 "
+                           f"(仓库 {result['warehouse']}, 对话 {result['conversation']})")
+        except Exception as e:
+            logger.error(f"舆情扫描异常: {e}")
+
+
 class CollectionScheduler:
     """定时采集调度器：按配置的间隔自动执行瞭望采集任务。"""
 
