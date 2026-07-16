@@ -17,7 +17,7 @@ from app.utils.security import _ensure_secret_key
 
 # ── 模块级日志（必须在任何使用 logger 的函数之前定义）──
 logger = logging.getLogger(__name__)
-from app.controllers.auth import LoginHandler, LogoutHandler, RegisterHandler, FaceRegisterHandler, FaceLoginHandler
+from app.controllers.auth import LoginHandler, LogoutHandler, RegisterHandler, UserAccountHandler, FaceRegisterHandler, FaceLoginHandler
 from app.controllers.home import IndexHandler
 from app.controllers.admin_home import AdminIndexHandler, AdminDashboardHandler, AdminDashboardApiHandler
 from app.controllers.admin_user import (
@@ -113,6 +113,8 @@ def make_app() -> tornado.web.Application:
             (r"/", LoginHandler),
             (r"/logout", LogoutHandler),
             (r"/register", RegisterHandler),
+            (r"/account", UserAccountHandler),
+            (r"/face/login", FaceLoginHandler),
             (r"/api/face/register", FaceRegisterHandler),
             (r"/api/face/login", FaceLoginHandler),
             (r"/index", IndexHandler),
