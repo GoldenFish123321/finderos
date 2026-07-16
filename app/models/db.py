@@ -346,8 +346,11 @@ def init_db():
             if "face_descriptor" not in cols:
                 conn.execute("ALTER TABLE users ADD COLUMN face_descriptor TEXT DEFAULT NULL")
                 logger.info("Database migration: added face_descriptor column to users")
+            if "face_login_enabled" not in cols:
+                conn.execute("ALTER TABLE users ADD COLUMN face_login_enabled INTEGER DEFAULT 0")
+                logger.info("Database migration: added face_login_enabled column to users")
         except Exception as e:
-            logger.error(f"Database migration failed (users.face_descriptor): {e}", exc_info=True)
+            logger.error(f"Database migration failed (users.face fields): {e}", exc_info=True)
 
         # 对话管理表 (v0.5 新增 — 多轮对话支持)
 
