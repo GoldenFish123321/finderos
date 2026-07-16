@@ -4,6 +4,8 @@
 
 - 🐛 **修复 #118**：`test/test_system_config.py` 移除硬编码 Windows 绝对路径（`d:\Code\shitproject\1\finderos`），改用 `os.path.dirname(os.path.abspath(__file__))` 动态构建项目路径，确保跨平台（Linux/macOS）测试可正常运行
 - 🧪 **测试 #118**：同步修复登录检测断言，适配登录后重定向至 `/chat` 页面的当前行为
+- 🐛 **修复 #119**：`admin_config.py` Logo 上传失败时不再在 redirect URL 中泄露原始异常信息（`str(e)`），改为 `logger.error` 记录异常详情 + URL 显示通用错误消息
+- ✅ **测试 #119**：新增 `test_issue119_logo_error_leak.py`（7 个静态源码测试），防止回归
 
 ## v1.3.2-beta (2026-07-16) — Bug 修复
 
