@@ -1570,26 +1570,49 @@ def _seed_script_tools():
             },
         ]
 
-        inserted = 0
-        for t in tools:
-            cur = conn.execute(
-                "INSERT OR IGNORE INTO mcp_tools "
-                "(name, display_name, description, category, tool_type, "
-                "input_schema, data_sources, transform_script, "
-                "script_enabled, is_enabled, sort_order) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (t["name"], t["display_name"], t["description"], t["category"],
-                 t["tool_type"], t["input_schema"], t["data_sources"],
-                 t["transform_script"], t["script_enabled"],
-                 t["is_enabled"], t["sort_order"]),
-            )
-            if cur.rowcount > 0:
-                inserted += 1
+        # ──────────────────────────────────────────────
+        # 按名称 UPDATE 原记录 (weather_query / get_random_music)，
+        # 不创建新的 weather_script / music_script。
+        # ──────────────────────────────────────────────
+        # weather_query → script 型
+        conn.execute(
+            "UPDATE mcp_tools SET "
+            "tool_type='script', "
+            "data_sources=?, "
+            "transform_script=?, "
+            "script_enabled=1, "
+            "api_url='', api_method='', api_headers='{}', api_params_template='', "
+            "category='data_warehouse', "
+            "is_enabled=1 "
+            "WHERE name='weather_query'",
+            (
+                tools[0]["data_sources"],
+                tools[0]["transform_script"],
+            ),
+        )
+        # get_random_music → script 型
+        conn.execute(
+            "UPDATE mcp_tools SET "
+            "tool_type='script', "
+            "data_sources=?, "
+            "transform_script=?, "
+            "script_enabled=1, "
+            "handler_module='', "
+            "is_enabled=1 "
+            "WHERE name='get_random_music'",
+            (
+                tools[1]["data_sources"],
+                tools[1]["transform_script"],
+            ),
+        )
+
+        # 清理历史残留的 weather_script / music_script 记录（如果有）
+        conn.execute(
+            "DELETE FROM mcp_tools WHERE name IN ('weather_script', 'music_script')"
+        )
+
         conn.commit()
-        if inserted > 0:
-            print(f"[种子] script 型 MCP 工具已创建（{inserted}个工具：weather_script + music_script）")
-        else:
-            print("[种子] script 型 MCP 工具已存在，跳过")
+        print(f"[种子] script 型 MCP 工具已更新（weather_query + get_random_music → script 型）")
 
 
 def _synchronize_default_capabilities(skills_created: bool, employees_created: bool):
