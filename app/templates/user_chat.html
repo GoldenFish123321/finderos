@@ -812,6 +812,7 @@ let currentModelId = {{ selected['id'] if selected else 0 }};
 let currentConversationId = null;
 let isStreaming = false;
 let employees = [];
+let chartResizeObservers = [];
 
 function renderMarkdownSafe(value) {
     var source = String(value || '');
@@ -824,11 +825,13 @@ function renderMarkdownSafe(value) {
     });
 }
 
+function handleFetchError(err) { console.error('请求失败:', err); }
+
 // 加载数字员工列表
 fetch('/api/chat/employees?_xsrf=' + XSRF)
     .then(r => r.json())
     .then(d => { if (d.code === 0) employees = d.items; })
-    .catch(() => {});
+    .catch(handleFetchError);
 
 // 移动端侧边栏切换
 function toggleSidebar() {
@@ -908,7 +911,7 @@ function newConversation() {
             resetChatToWelcome();
             refreshTaskList();
         }
-    });
+    }).catch(handleFetchError);
 }
 
 function loadConversation(cid) {
@@ -936,7 +939,7 @@ function loadConversation(cid) {
                 });
                 scrollToBottom();
             }
-        });
+        }).catch(handleFetchError);
 }
 
 function deleteConversation(cid) {
@@ -964,7 +967,7 @@ function deleteConversation(cid) {
                     }
                     refreshTaskList();
                 }
-            });
+            }).catch(handleFetchError);
         });
     });
 }
@@ -989,7 +992,7 @@ function refreshTaskList() {
                     ).join('');
                 }
             }
-        });
+        }).catch(handleFetchError);
 }
 
 // ============================================================
@@ -1056,7 +1059,7 @@ function sendMessage() {
             } else {
                 doSend(employeeId, sendMsg, employeeName);
             }
-        });
+        }).catch(handleFetchError);
     } else {
         doSend(employeeId, sendMsg, employeeName);
     }
@@ -1456,6 +1459,7 @@ function detectAndRenderChart(aiContent, totalContent) {
                 // 响应式缩放
                 var resizeObserver = new ResizeObserver(function() { chart.resize(); });
                 resizeObserver.observe(chartDom);
+                chartResizeObservers.push(resizeObserver);
                 // 点击图表可导出为图片
                 chart.on('click', function() {
                     // 不干扰正常交互，仅记录
@@ -1822,6 +1826,8 @@ window.addEventListener('beforeunload', function() {
         gestureDetector.destroy();
         gestureDetector = null;
     }
+    chartResizeObservers.forEach(function(observer) { observer.disconnect(); });
+    chartResizeObservers = [];
 });
 
 // 点击空白关闭 @ 菜单
