@@ -789,7 +789,6 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
                 </button>
             </div>
             <div class="input-hints">
-                <span onclick="setInput('/clear')">/clear 清屏</span>
                 <span onclick="setInput('/summary')">/summary 摘要</span>
                 <span onclick="toggleAtMenu()">@ 数字员工</span>
             </div>
@@ -1171,20 +1170,6 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
                                         avatar.title = empInfo.name;
                                     }
                                 }
-                            }
-                        } catch(e) {}
-                        currentEvent = '';
-                        continue;
-                    }
-
-                    // 处理 action 事件（快捷指令触发如 /clear）
-                    if (currentEvent === 'action') {
-                        try {
-                            const act = JSON.parse(dataStr);
-                            if (act.action === 'clear') {
-                                currentConversationId = null;
-                                document.querySelectorAll('.task-item').forEach(function(el) { el.classList.remove('active'); });
-                                resetChatToWelcome();
                             }
                         } catch(e) {}
                         currentEvent = '';
@@ -1574,17 +1559,6 @@ function setInput(text) {
     input.focus();
     input.style.height = '52px';
     input.style.height = Math.min(input.scrollHeight, 120) + 'px';
-    // 如果是快捷指令，直接处理
-    if (text.startsWith('/')) {
-        if (text === '/clear') {
-            currentConversationId = null;
-            // 取消所有任务高亮
-            document.querySelectorAll('.task-item').forEach(function(el) { el.classList.remove('active'); });
-            resetChatToWelcome();
-            input.value = '';
-            return;
-        }
-    }
 }
 
 // ============================================================
