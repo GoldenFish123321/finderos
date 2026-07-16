@@ -309,5 +309,77 @@ class TestAllToolDefinitions(unittest.TestCase):
             self.assertEqual(t["input_schema"]["type"], "object")
 
 
+class TestPromptFileLoading(unittest.TestCase):
+    """测试 prompt 从 docs/prompts/ 文件加载的正确性。
+
+    v1.9.8 将 24 个硬编码 AI prompt 提取到 docs/prompts/ 独立文件中，
+    确保文件可读且内容不退化。
+    """
+
+    def setUp(self):
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        self.prompts_dir = os.path.join(project_root, "docs", "prompts")
+
+    def _read_prompt_file(self, path: str) -> str:
+        with open(os.path.join(self.prompts_dir, path), "r", encoding="utf-8") as f:
+            return f.read()
+
+    def test_system_prompts_exist_and_nonempty(self):
+        """4 个 system prompt 文件存在且内容非空。"""
+        files = ["system_identity.txt", "chart_instruction.txt",
+                 "tool_usage_instruction.txt", "media_instruction.txt"]
+        for f in files:
+            content = self._read_prompt_file(f)
+            self.assertGreater(len(content), 50, f"{f} 内容过短 ({len(content)} chars)")
+
+    def test_system_prompts_have_expected_keywords(self):
+        """system prompt 文件包含预期关键词。"""
+        identity = self._read_prompt_file("system_identity.txt")
+        self.assertIn("DataFinderAgentOS", identity)
+        chart = self._read_prompt_file("chart_instruction.txt")
+        self.assertIn("ECharts", chart)
+        tools = self._read_prompt_file("tool_usage_instruction.txt")
+        self.assertIn("search_warehouse", tools)
+        media = self._read_prompt_file("media_instruction.txt")
+        self.assertIn("generate_image", media)
+
+    def test_employee_prompts_exist_and_nonempty(self):
+        """6 个员工 prompt 文件存在且内容非空。"""
+        employees = ["industry_analyst", "tianji_assistant", "collector",
+                     "copywriter", "news_aggregator", "science_pop"]
+        for emp in employees:
+            content = self._read_prompt_file(f"employees/{emp}.txt")
+            self.assertGreater(len(content), 50,
+                               f"employees/{emp}.txt 内容过短 ({len(content)} chars)")
+
+    def test_skill_prompts_exist_and_nonempty(self):
+        """14 个技能 prompt 文件存在且内容非空。"""
+        skills = ["data_stats", "data_search", "news_summary", "deep_collect",
+                  "translation", "industry_analysis", "policy_interpretation",
+                  "competitive_analysis", "trend_prediction", "copywriting",
+                  "code_assist", "encyclopedia", "info_retrieval", "data_analysis"]
+        for skill in skills:
+            content = self._read_prompt_file(f"skills/{skill}.txt")
+            self.assertGreater(len(content), 50,
+                               f"skills/{skill}.txt 内容过短 ({len(content)} chars)")
+
+    def test_db_load_prompt_file_returns_match(self):
+        """db.py 的 _load_prompt_file() 返回值与直接读文件一致。"""
+        from app.models.db import _load_prompt_file
+        for path in ["employees/collector.txt", "skills/data_stats.txt"]:
+            direct = self._read_prompt_file(path)
+            via_func = _load_prompt_file(path)
+            self.assertEqual(direct, via_func,
+                             f"_load_prompt_file('{path}') 与直接读文件不一致")
+
+    def test_total_prompt_count(self):
+        """验证 prompt 文件总数（24 = 4 system + 6 employee + 14 skill）。"""
+        count = 0
+        for root, dirs, files in os.walk(self.prompts_dir):
+            count += sum(1 for f in files if f.endswith(".txt"))
+        self.assertEqual(count, 24,
+                         f"预期 24 个 prompt 文件，实际 {count} 个")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

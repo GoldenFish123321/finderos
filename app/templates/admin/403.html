@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>403 权限不足</title>
+<link rel="stylesheet" href="{{ static_url('layui/css/layui.css') }}">
+</head>
+<body>
+<div style="text-align:center;padding:60px 20px;">
+    <i class="layui-icon layui-icon-close-fill" style="font-size:60px;color:#FF5722;"></i>
+    <h2 style="margin-top:20px;">403 权限不足</h2>
+    <p style="color:#999;margin-top:10px;">{{ message }}</p>
+    <a href="{{ link }}" style="margin-top:20px;display:inline-block;">{{ link_text }}</a>
+</div>
+</body>
+</html>

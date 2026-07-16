@@ -963,6 +963,27 @@ def _seed_default_interfaces():
         return weather_interface_id
 
 
+def _load_prompt_file(filename: str) -> str:
+    """从 docs/prompts/ 目录加载 prompt 模板文件。
+
+    Args:
+        filename: 相对于 docs/prompts/ 的文件路径，如 'employees/collector.txt'
+
+    Returns:
+        文件内容字符串
+    """
+    db_dir = os.path.dirname(__file__)  # app/models/
+    docs_dir = os.path.join(db_dir, '..', '..', 'docs', 'prompts')
+    path = os.path.join(docs_dir, filename)
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        raise RuntimeError(
+            f"Prompt 文件未找到: {path}。请确保 docs/prompts/ 目录已正确部署。"
+        )
+
+
 def _seed_default_employees():
     """种子：默认数字化员工（产业专员 + 天机助手 + 天气 + 采集专员 + 文案编写 + 新闻聚合 + 科普助手 + 随机音乐）。"""
     import json
@@ -989,12 +1010,7 @@ def _seed_default_employees():
                     1, "产业专员", "llm",
                     "专注于产业分析和行业研究的AI助手，能够追踪行业动态、分析产业链结构、生成产业报告",
                     None,
-                    "你是一位专业的产业分析师，擅长：\n"
-                    "1. 产业链结构分析与上下游关系梳理\n"
-                    "2. 行业政策解读与趋势预判\n"
-                    "3. 竞品分析与市场格局评估\n"
-                    "4. 技术路线演进追踪\n"
-                    "请用专业但不晦涩的语言回答，引用数据时注明来源。",
+                    _load_prompt_file('employees/industry_analyst.txt'),
                     json.dumps(["产业分析", "政策解读", "竞品分析", "趋势预判"], ensure_ascii=False),
                     1,
                     json.dumps([tool_name_to_id[n] for n in [
@@ -1013,12 +1029,7 @@ def _seed_default_employees():
                     2, "天机助手", "llm",
                     "通用智能助手，具备信息检索、数据分析、文案撰写、代码辅助等多维能力",
                     None,
-                    "你是天机助手，一个多才多艺的AI助手。你能够：\n"
-                    "1. 快速检索和整理网络信息\n"
-                    "2. 进行数据分析和可视化建议\n"
-                    "3. 撰写各类文案（报告、邮件、方案等）\n"
-                    "4. 提供编程和技术问题解答\n"
-                    "请保持友好、高效的回答风格，根据用户需求灵活调整。",
+                    _load_prompt_file('employees/tianji_assistant.txt'),
                     json.dumps(["信息检索", "数据分析", "文案撰写", "代码辅助"], ensure_ascii=False),
                     0,
                     json.dumps([tool_name_to_id[n] for n in [
@@ -1098,12 +1109,7 @@ def _seed_default_employees():
                     4, "采集专员", "llm",
                     "专注于数据采集与信息提取的AI助手，支持关键词搜索、深度采集、数据整理",
                     None,
-                    "你是采集专员，专门负责数据采集和整理工作。你的核心能力：\n"
-                    "1. 根据关键词在数据仓库中搜索相关信息\n"
-                    "2. 对指定URL进行深度内容采集和正文提取\n"
-                    "3. 对采集结果进行分类、归纳和摘要\n"
-                    "4. 生成结构化的数据报告\n"
-                    "请高效、准确地完成采集任务，输出清晰的结构化结果。",
+                    _load_prompt_file('employees/collector.txt'),
                     json.dumps(["数据搜索", "深度采集", "内容提取", "数据整理"], ensure_ascii=False),
                     0,  # v0.8: crawl4ai_enabled 已废弃，改用 mcp_tool_ids
                     json.dumps(resolve_tools([
@@ -1123,13 +1129,7 @@ def _seed_default_employees():
                     5, "文案编写", "llm",
                     "专注于各类文案创作的AI助手，支持报告、方案、邮件、宣传稿等多种文体",
                     None,
-                    "你是一位专业的文案撰写专家，擅长：\n"
-                    "1. 商业报告和行业分析报告的撰写\n"
-                    "2. 项目方案和策划书的编写\n"
-                    "3. 正式邮件和公文的起草\n"
-                    "4. 宣传稿、新闻稿的撰写\n"
-                    "5. 演讲稿和PPT大纲的制作\n"
-                    "请根据用户需求，输出格式规范、逻辑清晰、语言得体的专业文案。",
+                    _load_prompt_file('employees/copywriter.txt'),
                     json.dumps(["报告撰写", "方案策划", "公文起草", "宣传文案", "演讲稿"], ensure_ascii=False),
                     0,
                     json.dumps([tool_name_to_id[n] for n in [
@@ -1148,12 +1148,7 @@ def _seed_default_employees():
                     6, "新闻聚合", "llm",
                     "专注于新闻资讯聚合与摘要的AI助手，能够快速整理热点新闻并生成简报",
                     None,
-                    "你是新闻聚合助手，专门负责新闻资讯的检索与整理。你的核心能力：\n"
-                    "1. 从数据仓库中检索最新新闻和资讯\n"
-                    "2. 按主题/关键词整理新闻列表\n"
-                    "3. 生成新闻摘要和每日简报\n"
-                    "4. 追踪特定话题的新闻动态\n"
-                    "请输出清晰、有条理的新闻摘要，标注来源和时间。",
+                    _load_prompt_file('employees/news_aggregator.txt'),
                     json.dumps(["新闻检索", "资讯聚合", "热点追踪", "每日简报"], ensure_ascii=False),
                     0,
                     json.dumps([tool_name_to_id[n] for n in [
@@ -1172,12 +1167,7 @@ def _seed_default_employees():
                     7, "科普助手", "llm",
                     "专注于知识科普与百科问答的AI助手，能够深入浅出地解释各类知识",
                     None,
-                    "你是一位知识渊博的科普专家，擅长：\n"
-                    "1. 用通俗易懂的语言解释复杂概念\n"
-                    "2. 解答科学、历史、文化等各类百科问题\n"
-                    "3. 提供知识背景和延伸阅读建议\n"
-                    "4. 从数据仓库中引用相关数据和事实\n"
-                    "请用生动有趣但严谨准确的方式回答问题，必要时引用权威来源。",
+                    _load_prompt_file('employees/science_pop.txt'),
                     json.dumps(["百科问答", "知识科普", "概念解释", "学术参考"], ensure_ascii=False),
                     0,
                     json.dumps([tool_name_to_id[n] for n in [
@@ -1234,132 +1224,52 @@ def _seed_default_skills():
                 # ── 原有 5 个技能 ──
                 # 数据统计报告
                 (1, "数据统计", "生成数据仓库统计报告，含图表标记",
-                 "你正在进行数据统计分析任务。请遵循以下指令：\n"
-                 "1. 首先调用 get_warehouse_stats 工具获取数据仓库概况\n"
-                 "2. 根据统计结果生成自然语言报告，包含：总记录数、已深度采集数、来源分布\n"
-                 "3. 如果数据适合可视化，请使用 [CHART:bar|pie|line] 标记建议图表类型\n"
-                 "4. 报告格式清晰，使用 Markdown 标题和列表\n"
-                 "5. 最后给出数据利用建议（如：可对Top来源进行深度采集）",
+                 _load_prompt_file('skills/data_stats.txt'),
                  tool_name_to_id.get("get_warehouse_stats")),
                 # 数据搜索
                 (2, "数据搜索", "在数据仓库中按关键词搜索采集结果",
-                 "你正在执行数据搜索任务。请遵循以下指令：\n"
-                 "1. 使用 search_warehouse 工具搜索数据仓库，参数 keyword 填写用户搜索的关键词，limit 默认 10\n"
-                 "2. 将搜索结果整理为清晰的列表格式\n"
-                 "3. 每条结果输出：标题、来源、50字摘要\n"
-                 "4. 如果结果较多，按相关性排序，优先展示最匹配的内容",
+                 _load_prompt_file('skills/data_search.txt'),
                  tool_name_to_id.get("search_warehouse")),
                 # 新闻摘要
                 (3, "新闻摘要", "聚合多源新闻并生成结构化摘要",
-                 "你正在执行新闻摘要任务。请遵循以下指令：\n"
-                 "1. 调用 search_warehouse 或 get_recent_warehouse_data 获取新闻数据\n"
-                 "2. 按主题分类整理新闻（如：科技/财经/政策/社会）\n"
-                 "3. 每条新闻输出：标题、来源、50字摘要、发布时间\n"
-                 "4. 在末尾生成一份「今日要闻速览」（3-5条最重要新闻）\n"
-                 "5. 使用 Markdown 格式，标题用 ###，列表用 -",
+                 _load_prompt_file('skills/news_summary.txt'),
                  tool_name_to_id.get("get_recent_warehouse_data")),
                 # 深度采集
                 (4, "深度采集", "对指定 URL 进行正文深度抓取和内容提取",
-                 "你正在执行深度采集任务。请遵循以下指令：\n"
-                 "1. 使用 deep_collect_url 工具对用户提供的 URL 进行深度采集\n"
-                 "2. 如果 URL 内容复杂，可额外使用 collect_with_crawl4ai 工具获取更完整内容\n"
-                 "3. 提取文章正文、标题、关键信息\n"
-                 "4. 输出结构化内容：标题 → 正文摘要 → 关键数据 → 来源链接\n"
-                 "5. 用 Markdown 格式组织输出",
+                 _load_prompt_file('skills/deep_collect.txt'),
                  tool_name_to_id.get("deep_collect_url")),
                 # 翻译助手（纯 prompt 无需 MCP 工具）
                 (5, "翻译助手", "高质量中英文双向翻译，保持专业术语准确",
-                 "你正在执行翻译任务。请遵循以下指令：\n"
-                 "1. 识别用户输入的源语言和目标语言\n"
-                 "2. 执行高质量翻译，注意：\n"
-                 "   - 保持原文语义和语气\n"
-                 "   - 专业术语使用行业标准译法\n"
-                 "   - 长句合理断句，符合目标语言习惯\n"
-                 "3. 输出格式：先给出翻译结果，再附加【术语注释】（如有专业术语）\n"
-                 "4. 如涉及中文成语/典故，添加简短解释",
+                 _load_prompt_file('skills/translation.txt'),
                  None),
 
                 # ── 新增 9 个技能（来自 TAG_SKILL_MAP）──
                 (6, "产业分析", "分析产业链结构、上下游关系和行业格局",
-                 "你正在执行产业分析任务。请遵循以下指令：\n"
-                 "1. 使用 search_warehouse 或 get_recent_warehouse_data 获取相关产业数据\n"
-                 "2. 分析产业链结构：上游供应商、中游制造商、下游渠道和终端用户\n"
-                 "3. 识别关键节点和瓶颈环节\n"
-                 "4. 评估产业集中度和竞争格局\n"
-                 "5. 使用 get_warehouse_stats 了解数据概况作为参考\n"
-                 "6. 输出结构化的产业分析报告，使用 Markdown 格式",
+                 _load_prompt_file('skills/industry_analysis.txt'),
                  tool_name_to_id.get("search_warehouse")),  # 主要工具，实际可调用多个
                 (7, "政策解读", "解读行业政策法规，分析政策影响",
-                 "你正在执行政策解读任务。请遵循以下指令：\n"
-                 "1. 使用 search_warehouse 或 collect_web_data 搜集相关政策文本和解读\n"
-                 "2. 提取政策核心要点和关键条款\n"
-                 "3. 分析政策对不同利益相关方的影响\n"
-                 "4. 预测政策实施后的行业变化趋势\n"
-                 "5. 使用 get_recent_warehouse_data 获取最新的政策动态\n"
-                 "6. 输出清晰的政策解读报告",
+                 _load_prompt_file('skills/policy_interpretation.txt'),
                  tool_name_to_id.get("search_warehouse")),
                 (8, "竞品分析", "对比分析竞争对手的产品、策略和市场表现",
-                 "你正在执行竞品分析任务。请遵循以下指令：\n"
-                 "1. 使用 search_warehouse 搜索竞品相关信息\n"
-                 "2. 从产品功能、定价策略、市场份额、用户评价等维度对比\n"
-                 "3. 使用 get_recent_warehouse_data 获取最新动态\n"
-                 "4. 使用 get_warehouse_stats 了解整体数据分布\n"
-                 "5. 输出 SWOT 分析或对比矩阵\n"
-                 "6. 使用 Markdown 表格呈现对比数据",
+                 _load_prompt_file('skills/competitive_analysis.txt'),
                  tool_name_to_id.get("search_warehouse")),
                 (9, "趋势预判", "基于数据趋势分析，预判行业和技术发展方向",
-                 "你正在执行趋势预判任务。请遵循以下指令：\n"
-                 "1. 使用 get_recent_warehouse_data 获取最新数据\n"
-                 "2. 使用 get_warehouse_stats 分析整体数据趋势\n"
-                 "3. 使用 search_warehouse 搜索历史相关数据\n"
-                 "4. 识别关键变化趋势和拐点\n"
-                 "5. 预测未来3-6个月的发展方向\n"
-                 "6. 输出趋势分析报告，包含数据支撑和预测依据",
+                 _load_prompt_file('skills/trend_prediction.txt'),
                  tool_name_to_id.get("get_warehouse_stats")),
                 (10, "文案撰写", "撰写各类商业文案、报告、方案等专业文档",
-                 "你正在执行文案撰写任务。请遵循以下指令：\n"
-                 "1. 使用 search_warehouse 和 get_recent_warehouse_data 搜集背景资料\n"
-                 "2. 使用 load_skill 加载相关技能模板（如需要）\n"
-                 "3. 根据用户需求选择文体格式\n"
-                 "4. 保持逻辑清晰、语言专业、格式规范\n"
-                 "5. 必要时添加数据引用和来源标注\n"
-                 "6. 输出可直接使用的最终文稿",
+                 _load_prompt_file('skills/copywriting.txt'),
                  tool_name_to_id.get("load_skill")),
                 (11, "代码辅助", "提供编程问题解答、代码审查和技术方案建议",
-                 "你正在执行代码辅助任务。请遵循以下指令：\n"
-                 "1. 理解用户的技术问题和编程需求\n"
-                 "2. 提供清晰、可运行的代码示例\n"
-                 "3. 解释关键算法和设计思路\n"
-                 "4. 标注潜在的性能问题或安全隐患\n"
-                 "5. 必要时提供替代方案和最佳实践\n"
-                 "6. 使用代码块格式输出代码，注明语言类型",
+                 _load_prompt_file('skills/code_assist.txt'),
                  None),  # 代码辅助主要靠 LLM 自身能力
                 (12, "百科问答", "解答各类知识性问题，提供准确的百科信息",
-                 "你正在执行百科问答任务。请遵循以下指令：\n"
-                 "1. 使用 search_warehouse 或 search_warehouse_fulltext 检索相关知识\n"
-                 "2. 使用 get_recent_warehouse_data 获取最新资讯补充\n"
-                 "3. 提供准确、客观的百科知识解答\n"
-                 "4. 区分事实和观点，标注不确定信息\n"
-                 "5. 引用权威来源，提供延伸阅读建议\n"
-                 "6. 用通俗易懂的语言解释专业概念",
+                 _load_prompt_file('skills/encyclopedia.txt'),
                  tool_name_to_id.get("search_warehouse")),
                 (13, "信息检索", "高效检索和整理多源信息，生成结构化摘要",
-                 "你正在执行信息检索任务。请遵循以下指令：\n"
-                 "1. 使用 search_warehouse 或 search_warehouse_fulltext 进行关键词检索\n"
-                 "2. 使用 get_recent_warehouse_data 补充最新信息\n"
-                 "3. 对检索结果去重、分类和排序\n"
-                 "4. 生成结构化信息摘要\n"
-                 "5. 标注每条信息的来源和时间\n"
-                 "6. 使用 Markdown 列表和表格组织输出",
+                 _load_prompt_file('skills/info_retrieval.txt'),
                  tool_name_to_id.get("search_warehouse")),
                 (14, "数据分析", "对采集数据进行分析处理，生成数据洞察",
-                 "你正在执行数据分析任务。请遵循以下指令：\n"
-                 "1. 使用 get_warehouse_stats 了解数据全貌\n"
-                 "2. 使用 get_recent_warehouse_data 获取待分析数据\n"
-                 "3. 使用 search_warehouse 检索特定维度数据\n"
-                 "4. 进行数据清洗、统计和趋势分析\n"
-                 "5. 识别异常值和数据模式\n"
-                 "6. 生成数据分析报告，包含图表建议",
+                 _load_prompt_file('skills/data_analysis.txt'),
                  tool_name_to_id.get("get_warehouse_stats")),
             ]
             conn.executemany(
