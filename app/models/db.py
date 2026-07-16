@@ -1265,11 +1265,11 @@ def _seed_default_mcp_tools():
 
             # ── 爬虫增强类 (crawl4ai) ──
             (15, "collect_with_crawl4ai", "Crawl4ai智能采集", "使用 Crawl4ai 智能爬虫引擎对指定 URL 进行深度网页内容采集。替代旧的 crawl4ai_enabled 复选框功能，支持自动检测页面结构并提取正文。优先使用 crawl4ai 引擎，不可用时回退到标准采集。当用户提供 URL 并要求「用 crawl4ai 采集」「智能爬取这个网页」时使用。", "crawl4ai", "builtin",
-             "app.mcp.builtin_tools.crawl4ai_tools._collect_with_crawl4ai", "", "GET", "{}", "",
+             "app.mcp.builtin_tools.crawl4ai_tools._deep_collect_url", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{"url":{"type":"string","description":"目标URL"},"extract_mode":{"type":"string","enum":["auto","article","full"],"default":"auto"}},"required":["url"]}, ensure_ascii=False),
              "{}", 1, 1, 1, "{}"),
             (16, "batch_deep_collect", "批量深度采集", "批量对多个 URL 进行深度内容采集。一次性提交多个链接，系统逐一采集并汇总结果。当用户需要「批量抓取这些网页」「同时采集这几个链接」时使用此工具。", "crawl4ai", "builtin",
-             "app.mcp.builtin_tools.crawl4ai_tools._batch_deep_collect", "", "GET", "{}", "",
+             "app.mcp.builtin_tools.crawl4ai_tools._batch_deep_collect_url", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{"urls":{"type":"array","items":{"type":"string"},"description":"目标URL列表"},"extract_mode":{"type":"string","enum":["auto","article","full"],"default":"auto"}},"required":["urls"]}, ensure_ascii=False),
              "{}", 1, 1, 2, "{}"),
 

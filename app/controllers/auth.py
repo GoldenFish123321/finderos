@@ -13,7 +13,7 @@ from app.config.settings import settings
 from app.controllers.base import BaseHandler
 from app.models.user import UserRepository
 from app.models.role import RoleRepository
-from app.utils.security import write_audit_log
+from app.utils.security import validate_password_strength, write_audit_log
 
 
 class LoginRateLimiter:
@@ -198,11 +198,12 @@ class RegisterHandler(BaseHandler):
                 title="用户注册 — 瞭望与问数系统",
                 error="用户名至少需要2个字符",
             )
-        if len(password) < 6:
+        valid, pwd_error = validate_password_strength(password)
+        if not valid:
             return self.render(
                 "register.html",
                 title="用户注册 — 瞭望与问数系统",
-                error="密码至少需要6个字符",
+                error=pwd_error,
             )
         if password != password_confirm:
             return self.render(

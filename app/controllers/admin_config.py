@@ -57,8 +57,12 @@ class SystemConfigHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def post(self):
+        updates = {}  # #77: 移到 post() 开头，确保后续代码可用
+
         # 1. 处理 Logo 操作
         logo_path = None
+        logo_filename = None
+        logo_removed = False
         remove_logo = self.get_body_argument("remove_logo", "0")
 
         # 1a. 移除 Logo
@@ -72,16 +76,10 @@ class SystemConfigHandler(AdminBaseHandler):
                 if os.path.isfile(old_path):
                     try:
                         os.remove(old_path)
-                    except Exception:
-                        pass
+                    except OSError as e:  # #114: 精确捕获 OSError 并记录日志
+                        logger.warning(f"删除旧 Logo 文件失败: {old_path}, 错误: {e}")
             updates["system_logo"] = ""
-            write_audit_log(
-                action="SYSCONFIG_LOGO_REMOVE",
-                username=self.current_user,
-                target="system_config:system_logo",
-                detail="Logo removed",
-                client_ip=self.request.remote_ip or "",
-            )
+            logo_removed = True  # #92: 审计日志推迟到 bulk_update 成功后
 
         # 1b. 上传新 Logo
         try:
@@ -105,32 +103,22 @@ class SystemConfigHandler(AdminBaseHandler):
                 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
                 # 生成唯一文件名：logo_{timestamp}.{ext}
-                new_filename = f"{LOGO_FILE_PREFIX}{int(time.time() * 1000)}{ext}"
-                filepath = os.path.join(UPLOAD_DIR, new_filename)
+                logo_filename = f"{LOGO_FILE_PREFIX}{int(time.time() * 1000)}{ext}"
+                filepath = os.path.join(UPLOAD_DIR, logo_filename)
 
                 with open(filepath, "wb") as f:
                     f.write(file_obj["body"])
 
                 # 相对路径（前端通过 /static/uploads/... 访问）
-                logo_path = f"/static/uploads/{new_filename}"
+                logo_path = f"/static/uploads/{logo_filename}"
 
-                # 清理旧 Logo 文件
-                self._cleanup_old_logos(new_filename)
-
-                write_audit_log(
-                    action="SYSCONFIG_LOGO_UPLOAD",
-                    username=self.current_user,
-                    target="system_config:system_logo",
-                    detail=f"Logo uploaded: {new_filename}",
-                    client_ip=self.request.remote_ip or "",
-                )
+                # #106: _cleanup_old_logos 和审计日志推迟到 bulk_update 成功后
         except Exception as e:
-            logger.error(f"Logo 上传失败: {e}")
-            self.redirect("/admin/config?error=" + urllib.parse.quote("Logo 上传失败，请重试"))
+            logger.exception("Logo 上传失败")  # #119: 详细错误记日志（含堆栈）
+            self.redirect("/admin/config?error=" + urllib.parse.quote("系统错误，请重试"))
             return
 
         # 2. 读取文本配置项
-        updates = {}
         for key in (
             "system_name", "system_subtitle", "icp_number", "default_port",
             "ai_default_model", "ai_default_temperature", "ai_default_max_tokens",
@@ -148,6 +136,28 @@ class SystemConfigHandler(AdminBaseHandler):
             if count >= 0:
                 # 立即刷新内存中的 settings，使模板渲染即时生效
                 settings.load_from_db()
+
+                # #92: Logo 移除审计日志移到 bulk_update 成功之后
+                if logo_removed:
+                    write_audit_log(
+                        action="SYSCONFIG_LOGO_REMOVE",
+                        username=self.current_user,
+                        target="system_config:system_logo",
+                        detail="Logo removed",
+                        client_ip=self.request.remote_ip or "",
+                    )
+
+                # #106: 清理旧 Logo 从 DB 写入前移到 bulk_update 成功后
+                if logo_filename:
+                    self._cleanup_old_logos(logo_filename)
+                    write_audit_log(
+                        action="SYSCONFIG_LOGO_UPLOAD",
+                        username=self.current_user,
+                        target="system_config:system_logo",
+                        detail=f"Logo uploaded: {logo_filename}",
+                        client_ip=self.request.remote_ip or "",
+                    )
+
                 write_audit_log(
                     action="SYSCONFIG_UPDATE",
                     username=self.current_user,
@@ -172,5 +182,5 @@ class SystemConfigHandler(AdminBaseHandler):
                     fpath = os.path.join(UPLOAD_DIR, fname)
                     if os.path.isfile(fpath):
                         os.remove(fpath)
-        except Exception:
-            pass  # 清理失败不影响主流程
+        except OSError as e:  # #114: 精确捕获 OSError 并记录日志
+            logger.warning(f"清理旧 Logo 文件失败: {e}")

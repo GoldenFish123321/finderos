@@ -266,8 +266,8 @@ class DataWarehouseRepository:
                 ).fetchall()
                 if rows:
                     return [dict(r) for r in rows]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"FTS5 检索失败，回退 LIKE: {e}")
 
             return []
 

@@ -45,7 +45,7 @@ class SensitiveWordRepository:
             active_conn.execute("""
                 CREATE TABLE IF NOT EXISTS sentiment_sensitive_words (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    word TEXT NOT NULL,
+                    word TEXT NOT NULL UNIQUE,
                     category TEXT DEFAULT '低危',
                     severity INTEGER DEFAULT 1,
                     is_enabled INTEGER DEFAULT 1,
@@ -120,6 +120,8 @@ class SensitiveWordRepository:
     @staticmethod
     def add(word: str, category: str = "低危", severity: int = 1) -> bool:
         """添加敏感词。"""
+        if not word or len(word.strip()) < 1:
+            return False
         try:
             with get_db() as conn:
                 conn.execute(
@@ -275,19 +277,25 @@ class SensitiveWordRepository:
 
     @staticmethod
     def get_recent_alerts(limit: int = 20) -> list:
-        """获取最近的预警（用于大屏滚动）。"""
+        """获取最近的预警（用于大屏滚动）。
+
+        安全：不再 JOIN conversation_messages，仅使用 content_preview 前50字符，
+        避免在预警列表中泄露完整对话内容。
+        """
         with get_db() as conn:
-            return conn.execute(
-                "SELECT sa.*, "
-                "CASE WHEN sa.source_type = 'warehouse' THEN dw.title "
-                "     WHEN sa.source_type = 'conversation' THEN cm.content "
-                "ELSE '' END as source_detail "
-                "FROM sentiment_alerts sa "
-                "LEFT JOIN data_warehouse dw ON sa.source_type='warehouse' AND sa.source_id=dw.id "
-                "LEFT JOIN conversation_messages cm ON sa.source_type='conversation' AND sa.source_id=cm.id "
+            rows = conn.execute(
+                "SELECT sa.* FROM sentiment_alerts sa "
                 "ORDER BY sa.id DESC LIMIT ?",
                 (limit,),
             ).fetchall()
+            # 截断 content_preview 到 50 字符，移除 source_detail 泄露风险
+            result = []
+            for row in rows:
+                item = dict(row)
+                preview = (item.get("content_preview") or "")[:50]
+                item["content_preview"] = preview
+                result.append(item)
+            return result
 
     @staticmethod
     def get_alert_stats() -> dict:
@@ -344,8 +352,12 @@ class SensitiveWordRepository:
             return cur.rowcount > 0
 
     @staticmethod
-    def get_alert_detail(alert_id: int) -> dict:
-        """获取预警详情（含完整原文）。"""
+    def get_alert_detail(alert_id: int, username: str = "") -> dict:
+        """获取预警详情（含完整原文）。
+
+        安全：非对话创建者只能看到脱敏内容（仅显示匹配词上下文），
+        防止通过预警详情接口泄露他人隐私对话。
+        """
         with get_db() as conn:
             alert = conn.execute(
                 "SELECT * FROM sentiment_alerts WHERE id = ?", (alert_id,)
@@ -365,10 +377,35 @@ class SensitiveWordRepository:
                     result["link"] = src.get("link", "")
             elif alert["source_type"] == "conversation":
                 src = conn.execute(
-                    "SELECT content, conversation_id FROM conversation_messages WHERE id = ?",
+                    "SELECT cm.content, cm.conversation_id "
+                    "FROM conversation_messages cm WHERE cm.id = ?",
                     (alert["source_id"],),
                 ).fetchone()
                 if src:
-                    result["full_content"] = src["content"] or ""
-                    result["conversation_id"] = src.get("conversation_id")
+                    conv_id = src.get("conversation_id")
+                    # 检查请求者是否为对话创建者
+                    is_creator = False
+                    if username and conv_id:
+                        conv = conn.execute(
+                            "SELECT username FROM conversations WHERE id = ?",
+                            (conv_id,),
+                        ).fetchone()
+                        if conv and conv["username"] == username:
+                            is_creator = True
+
+                    if is_creator:
+                        result["full_content"] = src["content"] or ""
+                    else:
+                        # 非创建者：只显示脱敏片段（匹配词周围 ±30 字符）
+                        raw = src["content"] or ""
+                        matched = alert.get("matched_word", "")
+                        if matched and matched in raw:
+                            idx = raw.find(matched)
+                            start = max(0, idx - 30)
+                            end = min(len(raw), idx + len(matched) + 30)
+                            snippet = raw[start:end]
+                            result["full_content"] = f"[脱敏] ...{snippet}..."
+                        else:
+                            result["full_content"] = "[脱敏] 无权查看完整内容"
+                    result["conversation_id"] = conv_id
             return result

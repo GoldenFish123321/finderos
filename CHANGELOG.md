@@ -6,6 +6,7 @@
 - 🧪 **测试 #118**：同步修复登录检测断言，适配登录后重定向至 `/chat` 页面的当前行为
 - 🐛 **修复 #119**：`admin_config.py` Logo 上传失败时不再在 redirect URL 中泄露原始异常信息（`str(e)`），改为 `logger.error` 记录异常详情 + URL 显示通用错误消息
 - ✅ **测试 #119**：新增 `test_issue119_logo_error_leak.py`（7 个静态源码测试），防止回归
+- 🐛 **批量修复 #58-#128**：42 个 Bug 和安全漏洞一次性修复，详见 [PR #131](https://github.com/GoldenFish123321/finderos/pull/131) — 涵盖安全加固（10 项）和 Bug 修复（32 项）
 
 ## v1.3.2-beta (2026-07-16) — Bug 修复
 

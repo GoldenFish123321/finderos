@@ -414,6 +414,41 @@ def decrypt_api_key(ciphertext: str) -> str:
         return ciphertext
 
 
+# ── 密码强度校验 ──────────────────────────────────────────────
+
+
+def validate_password_strength(password: str) -> tuple[bool, str]:
+    """验证密码强度。
+
+    要求：
+    - 最少 8 个字符
+    - 至少包含 2 类字符（大写字母、小写字母、数字、特殊字符）
+
+    Returns:
+        (is_valid, error_message)
+    """
+    if not password:
+        return False, "密码不能为空"
+
+    if len(password) < 8:
+        return False, "密码长度至少需要8个字符"
+
+    categories = 0
+    if re.search(r"[A-Z]", password):
+        categories += 1
+    if re.search(r"[a-z]", password):
+        categories += 1
+    if re.search(r"[0-9]", password):
+        categories += 1
+    if re.search(r"[^A-Za-z0-9]", password):
+        categories += 1
+
+    if categories < 2:
+        return False, "密码必须包含至少两种字符类型（大写字母、小写字母、数字、特殊字符）"
+
+    return True, ""
+
+
 # ── 审计日志 ───────────────────────────────────────────────────
 
 

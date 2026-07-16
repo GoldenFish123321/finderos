@@ -35,7 +35,7 @@ class TestVideoGenHandler(unittest.TestCase):
             "data": None,
             "error": {"message": "402: 余额不足", "type": "video_generation_error"}
         }))
-        self.assertIn("余额不足", err)
+        self.assertEqual("媒体生成服务返回错误 (HTTP 500)", err)
 
     def test_validate_url_safe_blocked(self):
         """SSRF 校验：内网地址应被拦截。"""

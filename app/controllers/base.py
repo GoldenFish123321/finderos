@@ -57,4 +57,7 @@ class BaseHandler(tornado.web.RequestHandler):
         elif status_code == 404:
             self.write("<h2>404 页面未找到</h2>")
         else:
-            self.write(f"<h2>{status_code} 错误</h2>")
+            if settings.DEBUG:
+                self.write(f"<h2>{status_code} {self._reason}</h2>")
+            else:
+                self.write(f"<h2>{status_code} 服务器错误</h2>")
