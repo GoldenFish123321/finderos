@@ -322,6 +322,15 @@ class FaceLoginHandler(BaseHandler):
             self.write({"code": 1, "msg": "该用户未注册人脸，请先用密码登录后在账户设置中注册"})
             return
 
+        # 检查用户是否启用了人脸登录（前端 localStorage 传递）
+        try:
+            face_login_enabled = self.get_body_argument("face_login_enabled", "1")
+        except Exception:
+            face_login_enabled = "1"
+        if face_login_enabled == "0":
+            self.write({"code": 1, "msg": "该用户已暂停人脸登录，请在账户设置中重新启用"})
+            return
+
         # 接收上传的图片
         if "face_image" not in self.request.files:
             self.write({"code": 1, "msg": "未上传人脸图片"})
@@ -408,7 +417,7 @@ class UserAccountHandler(BaseHandler):
             if not success:
                 return render_page(error=msg)
             write_audit_log("CHANGE_PASSWORD", self.current_user, "", "用户修改密码")
-            return render_page(message="密码修改成功")
+            return render_page(msg="密码修改成功")
 
         elif action == "face_register":
             if "face_image" not in self.request.files:
@@ -422,7 +431,7 @@ class UserAccountHandler(BaseHandler):
             return self.redirect("/account?msg=人脸注册成功")
 
         elif action == "face_toggle":
-            return render_page(message="人脸登录设置已更新" if has_face else "",
+            return render_page(msg="人脸登录设置已更新" if has_face else "",
                               error="" if has_face else "请先注册人脸数据")
 
         elif action == "delete_account":
