@@ -95,7 +95,7 @@ def _register_external_proxies():
     for iface in external_ifaces:
         handler_key = f"proxy/{iface['id']}"
 
-        async def _make_proxy_handler(params: dict, _iface=iface) -> dict:
+        async def _make_proxy_handler(_iface=iface, **params) -> dict:
             import json as _json
             import urllib.parse
 

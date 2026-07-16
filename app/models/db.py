@@ -1519,7 +1519,6 @@ def _seed_script_tools():
                 }], ensure_ascii=False),
                 "transform_script": (
                     "def transform(data_sources):\n"
-                    "    import json\n"
                     "    try:\n"
                     "        w = data_sources[0]['data']\n"
                     "        cur = w.get('current_condition', [{}])[0]\n"
@@ -1556,7 +1555,6 @@ def _seed_script_tools():
                 }], ensure_ascii=False),
                 "transform_script": (
                     "def transform(data_sources):\n"
-                    "    import json, random\n"
                     "    try:\n"
                     "        songs = data_sources[0].get('data', [])\n"
                     "        if isinstance(songs, list) and len(songs) > 0:\n"

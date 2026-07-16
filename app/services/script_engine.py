@@ -26,6 +26,7 @@ _SAFE_BUILTINS = {
     "print": lambda *a, **kw: None,  # print 静默
     "json": __import__("json"),  # 允许 json
     "re": __import__("re"),      # 允许 re
+    "random": __import__("random"),  # 允许 random
 }
 
 # AST 节点白名单
