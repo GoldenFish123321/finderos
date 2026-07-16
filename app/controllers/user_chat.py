@@ -401,13 +401,10 @@ class UserChatPageHandler(BaseHandler):
 
     @tornado.web.authenticated
     def get(self):
-        models_data, _ = AiModelRepository.get_all(page=1, page_size=50)
-        selected_model = AiModelRepository.get_default()
-        if not selected_model:
-            for m in models_data:
-                if m.get("is_enabled") == 1:
-                    selected_model = m
-                    break
+        models_data, _ = AiModelRepository.get_available_for_user(
+            self.current_user, page=1, page_size=100
+        )
+        selected_model = AiModelRepository.get_default_for_user(self.current_user)
 
         conversations = ConversationRepository.get_all(
             username=self.current_user, limit=50
@@ -440,7 +437,9 @@ class UserChatPageHandler(BaseHandler):
 class UserModelListHandler(BaseHandler):
     @tornado.web.authenticated
     def get(self):
-        models_data, _ = AiModelRepository.get_all(page=1, page_size=50)
+        models_data, _ = AiModelRepository.get_available_for_user(
+            self.current_user, page=1, page_size=100
+        )
         items = []
         for m in models_data:
             if m.get("is_enabled") == 1:
@@ -450,6 +449,7 @@ class UserModelListHandler(BaseHandler):
                     "model_name": m.get("model_name", ""),
                     "category": m.get("category", ""),
                     "is_default": m.get("is_default", 0),
+                    "model_scope": m.get("model_scope", "admin"),
                 })
         self.write({"code": 0, "items": items})
 
@@ -525,7 +525,16 @@ class UserConversationCreateHandler(BaseHandler):
     @tornado.web.authenticated
     def post(self):
         model_id_str = self.get_body_argument("model_id", None)
-        model_id = int(model_id_str) if model_id_str else None
+        try:
+            model_id = int(model_id_str) if model_id_str else None
+        except (ValueError, TypeError):
+            self.write({"code": 1, "msg": "无效的模型ID"})
+            return
+        if model_id:
+            model = AiModelRepository.get_accessible_by_id(model_id, self.current_user)
+            if not model or model.get("is_enabled") == 0:
+                self.write({"code": 1, "msg": "模型不可用"})
+                return
         title = self.get_body_argument("title", "新对话").strip()[:200] or "新对话"
         conv_id = ConversationRepository.create(
             title=title, model_id=model_id, username=self.current_user
@@ -626,7 +635,9 @@ class UserChatStreamHandler(BaseHandler):
             return
 
         # ── 模型校验 ──
-        model = AiModelRepository.get_by_id(model_id, include_api_key=True)
+        model = AiModelRepository.get_accessible_by_id(
+            model_id, self.current_user, include_api_key=True
+        )
         if not model or model.get("is_enabled") == 0:
             self.write({"code": 1, "msg": "模型不可用"})
             return
@@ -1289,11 +1300,17 @@ class UserEmployeeInvokeHandler(BaseHandler):
 
         model = None
         if emp.get("model_id"):
-            model = AiModelRepository.get_by_id(emp["model_id"], include_api_key=True)
+            model = AiModelRepository.get_accessible_by_id(
+                emp["model_id"], self.current_user, include_api_key=True
+            )
         if not model or model.get("is_enabled", 0) == 0:
-            model = AiModelRepository.get_default(include_api_key=True)
+            model = AiModelRepository.get_default_for_user(
+                self.current_user, include_api_key=True
+            )
         if not model:
-            models, _ = AiModelRepository.get_all(page=1, page_size=50, include_api_key=True)
+            models, _ = AiModelRepository.get_available_for_user(
+                self.current_user, page=1, page_size=100, include_api_key=True
+            )
             for m in models:
                 if m.get("is_enabled") == 1:
                     model = m

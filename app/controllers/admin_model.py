@@ -193,9 +193,11 @@ class ModelListHandler(AdminBaseHandler):
         except (ValueError, TypeError):
             page = 1
         category = self.get_query_argument("category", "").strip()
-        rows, total = AiModelRepository.get_all(page=page, page_size=6, category=category)
+        rows, total = AiModelRepository.get_all(
+            page=page, page_size=6, category=category, model_scope="admin", owner_username=""
+        )
         total_pages = max(1, (total + 6 - 1) // 6)
-        stats = AiModelRepository.get_stats()
+        stats = AiModelRepository.get_stats(model_scope="admin", owner_username="")
 
         self.render(
             "admin/model_list.html",
@@ -227,6 +229,9 @@ class ModelFormHandler(AdminBaseHandler):
                 return
             if not model:
                 self.write('<script>alert("模型不存在");window.history.back();</script>')
+                return
+            if model.get("model_scope", "admin") != "admin":
+                self.write('<script>alert("该模型不属于管理员模型组");window.history.back();</script>')
                 return
 
         self.render(
@@ -270,13 +275,15 @@ class ModelFormHandler(AdminBaseHandler):
                 return
             # 检查是否需要清除 API Key（管理员主动勾选"清除密钥"复选框）
             clear_key = self.get_body_argument("clear_key", "0") == "1"
+            existing = AiModelRepository.get_by_id(model_id, include_api_key=True)
+            if not existing or existing.get("model_scope", "admin") != "admin":
+                self.write('<script>alert("该模型不属于管理员模型组");window.history.back();</script>')
+                return
             if clear_key:
                 api_key = ""  # 明确清除
             elif not api_key:
                 # 编辑时：如果 API Key 未填写且未勾选清除，保留数据库中的旧值
-                existing = AiModelRepository.get_by_id(model_id, include_api_key=True)
-                if existing:
-                    api_key = existing["api_key"]
+                api_key = existing["api_key"]
             ok = AiModelRepository.update(
                 model_id, name, provider, api_base, api_key, model_name,
                 category, system_prompt, temperature, top_p, top_k, max_tokens, context_size
@@ -295,26 +302,67 @@ class ModelFormHandler(AdminBaseHandler):
 class ModelQuickConfigHandler(AdminBaseHandler):
     """模型 API 快速配置页。
 
-    面向默认普通用户的窄权限入口，仅允许维护当前默认/首个模型的
-    API Base、API Key、Provider、Model Name 等基础连接信息，不提供
-    删除、启停、设默认和完整模型 CRUD 能力。
+    面向默认普通用户的窄权限入口，仅允许维护当前用户自己的 user 模型组，
+    不写入管理员提供的 admin 模型组，避免多用户互相覆盖全局配置。
     """
 
-    def _get_target_model(self):
-        model = AiModelRepository.get_default(include_api_key=True)
+    def _get_user_models(self, include_api_key: bool = True):
+        rows, _ = AiModelRepository.get_all(
+            page=1,
+            page_size=200,
+            include_api_key=include_api_key,
+            model_scope="user",
+            owner_username=self.current_user,
+        )
+        return rows
+
+    def _get_target_model(self, source: str = "query"):
+        if source == "body":
+            model_id = self.get_body_argument("id", "").strip()
+            force_new = self.get_body_argument("new_model", "0") == "1"
+        else:
+            model_id = self.get_query_argument("id", "").strip()
+            force_new = self.get_query_argument("new", "0") == "1"
+        if force_new:
+            return None
+        if model_id:
+            try:
+                model = AiModelRepository.get_by_id(int(model_id), include_api_key=True)
+            except (ValueError, TypeError):
+                return None
+            if (
+                model
+                and model.get("model_scope") == "user"
+                and model.get("owner_username", "") == self.current_user
+            ):
+                return model
+            return None
+        model = AiModelRepository.get_default(
+            include_api_key=True, model_scope="user", owner_username=self.current_user
+        )
         if model:
             return model
-        rows, _ = AiModelRepository.get_all(page=1, page_size=1, include_api_key=True)
+        rows, _ = AiModelRepository.get_all(
+            page=1,
+            page_size=1,
+            include_api_key=True,
+            model_scope="user",
+            owner_username=self.current_user,
+        )
         return rows[0] if rows else None
 
     @tornado.web.authenticated
     def get(self):
         msg = self.get_query_argument("msg", "")
+        model = self._get_target_model(source="query")
+        model_options = self._get_user_models(include_api_key=False)
         self.render(
             "admin/model_quick_config.html",
             title="模型 API 快速配置 — 瞭望与问数系统",
             username=self.current_user,
-            model=self._get_target_model(),
+            model=model,
+            model_options=model_options,
+            is_new=(model is None),
             providers=PROVIDERS,
             categories=CATEGORIES,
             msg=msg,
@@ -322,13 +370,18 @@ class ModelQuickConfigHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def post(self):
-        model = self._get_target_model()
+        model = self._get_target_model(source="body")
+        submitted_model_id = self.get_body_argument("id", "").strip()
+        if submitted_model_id and not model:
+            self.write('<script>alert("无权修改该模型或模型不存在");window.history.back();</script>')
+            return
         name = self.get_body_argument("name", "").strip()
         provider = self.get_body_argument("provider", "openai").strip()
         api_base = self.get_body_argument("api_base", "").strip()
         api_key = self.get_body_argument("api_key", "").strip()
         model_name = self.get_body_argument("model_name", "").strip()
         category = self.get_body_argument("category", "text").strip()
+        set_as_default = self.get_body_argument("set_default", "0") == "1"
 
         if not name:
             self.write('<script>alert("模型名称不能为空");window.history.back();</script>')
@@ -377,11 +430,19 @@ class ModelQuickConfigHandler(AdminBaseHandler):
                 api_key=api_key,
                 model_name=model_name,
                 category=category,
+                model_scope="user",
+                owner_username=self.current_user,
             )
-            if new_id > 0:
+            has_user_default = AiModelRepository.get_default(
+                model_scope="user", owner_username=self.current_user
+            )
+            if new_id > 0 and (set_as_default or not has_user_default):
                 AiModelRepository.set_default(new_id)
             target = f"model:{new_id}" if new_id > 0 else "model:create"
             msg = "模型 API 配置已创建" if new_id > 0 else "模型 API 配置创建失败"
+
+        if model and set_as_default:
+            AiModelRepository.set_default(model["id"])
 
         write_audit_log(
             action="MODEL_QUICK_CONFIG",
@@ -390,7 +451,9 @@ class ModelQuickConfigHandler(AdminBaseHandler):
             detail=msg,
             client_ip=self.request.remote_ip or "",
         )
-        self.redirect(f"/admin/model/config?msg={msg}")
+        redirect_id = model["id"] if model else (new_id if "new_id" in locals() and new_id > 0 else "")
+        suffix = f"&id={redirect_id}" if redirect_id else ""
+        self.redirect(f"/admin/model/config?msg={msg}{suffix}")
 
 
 class ModelQuickConfigTestHandler(AdminBaseHandler):
@@ -398,7 +461,11 @@ class ModelQuickConfigTestHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     async def post(self):
-        model = ModelQuickConfigHandler._get_target_model(self)
+        model = ModelQuickConfigHandler._get_target_model(self, source="body")
+        submitted_model_id = self.get_body_argument("id", "").strip()
+        if submitted_model_id and not model:
+            self.write({"code": 1, "msg": "无权测试该模型或模型不存在", "status": 0})
+            return
         provider = self.get_body_argument("provider", "openai").strip()
         api_base = self.get_body_argument("api_base", "").strip()
         api_key = self.get_body_argument("api_key", "").strip()
@@ -442,6 +509,10 @@ class ModelDeleteHandler(AdminBaseHandler):
         except (ValueError, TypeError):
             self.write('<script>alert("无效的模型ID");window.history.back();</script>')
             return
+        model = AiModelRepository.get_by_id(model_id)
+        if not model or model.get("model_scope", "admin") != "admin":
+            self.write('<script>alert("该模型不属于管理员模型组");window.history.back();</script>')
+            return
         AiModelRepository.delete(model_id)
         self.redirect("/admin/model?msg=已删除")
 
@@ -455,6 +526,10 @@ class ModelToggleHandler(AdminBaseHandler):
             model_id = int(self.get_body_argument("id", 0))
         except (ValueError, TypeError):
             self.write('<script>alert("无效的模型ID");window.history.back();</script>')
+            return
+        model = AiModelRepository.get_by_id(model_id)
+        if not model or model.get("model_scope", "admin") != "admin":
+            self.write('<script>alert("该模型不属于管理员模型组");window.history.back();</script>')
             return
         status = AiModelRepository.toggle_enabled(model_id)
         if status == -1:
@@ -475,6 +550,10 @@ class ModelDefaultHandler(AdminBaseHandler):
         except (ValueError, TypeError):
             self.write('<script>alert("无效的模型ID");window.history.back();</script>')
             return
+        model = AiModelRepository.get_by_id(model_id)
+        if not model or model.get("model_scope", "admin") != "admin":
+            self.write('<script>alert("该模型不属于管理员模型组");window.history.back();</script>')
+            return
         AiModelRepository.set_default(model_id)
         self.redirect("/admin/model?msg=已设为默认模型")
 
@@ -494,7 +573,8 @@ class ModelApiListHandler(AdminBaseHandler):
             limit = 6
         category = self.get_query_argument("category", "").strip()
         rows, total = AiModelRepository.get_all(
-            page=page, page_size=limit, category=category, enabled_only=True
+            page=page, page_size=limit, category=category, enabled_only=True,
+            model_scope="admin", owner_username=""
         )
         items = []
         for r in rows:

@@ -800,9 +800,11 @@ HTTP API 型 MCP 工具支持在 URL 中使用 `{参数名}` 占位符；GET 请
 | `context_size` | INTEGER | `8192` | 上下文窗口大小 |
 | `total_tokens` | INTEGER | `0` | Token 消耗累计（自动更新） |
 | `is_enabled` | INTEGER | `1` | 启用状态 |
-| `is_default` | INTEGER | `0` | 是否默认模型（全局唯一） |
+| `is_default` | INTEGER | `0` | 是否默认模型（在各自模型分组内唯一） |
+| `model_scope` | TEXT | `admin` | 模型分组：`admin` 管理员提供、`user` 用户自助配置 |
+| `owner_username` | TEXT | `''` | 用户模型所属用户名；管理员模型为空 |
 
-支持的操作：**新增、编辑、删除、启用/禁用、设为默认**。
+支持的操作：**新增、编辑、删除、启用/禁用、设为默认**。`/admin/model` 仅管理“管理员提供模型”分组；普通用户在 `/admin/model/config` 创建的“我的模型配置”按 `owner_username` 隔离，不会出现在管理员模型列表中。
 
 > **注**：模型流式对话功能已统一迁移至前台 `/chat/stream`（MCP 架构），后台不再提供独立对话页面。
 
@@ -890,7 +892,7 @@ HTTP API 型 MCP 工具支持在 URL 中使用 `{参数名}` 占位符；GET 请
 - **图表注入**：AI 回复中 `[CHART:...]` 标记自动渲染为 ECharts 图表
 - **表格注入**：`[TABLE:...]` 标记自动渲染为 HTML 数据表格
 - **元信息显示**：每条 AI 回复下方显示响应时间(s)和 Token 消耗
-- **模型 API 自助配置**：聊天页侧边栏模型选择区和欢迎页快捷操作会向有 `/admin/model/config` 权限的用户提供配置链接，普通用户可直接配置 API Key、API Base 与模型标识
+- **模型 API 自助配置**：聊天页侧边栏模型选择区和欢迎页快捷操作会向有 `/admin/model/config` 权限的用户提供配置链接；普通用户配置写入自己的“我的模型配置”分组，不覆盖管理员提供模型或其他用户模型
 
 #### 8.4 对话持久化
 
@@ -1102,8 +1104,8 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 #### 模型引擎
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/model` | 模型列表（`?page=&category=`） |
-| GET/POST | `/admin/model/config` | 模型 API 快速配置（普通用户默认权限，API Key 密码框回显且可显示/隐藏，不含删除/启停/设默认） |
+| GET | `/admin/model` | 管理员提供模型列表（`?page=&category=`） |
+| GET/POST | `/admin/model/config` | 我的模型 API 快速配置（普通用户默认权限，按当前用户隔离，API Key 密码框回显且可显示/隐藏） |
 | POST | `/admin/model/config/test` | 测试模型 API 配置连通性（保存前可验证 API Base/API Key/Model Name） |
 | GET | `/admin/model/add` | 新增模型页面 |
 | POST | `/admin/model/add` | 提交新增模型 |
@@ -1114,7 +1116,7 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 | POST | `/admin/model/default` | 设为默认模型 |
 | GET | `/admin/api/model/list` | 模型 JSON API（返回已启用模型列表） |
 
-> 模型 API 快速配置页会回显已保存 API Key（默认密码框隐藏，可手动显示）。当 Provider、API Base 或 Model Name 改变且仍在使用已保存密钥时，页面会显示醒目的“复用当前密钥”确认区；用户可重新输入新 Key，或勾选确认后继续复用当前密钥。
+> 模型 API 快速配置页仅管理当前用户的 `user` 模型分组，会回显已保存 API Key（默认密码框隐藏，可手动显示）。当 Provider、API Base 或 Model Name 改变且仍在使用已保存密钥时，页面会显示醒目的“复用当前密钥”确认区；用户可重新输入新 Key，或勾选确认后继续复用当前密钥。
 
 #### 管理侧会话管理（Issue #17）
 | 方法 | 路径 | 说明 |
@@ -1203,6 +1205,8 @@ erDiagram
         int total_tokens
         int is_enabled
         int is_default
+        string model_scope
+        string owner_username
         timestamp created_at
     }
     data_warehouse {
@@ -1551,7 +1555,7 @@ python make_admin.py --reset --username admin --password newpassword
 
 ## 测试用例
 
-系统已覆盖 7 大模块共 30+ 项测试用例，详见 `docs/test_case.md`：
+系统已覆盖 7 大模块共 40+ 项测试用例，详见 `docs/test_case.md`：
 
 | 模块 | 测试项数 | 覆盖要点 |
 |------|---------|---------|
@@ -1559,7 +1563,7 @@ python make_admin.py --reset --username admin --password newpassword
 | **用户管理** | 6 | 新增用户、编辑用户、禁用/启用、删除、关键词搜索、admin 账号保护 |
 | **角色管理** | 3 | 新增角色+功能授权、系统角色编辑保护（is_system）、系统角色删除保护 |
 | **瞭望采集** | 9 | 关键词采集、瞭望源选择、保存到数据仓库、SSRF 防护、空关键词、SSE 进度事件、进度条渲染、采集审计日志、日志页检索 |
-| **模型引擎** | 8 | 新增模型、设为默认、Mock 对话（无 API Key）、真实 API 流式对话、Token 统计、审计日志记录、快速配置 Key 回显、连接测试 |
+| **模型引擎** | 11 | 新增模型、设为默认、Mock 对话（无 API Key）、真实 API 流式对话、Token 统计、审计日志记录、快速配置 Key 回显、连接测试、模型分组隔离、Chat 分组展示 |
 | **会话管理** | 5 | 跨用户列表、用户筛选、消息详情、管理员删除、用户侧隔离保持 |
 | **接口管理** | 10 | 接口模板 CRUD、安全校验、敏感 Header 脱敏、安全 HTTP 调用、接口测试、API 型数字员工联动创建 |
 | **MCP 重构** | 6 | 工具表查询、CRUD、注册表加载、员工权限、技能关联、测试日志 |

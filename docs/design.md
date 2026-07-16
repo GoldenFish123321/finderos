@@ -147,7 +147,8 @@ audit_logs (独立审计)
 - **多轮对话**：conversations + conversation_messages 双表持久化
 - **@数字员工**：输入 `@` 触发下拉菜单，自动匹配并调用
 - **ECharts 图表**：`[CHART:...]` / `[TABLE:...]` 标记自动渲染
-- **自助模型配置**：`/chat` 侧边栏与欢迎页快捷区按用户是否拥有 `/admin/model/config` 显示配置入口，与普通用户默认最小权限配合使用
+- **模型分组隔离**：`ai_models.model_scope=admin` 表示管理员提供模型，`model_scope=user + owner_username` 表示用户自助模型；管理员页只管理 admin 组，普通用户快速配置只管理自己的 user 组
+- **自助模型配置**：`/chat` 侧边栏与欢迎页快捷区按用户是否拥有 `/admin/model/config` 显示配置入口，与普通用户默认最小权限配合使用；聊天模型选择按“我的模型配置 / 管理员提供模型”分组展示
 - **模型配置体验**：快速配置页遵循常见控制台交互，API Key 密码框回显、可显示/隐藏，并可调用 `/admin/model/config/test` 测试连接；连接信息变更且继续使用已保存密钥时显示醒目的确认复用区
 
 ### 3.4b 管理侧会话管理

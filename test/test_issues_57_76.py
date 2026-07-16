@@ -137,9 +137,17 @@ def test_issue_73_api_keys_are_opt_in(monkeypatch):
 
 
 def test_model_quick_config_falls_back_when_no_default():
+    handler = SimpleNamespace(
+        current_user="alice",
+        get_query_argument=lambda name, default="": default,
+    )
+    handler._get_user_models = lambda include_api_key=True: AiModelRepository.get_all(
+        page=1, page_size=1, include_api_key=include_api_key,
+        model_scope="user", owner_username=handler.current_user,
+    )[0]
     with patch.object(AiModelRepository, "get_default", return_value=None), \
          patch.object(AiModelRepository, "get_all", return_value=([{"id": 9}], 1)):
-        assert ModelQuickConfigHandler._get_target_model(None) == {"id": 9}
+        assert ModelQuickConfigHandler._get_target_model(handler) == {"id": 9}
 
 
 def test_issue_65_interface_response_secrets_are_redacted():

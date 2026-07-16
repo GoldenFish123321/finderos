@@ -91,6 +91,23 @@
 .api-key-reuse-confirm input[type="checkbox"] {
     margin-top:3px;
 }
+.user-model-switcher {
+    padding:12px 14px;
+    margin-bottom:14px;
+    border-radius:10px;
+    border:1px solid rgba(255,255,255,0.10);
+    background:rgba(255,255,255,0.04);
+}
+.user-model-switcher .switcher-actions {
+    display:flex;
+    gap:8px;
+    align-items:center;
+}
+.model-scope-tip {
+    margin-top:8px;
+    color:var(--text-muted);
+    font-size:12px;
+}
 </style>
 
 <div class="layui-card">
@@ -103,21 +120,49 @@
         {% end %}
 
         <div class="quick-model-help">
-            该页面面向普通用户开放，只允许配置当前默认/首个模型的基础 API 连接信息；
-            不提供模型删除、启停、设为默认等全局管理操作。如需完整模型管理，请联系管理员授权“模型引擎”。
+            该页面面向普通用户开放，只管理“我的模型配置”分组，不会修改管理员提供的全局模型；
+            管理员模型和用户模型会在聊天页分组展示，避免多用户互相覆盖 API 配置。
             API Key 默认以密码形式隐藏但会回显，点击“显示”可明文确认；保存前可点击“测试连接”验证配置是否可用。
             如果修改提供商、API Base 或 Model Name，页面会显示“复用当前密钥”的确认区；
             你可以重新输入新密钥，或勾选确认继续使用已保存密钥。
         </div>
 
+        <div class="user-model-switcher">
+            <div class="switcher-actions">
+                <select id="user-model-switch" lay-filter="user-model-switch" style="max-width:360px;">
+                    {% if model_options %}
+                    {% for opt in model_options %}
+                    <option value="{{ opt['id'] }}" {% if model and model['id'] == opt['id'] %}selected{% end %}>
+                        {{ '⭐ ' if opt.get('is_default') == 1 else '' }}{{ opt['name'] }}
+                    </option>
+                    {% end %}
+                    {% else %}
+                    <option value="">暂无我的模型配置</option>
+                    {% end %}
+                </select>
+                <a href="/admin/model/config?new=1" class="layui-btn layui-btn-primary layui-btn-sm">
+                    <i class="layui-icon layui-icon-add-1"></i> 新建我的模型
+                </a>
+            </div>
+            <div class="model-scope-tip">
+                当前编辑对象：{{ '我的模型配置' if model else '新的我的模型配置' }}。
+                管理员提供的模型请在聊天页“管理员提供”分组中直接选择，普通用户不会覆盖它们。
+            </div>
+        </div>
+
         <form class="layui-form" id="quick-model-form" action="/admin/model/config" method="post" style="max-width:700px;">
             {% module xsrf_form_html() %}
+            {% if model %}
+            <input type="hidden" name="id" value="{{ model['id'] }}">
+            {% else %}
+            <input type="hidden" name="new_model" value="1">
+            {% end %}
 
             <div class="layui-form-item">
                 <label class="layui-form-label">模型名称</label>
                 <div class="layui-input-block">
                     <input type="text" name="name" class="layui-input" required
-                           value="{{ model['name'] if model else '自助配置模型' }}"
+                           value="{{ model['name'] if model else '我的模型配置' }}"
                            placeholder="例如：GPT-4o-mini">
                 </div>
             </div>
@@ -200,6 +245,18 @@
                 </div>
             </div>
 
+            <div class="layui-form-item">
+                <label class="layui-form-label">默认设置</label>
+                <div class="layui-input-block">
+                    <input type="checkbox" name="set_default" value="1"
+                           title="设为我的默认模型"
+                           {% if (model and model.get('is_default') == 1) or not model_options %}checked{% end %}>
+                    <div class="layui-form-mid layui-word-aux">
+                        仅影响你自己的模型分组，不会改变管理员默认模型。
+                    </div>
+                </div>
+            </div>
+
             <div class="layui-form-item" style="margin-top:20px;">
                 <div class="layui-input-block">
                     <button type="button" class="layui-btn layui-btn-warm" id="test-api-config">
@@ -229,6 +286,7 @@ layui.use('form', function(){
     var testBtn = document.getElementById('test-api-config');
     var form = document.getElementById('quick-model-form');
     var resultBox = document.getElementById('quick-model-test-result');
+    var userModelSwitch = document.getElementById('user-model-switch');
     var reuseBox = document.getElementById('api-key-reuse-confirm');
     var reuseCheck = document.getElementById('confirm-reuse-key');
     var providerInput = form ? form.querySelector('[name="provider"]') : null;
@@ -246,6 +304,16 @@ layui.use('form', function(){
             var visible = keyInput.type === 'text';
             keyInput.type = visible ? 'password' : 'text';
             toggleBtn.textContent = visible ? '👁 显示' : '🙈 隐藏';
+        });
+    }
+
+    if (userModelSwitch) {
+        layui.use('form', function(){
+            layui.form.on('select(user-model-switch)', function(data){
+                if (data.value) {
+                    window.location.href = '/admin/model/config?id=' + encodeURIComponent(data.value);
+                }
+            });
         });
     }
 

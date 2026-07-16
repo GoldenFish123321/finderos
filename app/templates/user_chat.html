@@ -565,14 +565,26 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
             <label>🤖 模型引擎</label>
             <select id="model-select" onchange="switchModel()">
                 {% if models %}
+                <optgroup label="我的模型配置">
                 {% for m in models %}
-                {% if m.get('is_enabled') == 1 %}
+                {% if m.get('is_enabled') == 1 and m.get('model_scope', 'admin') == 'user' %}
                 <option value="{{ m['id'] }}"
                     {% if selected and selected['id'] == m['id'] %}selected{% end %}>
                     {{ '⭐ ' if m.get('is_default') == 1 else '' }}{{ m['name'] }}
                 </option>
                 {% end %}
                 {% end %}
+                </optgroup>
+                <optgroup label="管理员提供模型">
+                {% for m in models %}
+                {% if m.get('is_enabled') == 1 and m.get('model_scope', 'admin') == 'admin' %}
+                <option value="{{ m['id'] }}"
+                    {% if selected and selected['id'] == m['id'] %}selected{% end %}>
+                    {{ '⭐ ' if m.get('is_default') == 1 else '' }}{{ m['name'] }}
+                </option>
+                {% end %}
+                {% end %}
+                </optgroup>
                 {% end %}
             </select>
             {% if can_config_model_api %}

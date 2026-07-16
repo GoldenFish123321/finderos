@@ -147,9 +147,13 @@
 | max_tokens | INTEGER | 最大Token数 |
 | context_size | INTEGER | 上下文窗口大小 |
 | is_enabled | INTEGER DEFAULT 1 | 启用状态 |
-| is_default | INTEGER DEFAULT 0 | 是否默认模型 |
+| is_default | INTEGER DEFAULT 0 | 是否默认模型（在 admin 组或单个用户 user 组内生效） |
+| model_scope | TEXT DEFAULT 'admin' | 模型分组：`admin` 管理员提供模型，`user` 用户自助模型 |
+| owner_username | TEXT DEFAULT '' | `user` 模型所属用户名；`admin` 模型为空 |
 | total_tokens | INTEGER DEFAULT 0 | Token 消耗累计 |
 | created_at | TIMESTAMP | 创建时间 |
+
+> 分组约束：管理员模型管理页只操作 `model_scope='admin'`；普通用户快速配置页只操作 `model_scope='user' AND owner_username=<当前用户>`。聊天页合并展示当前用户自己的 user 模型与管理员提供的 admin 模型，禁止访问其他用户模型。
 
 ### data_warehouse 表（独立数据仓库）
 | 字段 | 类型 | 说明 |

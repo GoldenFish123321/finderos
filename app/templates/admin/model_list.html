@@ -20,6 +20,11 @@
 .model-stats .stat-total b { color: #5ea3ff; }
 .model-stats .stat-enabled b { color: #5FB878; }
 .model-stats .stat-default b { color: #FFB800; }
+.model-scope-note {
+    margin:-8px 0 16px 0;
+    color:#a0a0c0;
+    font-size:12px;
+}
 
 /* 分类标签 — 沉浸式风格 */
 .category-tabs {
@@ -155,6 +160,9 @@
         <span class="stat-total">总数：<b>{{ stats['total'] }}</b></span>
         <span class="stat-enabled">已启用：<b>{{ stats['enabled'] }}</b></span>
         <span class="stat-default">默认模型：<b>{{ '⭐' if stats['has_default'] > 0 else '—' }}</b></span>
+    </div>
+    <div class="model-scope-note">
+        当前页面仅管理“管理员提供模型”分组；普通用户在“模型 API 配置”中创建的“我的模型配置”不会出现在这里。
     </div>
 
     <!-- 分类标签 -->

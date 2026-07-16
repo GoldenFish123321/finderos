@@ -192,6 +192,10 @@ def test_model_quick_config_template_key_echo_and_test_ui():
     assert 'value="{{ model[\'api_key\'] if model else \'\' }}"' in source
     assert "toggle-api-key" in source
     assert "已保存密钥" in source
+    assert "user-model-switch" in source
+    assert "只管理“我的模型配置”分组" in source
+    assert "新建我的模型" in source
+    assert "设为我的默认模型" in source
     assert "api-key-reuse-confirm" in source
     assert "confirm_reuse_key" in source
     assert 'id="confirm-reuse-key"' in source
@@ -222,6 +226,9 @@ def test_model_quick_config_handlers_use_confirm_reuse_flag():
     for handler_source in (save_handler, test_handler):
         assert 'confirm_reuse_key = self.get_body_argument("confirm_reuse_key", "0") == "1"' in handler_source
         assert "clear_key, confirm_reuse_key" in handler_source
+        assert "_get_target_model" in handler_source
+    assert "owner_username" in save_handler
+    assert 'model_scope="user"' in save_handler
 
 
 def test_model_quick_config_test_redacts_key_and_reports_success():

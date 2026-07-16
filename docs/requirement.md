@@ -62,8 +62,9 @@
 - 6 大分类（text/image/audio/video/multimodal/embedding）
 - SSE 流式对话（真实 API + Mock 回退）
 - Token 消耗累计 + 对话审计日志
-- 完整 `/admin/model` 仍属于管理员级全局模型管理；普通用户默认使用 `/admin/model/config` 进行模型 API 快速配置
-- 模型 API 快速配置页需回显已保存 API Key（默认密码框隐藏，可手动显示/隐藏）并支持保存前测试连接；变更 Provider/API Base/Model Name 且继续使用已保存密钥时，需显示明确的确认复用入口
+- 完整 `/admin/model` 仍属于管理员级全局模型管理，仅维护 `admin` 管理员提供模型组；普通用户默认使用 `/admin/model/config` 维护自己的 `user` 模型组
+- 模型 API 快速配置页需回显当前用户已保存 API Key（默认密码框隐藏，可手动显示/隐藏）并支持保存前测试连接；变更 Provider/API Base/Model Name 且继续使用已保存密钥时，需显示明确的确认复用入口
+- 聊天页模型选择需按“我的模型配置 / 管理员提供模型”分组展示；用户模型按 `owner_username` 隔离，不能被其他用户选择或覆盖
 
 ---
 
