@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.3.2-beta (2026-07-16) — Bug 修复
+
+- 🐛 **修复 #120**：`deep_collector.py` 编码探测改为两阶段策略（`errors="strict"` 试探 + `errors="replace"` 容错），防止 GB18030 等编码含非法字节时抛出 `UnicodeDecodeError` 导致采集失败，同时确保 GBK/GB18030 中文页面能被正确检测编码
+- ✅ **测试 #120**：新增 `test_bug120_encoding_fallback.py`（6 个用例），覆盖纯 UTF-8/GBK 正确解码、非法字节容错、latin-1 兜底等场景
+
 ## v1.3.1-beta (2026-07-16) — Bug 修复 + 代码清理
 
 - 🐛 **修复 #23**：`/admin/dashboard` 数智大屏页面因缺少 `xsrf_token` 模板变量导致 500 错误（`NameError: name 'xsrf_token' is not defined`）
