@@ -844,6 +844,32 @@ class UserChatStreamHandler(BaseHandler):
             return
         message = sanitize_user_input(message)
 
+        # ── Issue #98: 敏感词检测 → 用户侧推送预警提示 ──
+        from app.models.sensitive_word import SensitiveWordRepository
+        _sensitive_words = SensitiveWordRepository.get_all_enabled()
+        self._sensitive_matched = []
+        if _sensitive_words:
+            import re as _re
+            for _w in _sensitive_words:
+                word = _w.get("word", "")
+                if word and _re.search(_re.escape(word), message, _re.IGNORECASE):
+                    self._sensitive_matched.append({"word": word, "severity": _w.get("severity", 1)})
+        if self._sensitive_matched:
+            for _m in self._sensitive_matched:
+                try:
+                    SensitiveWordRepository._create_alert(
+                        source_type="conversation",
+                        content_preview=message[:200],
+                        matched_word=_m["word"],
+                        severity=_m["severity"],
+                    )
+                except Exception:
+                    pass
+            logger.info(
+                f"用户 {self.current_user} 消息含敏感词: {[m['word'] for m in self._sensitive_matched]}, "
+                f"msg_preview={message[:80]}"
+            )
+
         # 快捷指令
         if message.startswith("/"):
             await self._handle_slash_command(message, conversation_id)
@@ -905,6 +931,18 @@ class UserChatStreamHandler(BaseHandler):
         self.set_header("Cache-Control", "no-cache")
         self.set_header("Connection", "keep-alive")
         self.set_header("X-Accel-Buffering", "no")
+
+        # ── Issue #98: 敏感词检测 → SSE 用户侧预警 ──
+        _sensitive_matched = getattr(self, '_sensitive_matched', [])
+        if _sensitive_matched:
+            try:
+                import json as _json
+                self.write(
+                    f"event: sensitive_warning\ndata: {_json.dumps({'msg': '系统检测到您的提问涉及敏感内容，已记录并通知管理员审核。'}, ensure_ascii=False)}\n\n"
+                )
+                await self.flush()
+            except Exception:
+                pass
 
         total_tokens = 0
         assistant_reply = ""
@@ -1633,6 +1671,26 @@ class UserEmployeeInvokeHandler(BaseHandler):
             return
         message = sanitize_user_input(message)
 
+        # ── Issue #98: 敏感词检测 ──
+        from app.models.sensitive_word import SensitiveWordRepository
+        self._sensitive_matched = []
+        _sw = SensitiveWordRepository.get_all_enabled()
+        if _sw:
+            import re as _re
+            for _w in _sw:
+                word = _w.get("word", "")
+                if word and _re.search(_re.escape(word), message, _re.IGNORECASE):
+                    self._sensitive_matched.append({"word": word, "severity": _w.get("severity", 1)})
+        if self._sensitive_matched:
+            for _m in self._sensitive_matched:
+                try:
+                    SensitiveWordRepository._create_alert(
+                        source_type="conversation", content_preview=message[:200],
+                        matched_word=_m["word"], severity=_m["severity"],
+                    )
+                except Exception:
+                    pass
+
         emp = DigitalEmployeeRepository.get_by_id(emp_id)
         if not emp or emp.get("is_enabled") == 0:
             self.write({"code": 1, "msg": "员工不可用"})
@@ -1718,6 +1776,16 @@ class UserEmployeeInvokeHandler(BaseHandler):
         self.set_header("Cache-Control", "no-cache")
         self.set_header("Connection", "keep-alive")
         self.set_header("X-Accel-Buffering", "no")
+
+        # ── Issue #98: 敏感词 SSE 预警 ──
+        if getattr(self, '_sensitive_matched', []):
+            try:
+                self.write(
+                    f"event: sensitive_warning\ndata: {json.dumps({'msg': '系统检测到您的提问涉及敏感内容，已记录并通知管理员审核。'}, ensure_ascii=False)}\n\n"
+                )
+                await self.flush()
+            except Exception:
+                pass
 
         self.write(
             f"event: employee\ndata: {json.dumps({'name': emp_name, 'type': emp.get('employee_type', 'llm')}, ensure_ascii=False)}\n\n"
