@@ -29,6 +29,7 @@
             <div class="emp-type-toggle">
                 {% for t in employee_types %}
                 <input type="radio" name="employee_type" value="{{ t['value'] }}" id="type-{{ t['value'] }}"
+                       lay-filter="employeeType"
                        {% if (employee and employee['employee_type'] == t['value']) or (not employee and t['value'] == 'llm') %}checked{% end %}>
                 <label for="type-{{ t['value'] }}">{{ t['name'] }}</label>
                 {% end %}
@@ -277,19 +278,23 @@ layui.use(['form'], function(){
     var form = layui.form;
     form.render();
 
-    // 类型切换
-    document.querySelectorAll('input[name="employee_type"]').forEach(function(radio){
-        radio.addEventListener('change', function(){
-            document.querySelector('.llm-fields').classList.toggle('active', this.value === 'llm');
-            document.querySelector('.api-fields').classList.toggle('active', this.value === 'api');
-        });
+    // 类型切换 — 使用 Layui 原生 radio 事件，确保 form.render() 后仍能正常触发
+    function toggleEmployeeFields(type) {
+        var llmEl = document.querySelector('.llm-fields');
+        var apiEl = document.querySelector('.api-fields');
+        if (llmEl) llmEl.classList.toggle('active', type === 'llm');
+        if (apiEl) apiEl.classList.toggle('active', type === 'api');
+    }
+
+    // Layui radio 事件监听
+    form.on('radio(employeeType)', function(data){
+        toggleEmployeeFields(data.value);
     });
 
-    // 初始化类型显示
+    // 初始化类型显示（从服务端渲染的 checked 状态）
     var checkedType = document.querySelector('input[name="employee_type"]:checked');
     if (checkedType){
-        document.querySelector('.llm-fields').classList.toggle('active', checkedType.value === 'llm');
-        document.querySelector('.api-fields').classList.toggle('active', checkedType.value === 'api');
+        toggleEmployeeFields(checkedType.value);
     }
 
     // 接口模板联动：选择接口后自动填充 API 型员工配置
