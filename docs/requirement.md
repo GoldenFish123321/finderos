@@ -79,7 +79,7 @@
 - 模型选择区与欢迎快捷操作向有 `/admin/model/config` 权限的用户提供链接，便于普通用户在聊天过程中自助配置模型 API
 - 登录、注册和 `/index` 默认进入 `/chat`，不再因普通用户拥有 `/admin/model/config` 而直接进入模型配置页
 - ECharts 图表自动注入（`[CHART:...]` / `[TABLE:...]` 标记）
-- 快捷指令（`/clear` `/summary` `/trans` `/tools`）
+- 快捷指令（`/summary` `/trans` `/tools`）
 
 ### 11. 管理侧会话管理 (`/admin/conversation`)
 

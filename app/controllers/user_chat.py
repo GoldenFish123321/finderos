@@ -1513,13 +1513,7 @@ class UserChatStreamHandler(BaseHandler):
         self.set_header("Content-Type", "text/event-stream")
         self.set_header("Cache-Control", "no-cache")
 
-        if cmd == "/clear":
-            self.write(f"event: action\ndata: {json.dumps({'action': 'clear'})}\n\n")
-            self.write("data: [DONE]\n\n")
-            await self.flush()
-            return
-
-        elif cmd == "/tools":
+        if cmd == "/tools":
             tools_list = _mcp_server.list_tools()
             lines = ["🔧 **可用 MCP 工具列表**:\n"]
             for t in tools_list:
@@ -1570,7 +1564,7 @@ class UserChatStreamHandler(BaseHandler):
         else:
             await _sse_write(
                 self,
-                f"未知指令: {message}。可用指令: /clear, /summary, /trans, /tools"
+                f"未知指令: {message}。可用指令: /summary, /trans, /tools"
             )
             await _sse_done(self)
 

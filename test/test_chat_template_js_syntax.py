@@ -69,14 +69,10 @@ def test_user_chat_media_onerror_handlers_do_not_break_script_string():
     assert "this.style.display=&quot;none&quot;" in html
 
 
-def test_clear_shortcut_uses_safe_local_clear_flow():
-    """底部 /clear 应走专用清屏逻辑，不再只把命令塞进输入框或创建空会话。"""
+def test_clear_shortcut_has_been_removed_from_chat_ui():
+    """/clear 功能已移除，聊天页不应再暴露入口或特殊处理。"""
     html = _render_chat_template(can_config_model_api=True)
-    assert 'onclick="clearChatShortcut()"' in html
-    assert "function clearChatView(options)" in html
-    assert "let chatFlowVersion = 0" in html
-    assert "const sendVersion = ++chatFlowVersion" in html
-    assert "if (sendVersion !== chatFlowVersion) return" in html
-    assert "message.toLowerCase() === '/clear'" in html
-    assert "已清空当前屏幕，历史记录未删除" in html
+    assert "/clear" not in html
+    assert "clearChatShortcut" not in html
+    assert "clearChatView" not in html
     assert 'onclick="setInput(\'/clear\')"' not in html

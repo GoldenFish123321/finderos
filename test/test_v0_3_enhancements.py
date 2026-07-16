@@ -462,34 +462,28 @@ class TestStep4_IntentAndFTS5(BaseTestCase):
 # ============================================================
 
 class TestStep5_SlashCommands(BaseTestCase):
-    """验证 /clear, /summary, /trans 指令和自动标题。"""
+    """验证 /summary, /trans, /tools 指令和自动标题。"""
 
-    def test_01_clear_command_detection(self):
-        """/clear 指令应被识别为快捷指令。"""
-        self.assertTrue("/clear".startswith("/"))
-        self.assertEqual("/clear", "/clear")
-        print("  ✅ /clear 指令识别正确")
-
-    def test_02_summary_command_detection(self):
+    def test_01_summary_command_detection(self):
         """/summary 指令应被识别。"""
         self.assertTrue("/summary".startswith("/"))
         print("  ✅ /summary 指令识别正确")
 
-    def test_03_trans_command_detection(self):
+    def test_02_trans_command_detection(self):
         """/trans 指令应被识别。"""
         self.assertTrue("/trans".startswith("/"))
         # /trans 可以带参数如 /trans en
         self.assertTrue("/trans en".startswith("/"))
         print("  ✅ /trans 指令识别正确")
 
-    def test_04_unknown_command(self):
+    def test_03_unknown_command(self):
         """未知 / 指令不应崩溃，应返回提示。"""
         unknown = "/unknown_command_xyz"
         self.assertTrue(unknown.startswith("/"))
         # 实际方法会返回提示信息
         print("  ✅ 未知指令格式正确，不会崩溃")
 
-    def test_05_auto_title_generation(self):
+    def test_04_auto_title_generation(self):
         """首条消息后标题应自动从"新对话"更新为消息前30字。"""
         # 创建对话
         conv_id = ConversationRepository.create(
@@ -513,20 +507,12 @@ class TestStep5_SlashCommands(BaseTestCase):
         self.assertEqual(conv["title"], message[:30])
         print(f"  ✅ 自动标题: '{conv['title']}'")
 
-    def test_06_auto_title_truncation(self):
+    def test_05_auto_title_truncation(self):
         """超长消息标题应截断为30字。"""
         long_message = "这是一个非常非常长的消息用来测试自动标题截断功能是否正常工作" * 3
         auto_title = long_message.strip()[:30]
         self.assertLessEqual(len(auto_title), 30)
         print(f"  ✅ 标题截断: {len(auto_title)} 字")
-
-    def test_07_clear_resets_conversation(self):
-        """/clear 应重置当前对话（前端行为模拟）。"""
-        # 模拟前端收到 event: action {action: 'clear'} 时的行为
-        action_data = {"action": "clear"}
-        self.assertEqual(action_data["action"], "clear")
-        # 前端会清空 chat-messages 并显示 welcome 页，重置 currentConversationId
-        print("  ✅ /clear action 数据结构正确")
 
 
 # ============================================================

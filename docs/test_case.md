@@ -121,7 +121,6 @@
 | TC-CHAT-10 | 消息元信息 | 查看 AI 回复底部 | 显示响应时间和 Token 消耗 |
 | TC-CHAT-11 | 模型 API 配置入口 | 拥有 `/admin/model/config` 权限的用户查看 B 区模型选择器或欢迎页快捷操作 | 展示“配置模型 API”链接，跳转 `/admin/model/config` |
 | TC-CHAT-12 | 聊天页脚本可用性 | 加载 `user_chat.html` 并校验内联 JavaScript 语法 | `sendMessage()` 等输入区函数正常注册，点击发送/回车不会因脚本解析错误失效 |
-| TC-CHAT-13 | `/clear` 清屏快捷项 | 点击输入框下方 `/clear 清屏` 或手输 `/clear` 回车 | 立即清空当前屏幕、取消会话选中并回到欢迎页，不创建 `/clear` 空会话；流式回复中提示稍后再清屏 |
 
 ## 7b. 管理侧会话管理（Issue #17）
 
