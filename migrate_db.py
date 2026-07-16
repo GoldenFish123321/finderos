@@ -19,6 +19,7 @@ migrate_db.py — 数据库迁移脚本
   v0.10 — 添加 mcp_tools MCP工具注册表 + mcp_tool_test_logs
   v0.10 — 添加 skills.mcp_tool_id / digital_employees.mcp_tool_ids
   v0.11 — 迁移旧 crawl4ai_enabled=1 员工的权限到 mcp_tool_ids
+  v1.3.5 — 为 conversation_messages 添加 is_sensitive / review_status 列（Issue #18）
 
 Usage:
   python migrate_db.py              # 执行待处理迁移
@@ -356,6 +357,27 @@ def run_migrations():
             "check": _check_crawl4ai_permissions_migrated,
             "run": _migrate_crawl4ai_permissions,
         },
+        # v1.3.5 Issue #18: conversation_messages 添加敏感标记和审核状态列
+        {
+            "name": "add_conversation_messages_is_sensitive",
+            "sql": "ALTER TABLE conversation_messages ADD COLUMN is_sensitive INTEGER DEFAULT 0",
+            "check": lambda c: _column_exists(c, "conversation_messages", "is_sensitive"),
+        },
+        {
+            "name": "add_conversation_messages_review_status",
+            "sql": "ALTER TABLE conversation_messages ADD COLUMN review_status TEXT DEFAULT 'pending'",
+            "check": lambda c: _column_exists(c, "conversation_messages", "review_status"),
+        },
+        {
+            "name": "idx_conv_msgs_sensitive",
+            "sql": "CREATE INDEX IF NOT EXISTS idx_conv_msgs_sensitive ON conversation_messages(is_sensitive)",
+            "check": lambda c: _index_exists(c, "idx_conv_msgs_sensitive"),
+        },
+        {
+            "name": "idx_conv_msgs_review",
+            "sql": "CREATE INDEX IF NOT EXISTS idx_conv_msgs_review ON conversation_messages(review_status)",
+            "check": lambda c: _index_exists(c, "idx_conv_msgs_review"),
+        },
     ]
 
     applied = 0
@@ -612,7 +634,7 @@ def _seed_mcp_tools(conn):
         {
             "name": "collect_with_crawl4ai", "display_name": "Crawl4ai智能采集",
             "category": "crawl4ai", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.crawl4ai_tools._deep_collect_url",
+            "handler_module": "app.mcp.builtin_tools.crawl4ai_tools._collect_with_crawl4ai",
             "description": "使用 Crawl4ai 智能爬虫引擎对指定 URL 进行深度网页内容采集。替代旧的 crawl4ai_enabled 复选框功能，支持自动检测页面结构并提取正文。优先使用 crawl4ai 引擎，不可用时回退到标准采集。当用户提供 URL 并要求「用 crawl4ai 采集」「智能爬取这个网页」时使用。",
             "input_schema": _json.dumps({
                 "type": "object",
@@ -627,7 +649,7 @@ def _seed_mcp_tools(conn):
         {
             "name": "batch_deep_collect", "display_name": "批量深度采集",
             "category": "crawl4ai", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.crawl4ai_tools._batch_deep_collect_url",
+            "handler_module": "app.mcp.builtin_tools.crawl4ai_tools._batch_deep_collect",
             "description": "批量对多个 URL 进行深度内容采集。一次性提交多个链接，系统逐一采集并汇总结果。当用户需要「批量抓取这些网页」「同时采集这几个链接」时使用此工具。",
             "input_schema": _json.dumps({
                 "type": "object",

@@ -59,6 +59,10 @@ from app.controllers.admin_employee import (
 from app.controllers.admin_conversation import (
     AdminConversationListHandler, AdminConversationDeleteHandler,
 )
+from app.controllers.admin_message import (
+    AdminMessageListHandler, AdminMessageDeleteHandler,
+    AdminMessageMarkHandler, AdminMessageBatchHandler,
+)
 from app.controllers.admin_skill import (
     SkillListHandler, SkillFormHandler, SkillDeleteHandler, SkillToggleHandler,
 )
@@ -177,6 +181,11 @@ def make_app() -> tornado.web.Application:
             # 会话管理：管理员查看/筛选/删除所有用户会话
             (r"/admin/conversation", AdminConversationListHandler),
             (r"/admin/conversation/delete", AdminConversationDeleteHandler),
+            # 消息管理：管理员逐条管理跨会话消息（Issue #18）
+            (r"/admin/message", AdminMessageListHandler),
+            (r"/admin/message/delete", AdminMessageDeleteHandler),
+            (r"/admin/message/mark", AdminMessageMarkHandler),
+            (r"/admin/message/batch", AdminMessageBatchHandler),
             # 接口管理：API 接口模板 CRUD / 测试 / 数字员工联动
             (r"/admin/interface", InterfaceListHandler),
             (r"/admin/interface/add", InterfaceFormHandler),

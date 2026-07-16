@@ -64,7 +64,7 @@
                             <i class="layui-icon layui-icon-delete"></i> 移除
                         </button>
                         <input type="hidden" name="remove_logo" id="removeLogoFlag" value="0">
-                        <div class="layui-form-mid layui-word-aux">支持 PNG / JPG / GIF / WebP / SVG，最大 2MB</div>
+                        <div class="layui-form-mid layui-word-aux">支持 PNG / JPG / GIF / WebP / SVG，最大 <span id="logoMaxSizeText">{{ config_dict.get('upload_max_size_mb', {}).get('value', '10') }}</span>MB</div>
                     </div>
                 </div>
             </div>
@@ -85,7 +85,7 @@
                     <input type="number" name="default_port" lay-verify="port" placeholder="10010"
                            value="{{ config_dict.get('default_port', {}).get('value', '10010') }}"
                            class="layui-input" style="max-width: 200px;">
-                    <div class="layui-form-mid layui-word-aux">仅供参考，实际端口由环境变量 PORT 控制，修改后需重启服务</div>
+                        <div class="layui-form-mid layui-word-aux">服务监听端口，修改后需重启服务生效（环境变量 PORT 优先级更高请在启动时指定）</div>
                 </div>
             </div>
 
@@ -135,6 +135,141 @@
                 </div>
             </div>
 
+            <!-- ========== 备份策略区（#99 新增）========== -->
+            <fieldset class="layui-elem-field layui-field-title" style="margin-top: 30px;">
+                <legend>备份策略</legend>
+            </fieldset>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">备份路径</label>
+                <div class="layui-input-block">
+                    <input type="text" name="db_backup_path" placeholder="backups/"
+                           value="{{ config_dict.get('db_backup_path', {}).get('value', 'backups/') }}"
+                           class="layui-input" style="max-width: 400px;">
+                    <div class="layui-form-mid layui-word-aux">数据库备份文件存放路径（相对于项目根目录）</div>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">备份间隔（天）</label>
+                <div class="layui-input-block">
+                    <input type="number" name="db_backup_interval_days" lay-verify="number" placeholder="7"
+                           value="{{ config_dict.get('db_backup_interval_days', {}).get('value', '7') }}"
+                           class="layui-input" style="max-width: 150px;" min="1" max="365">
+                    <div class="layui-form-mid layui-word-aux">两次自动备份之间的间隔天数（1-365）</div>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">保留份数</label>
+                <div class="layui-input-block">
+                    <input type="number" name="db_backup_keep_count" lay-verify="number" placeholder="5"
+                           value="{{ config_dict.get('db_backup_keep_count', {}).get('value', '5') }}"
+                           class="layui-input" style="max-width: 150px;" min="1" max="100">
+                    <div class="layui-form-mid layui-word-aux">备份文件最大保留份数，超出后自动清理最早的文件</div>
+                </div>
+            </div>
+
+            <!-- ========== 日志与通知区（#99 新增）========== -->
+            <fieldset class="layui-elem-field layui-field-title" style="margin-top: 30px;">
+                <legend>日志与通知</legend>
+            </fieldset>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">日志级别</label>
+                <div class="layui-input-block">
+                    <select name="log_level">
+                        {% for lv in ['DEBUG', 'INFO', 'WARNING', 'ERROR'] %}
+                        <option value="{{ lv }}"
+                            {% if config_dict.get('log_level', {}).get('value', 'INFO') == lv %}selected{% end %}>
+                            {{ lv }}
+                        </option>
+                        {% end %}
+                    </select>
+                    <div class="layui-form-mid layui-word-aux">DEBUG 输出最详细（仅开发调试使用），生产环境建议 INFO 或 WARNING</div>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">SMTP 服务器</label>
+                <div class="layui-input-block">
+                    <input type="text" name="smtp_host" placeholder="smtp.example.com:587"
+                           value="{{ config_dict.get('smtp_host', {}).get('value', '') }}"
+                           class="layui-input" style="max-width: 400px;">
+                    <div class="layui-form-mid layui-word-aux">SMTP 邮件服务器地址（含端口），为空则不启用邮件通知</div>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">Webhook URL</label>
+                <div class="layui-input-block">
+                    <input type="text" name="webhook_url" placeholder="https://hooks.example.com/notify"
+                           value="{{ config_dict.get('webhook_url', {}).get('value', '') }}"
+                           class="layui-input" style="max-width: 500px;">
+                    <div class="layui-form-mid layui-word-aux">全局 Webhook 通知地址（支持钉钉/企业微信/飞书机器人），为空则不启用</div>
+                </div>
+            </div>
+
+            <!-- ========== 采集与安全区（#99 新增）========== -->
+            <fieldset class="layui-elem-field layui-field-title" style="margin-top: 30px;">
+                <legend>采集与安全</legend>
+            </fieldset>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">采集间隔（分）</label>
+                <div class="layui-input-block">
+                    <input type="number" name="collector_interval_minutes" lay-verify="number" placeholder="60"
+                           value="{{ config_dict.get('collector_interval_minutes', {}).get('value', '60') }}"
+                           class="layui-input" style="max-width: 150px;" min="1" max="1440">
+                    <div class="layui-form-mid layui-word-aux">全局默认采集调度间隔（分钟），1-1440（24小时）</div>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">验证码开关</label>
+                <div class="layui-input-block">
+                    <input type="checkbox" name="captcha_enabled" lay-skin="switch" lay-text="ON|OFF"
+                           value="true"
+                           {% if config_dict.get('captcha_enabled', {}).get('value', 'false') in ('true', '1', 'yes') %}checked{% end %}>
+                    <div class="layui-form-mid layui-word-aux">启用后登录页需要输入图形验证码</div>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">注册开关</label>
+                <div class="layui-input-block">
+                    <input type="checkbox" name="registration_enabled" lay-skin="switch" lay-text="ON|OFF"
+                           value="true"
+                           {% if config_dict.get('registration_enabled', {}).get('value', 'true') in ('true', '1', 'yes') %}checked{% end %}>
+                    <div class="layui-form-mid layui-word-aux">关闭后禁止新用户自行注册（管理员仍可手动创建）</div>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">会话过期（时）</label>
+                <div class="layui-input-block">
+                    <input type="number" name="session_expire_hours" lay-verify="number" placeholder="24"
+                           value="{{ config_dict.get('session_expire_hours', {}).get('value', '24') }}"
+                           class="layui-input" style="max-width: 150px;" min="1" max="720">
+                    <div class="layui-form-mid layui-word-aux">用户会话过期时间（小时），超时后需重新登录</div>
+                </div>
+            </div>
+
+            <!-- ========== 上传限制区（#99 新增）========== -->
+            <fieldset class="layui-elem-field layui-field-title" style="margin-top: 30px;">
+                <legend>上传限制</legend>
+            </fieldset>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">上传大小限制（MB）</label>
+                <div class="layui-input-block">
+                    <input type="number" name="upload_max_size_mb" lay-verify="number" placeholder="10"
+                           value="{{ config_dict.get('upload_max_size_mb', {}).get('value', '10') }}"
+                           class="layui-input" style="max-width: 150px;" min="1" max="1024">
+                    <div class="layui-form-mid layui-word-aux">文件上传大小上限（MB），包括 Logo、附件等</div>
+                </div>
+            </div>
+
             <!-- ========== 操作按钮 ========== -->
             <div class="layui-form-item" style="margin-top: 30px;">
                 <div class="layui-input-block">
@@ -177,6 +312,10 @@ layui.use(['form', 'upload'], function() {
         }
     });
 
+    // #99: Logo 上传大小限制从配置读取（默认 10MB）
+    var maxLogoSizeMB = parseInt('{{ config_dict.get("upload_max_size_mb", {}).get("value", "10") }}') || 10;
+    var maxLogoSizeBytes = maxLogoSizeMB * 1024 * 1024;
+
     // Logo 上传：点击按钮触发文件选择
     $('#uploadBtn').on('click', function() {
         $('#logoFileInput').click();
@@ -187,9 +326,9 @@ layui.use(['form', 'upload'], function() {
         var file = e.target.files[0];
         if (!file) return;
 
-        // 校验文件大小
-        if (file.size > 2 * 1024 * 1024) {
-            layer.msg('图片大小不能超过 2MB', {icon: 2});
+        // 校验文件大小（#99: 使用可配置的上限）
+        if (file.size > maxLogoSizeBytes) {
+            layer.msg('图片大小不能超过 ' + maxLogoSizeMB + 'MB', {icon: 2});
             return;
         }
 

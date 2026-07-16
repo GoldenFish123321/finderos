@@ -260,6 +260,41 @@ audit_logs (独立审计)
 - 环境变量覆盖: `COOKIE_SECRET`, `DB_PATH`, `PORT`, `BIND_ADDRESS`, `DEBUG`, `PBKDF2_ITERATIONS` 等
 - 数据库: `database/finderos.db` (SQLite WAL 模式)
 
+### 5.1 系统设置（Web UI 配置中心） — #99
+
+系统配置采用 **DB 持久化 + 内存缓存** 双层架构：
+
+```
+管理后台 /admin/config (config.html)
+    │ POST 保存
+    ▼
+SystemConfigRepository.bulk_update()  ← 持久化到 system_config 表
+    │
+    ▼
+settings.load_from_db()               ← 刷新内存 Settings 对象
+    │ _DB_KEY_MAP 白名单映射
+    ▼
+Settings.XXX 属性                     ← 模板/控制器即时读取
+```
+
+**配置类别（19 项）**：
+
+| 类别 | 数量 | 配置项 |
+|------|------|--------|
+| general | 5 | system_name, subtitle, logo, icp_number, default_port |
+| ai | 3 | default_model, temperature, max_tokens |
+| backup | 3 | db_backup_path, interval_days, keep_count |
+| logging | 1 | log_level |
+| notification | 2 | smtp_host, webhook_url |
+| collector | 1 | collector_interval_minutes |
+| security | 3 | captcha_enabled, registration_enabled, session_expire_hours |
+| upload | 1 | upload_max_size_mb |
+
+**安全设计**：
+- `_DB_KEY_MAP` 白名单机制：仅允许预定义的 key 覆盖 Settings 属性
+- 类型安全转换：int / float / bool 自动转换，转换失败回退默认值
+- 即时生效：保存后立即调用 `load_from_db()` 刷新内存
+
 ## 6. 默认账户
 
 | 用户名 | 密码 | 角色 |

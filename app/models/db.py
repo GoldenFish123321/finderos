@@ -361,11 +361,16 @@ def init_db():
                 role            TEXT NOT NULL,
                 content         TEXT DEFAULT '',
                 token_count     INTEGER DEFAULT 0,
+                is_sensitive    INTEGER DEFAULT 0,
+                review_status   TEXT DEFAULT 'pending',
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_msgs_conv ON conversation_messages(conversation_id)")
+        # v1.3.5 Issue #18: 消息管理索引
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_msgs_sensitive ON conversation_messages(is_sensitive)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_msgs_review ON conversation_messages(review_status)")
 
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id)")
@@ -545,6 +550,8 @@ def seed_default_data():
                 (21, "数智大屏", "layui-icon-screen-full", "/admin/dashboard", None, 3, 1),
                 # 舆情大屏 (v1.2.0 新增)
                 (22, "舆情大屏", "layui-icon-log", "/admin/sentiment", None, 14, 1),
+                # 消息管理 (v1.3.5 Issue #18 新增)
+                (23, "消息管理", "layui-icon-email", "/admin/message", None, 15, 1),
             ]
             conn.executemany(
                 "INSERT INTO functions (id, name, icon, route_path, parent_id, sort_order, is_enabled) "
@@ -564,6 +571,7 @@ def seed_default_data():
             ("常规设置", "layui-icon-set-fill", "/admin/config", 3, 2),
             ("数智大屏", "layui-icon-screen-full", "/admin/dashboard", None, 3),
             ("舆情大屏", "layui-icon-log", "/admin/sentiment", None, 14),
+            ("消息管理", "layui-icon-email", "/admin/message", None, 15),
         ):
             func = conn.execute(
                 "SELECT id FROM functions WHERE route_path = ?", (route_path,)
@@ -618,24 +626,68 @@ def seed_default_data():
                     (normal_role_id, func_id),
                 )
 
-        # ── 种子：系统配置默认值（v0.11 新增）──
+        # ── 种子：系统配置默认值（v0.11 新增, v1.3.5 扩展至 19 项 #99）──
         existing_config = conn.execute("SELECT COUNT(*) as cnt FROM system_config").fetchone()
         if existing_config["cnt"] == 0:
             default_configs = [
+                # === general（常规设置）===
                 ("system_name", "瞭望与问数系统", "系统名称，显示在页面标题和头部导航栏", "general"),
                 ("system_subtitle", "DataFinderAgentOS", "系统副标题/英文名称，显示在头部版本号旁", "general"),
                 ("system_logo", "", "系统 Logo 图片路径（相对于 static 目录），为空则显示文字 Logo", "general"),
                 ("icp_number", "", "ICP 备案号，显示在页面底部", "general"),
                 ("default_port", "10010", "默认服务端口（重启后生效，环境变量 PORT 优先级更高）", "general"),
+                # === ai（AI 默认参数）===
                 ("ai_default_model", "", "AI 默认模型 ID（空=使用 is_default=1 的模型）", "ai"),
                 ("ai_default_temperature", "0.7", "AI 默认温度参数（0-2）", "ai"),
                 ("ai_default_max_tokens", "4096", "AI 默认最大输出 Token 数", "ai"),
+                # === backup（备份策略）=== #99
+                ("db_backup_path", "backups/", "数据库备份文件存放路径（相对于项目根目录）", "backup"),
+                ("db_backup_interval_days", "7", "数据库自动备份间隔天数", "backup"),
+                ("db_backup_keep_count", "5", "备份文件最大保留份数（超出自动清理旧文件）", "backup"),
+                # === logging（日志配置）=== #99
+                ("log_level", "INFO", "应用日志级别：DEBUG / INFO / WARNING / ERROR", "logging"),
+                # === notification（通知配置）=== #99
+                ("smtp_host", "", "SMTP 邮件服务器地址（为空则不启用邮件通知）", "notification"),
+                ("webhook_url", "", "Webhook 通知 URL（为空则不启用 Webhook 通知）", "notification"),
+                # === collector（采集配置）=== #99
+                ("collector_interval_minutes", "60", "全局默认采集调度间隔（分钟）", "collector"),
+                # === security（安全策略）=== #99
+                ("captcha_enabled", "false", "是否启用登录验证码（true/false）", "security"),
+                ("registration_enabled", "true", "是否允许新用户注册（true/false）", "security"),
+                ("session_expire_hours", "24", "用户会话过期时间（小时）", "security"),
+                # === upload（上传限制）=== #99
+                ("upload_max_size_mb", "10", "文件上传大小限制（MB）", "upload"),
             ]
             conn.executemany(
                 "INSERT INTO system_config (key, value, description, category) VALUES (?, ?, ?, ?)",
                 default_configs,
             )
-            print("[种子] 默认系统配置已创建（8 项）")
+            print("[种子] 默认系统配置已创建（19 项）")
+
+        # #99: 迁移已有数据库 — 确保新配置项存在（使用 upsert 避免重复）
+        _MIGRATE_NEW_CONFIGS = [
+            ("db_backup_path", "backups/", "数据库备份文件存放路径（相对于项目根目录）", "backup"),
+            ("db_backup_interval_days", "7", "数据库自动备份间隔天数", "backup"),
+            ("db_backup_keep_count", "5", "备份文件最大保留份数（超出自动清理旧文件）", "backup"),
+            ("log_level", "INFO", "应用日志级别：DEBUG / INFO / WARNING / ERROR", "logging"),
+            ("smtp_host", "", "SMTP 邮件服务器地址（为空则不启用邮件通知）", "notification"),
+            ("webhook_url", "", "Webhook 通知 URL（为空则不启用 Webhook 通知）", "notification"),
+            ("collector_interval_minutes", "60", "全局默认采集调度间隔（分钟）", "collector"),
+            ("captcha_enabled", "false", "是否启用登录验证码（true/false）", "security"),
+            ("registration_enabled", "true", "是否允许新用户注册（true/false）", "security"),
+            ("session_expire_hours", "24", "用户会话过期时间（小时）", "security"),
+            ("upload_max_size_mb", "10", "文件上传大小限制（MB）", "upload"),
+        ]
+        migrated = 0
+        for key, value, desc, cat in _MIGRATE_NEW_CONFIGS:
+            cursor = conn.execute(
+                "INSERT OR IGNORE INTO system_config (key, value, description, category) VALUES (?, ?, ?, ?)",
+                (key, value, desc, cat),
+            )
+            if cursor.rowcount > 0:
+                migrated += 1
+        if migrated > 0:
+            print(f"[迁移] 已补充 {migrated} 项新配置（#99 扩展）")
 
         conn.commit()
 
@@ -1265,11 +1317,11 @@ def _seed_default_mcp_tools():
 
             # ── 爬虫增强类 (crawl4ai) ──
             (15, "collect_with_crawl4ai", "Crawl4ai智能采集", "使用 Crawl4ai 智能爬虫引擎对指定 URL 进行深度网页内容采集。替代旧的 crawl4ai_enabled 复选框功能，支持自动检测页面结构并提取正文。优先使用 crawl4ai 引擎，不可用时回退到标准采集。当用户提供 URL 并要求「用 crawl4ai 采集」「智能爬取这个网页」时使用。", "crawl4ai", "builtin",
-             "app.mcp.builtin_tools.crawl4ai_tools._deep_collect_url", "", "GET", "{}", "",
+             "app.mcp.builtin_tools.crawl4ai_tools._collect_with_crawl4ai", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{"url":{"type":"string","description":"目标URL"},"extract_mode":{"type":"string","enum":["auto","article","full"],"default":"auto"}},"required":["url"]}, ensure_ascii=False),
              "{}", 1, 1, 1, "{}"),
             (16, "batch_deep_collect", "批量深度采集", "批量对多个 URL 进行深度内容采集。一次性提交多个链接，系统逐一采集并汇总结果。当用户需要「批量抓取这些网页」「同时采集这几个链接」时使用此工具。", "crawl4ai", "builtin",
-             "app.mcp.builtin_tools.crawl4ai_tools._batch_deep_collect_url", "", "GET", "{}", "",
+             "app.mcp.builtin_tools.crawl4ai_tools._batch_deep_collect", "", "GET", "{}", "",
              json.dumps({"type":"object","properties":{"urls":{"type":"array","items":{"type":"string"},"description":"目标URL列表"},"extract_mode":{"type":"string","enum":["auto","article","full"],"default":"auto"}},"required":["urls"]}, ensure_ascii=False),
              "{}", 1, 1, 2, "{}"),
 

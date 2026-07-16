@@ -1,4 +1,4 @@
-# 🔭 瞭望与问数系统 (DataFinderAgentOS) v1.3.3-beta
+# 🔭 瞭望与问数系统 (DataFinderAgentOS) v1.4.0-beta
 
 > 基于 Tornado 异步 Web 框架构建的轻量级智能数据采集与 AI 问数一体化平台。
 > **v1.3.0 新增**：多模态 AI 媒体生成（文生图/图生图/文生视频/图生视频）、20+ MCP 工具。
@@ -368,7 +368,7 @@ python main.py
 
 ```
 ==================================================
-  瞭望与问数系统 (DataFinderAgentOS) v1.3.1-beta
+  瞭望与问数系统 (DataFinderAgentOS) v1.4.0-beta
   Server started: http://localhost:10010/
 ==================================================
 ```
@@ -1130,6 +1130,14 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 | GET | `/admin/conversation` | 所有用户会话列表，支持 `?username=&keyword=&page=&id=` 筛选/查看详情 |
 | POST | `/admin/conversation/delete` | 管理员删除任意会话及其消息 |
 
+#### 管理侧消息管理（Issue #18）
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/message` | 跨会话逐条消息管理，支持 `?username=&keyword=&role=&is_sensitive=&review_status=&date_from=&date_to=&page=` 多维筛选 |
+| POST | `/admin/message/delete` | 删除单条消息 |
+| POST | `/admin/message/mark` | 标记消息（敏感标记 `toggle_sensitive` / 审核状态 `set_review`） |
+| POST | `/admin/message/batch` | 批量操作（批量删除/标记敏感/审核通过） |
+
 #### 接口管理（Issue #26）
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -1410,6 +1418,23 @@ Permissions-Policy: camera=(), microphone=(), geolocation=()
 | `LOGIN_MAX_FAILURES` | `5` | 登录失败次数上限（同一 IP + 用户名组合） |
 | `LOGIN_LOCKOUT_SECONDS` | `900` | 登录锁定时间（秒），默认 15 分钟 |
 | `BIND_ADDRESS` | `127.0.0.1` | HTTP 服务监听地址（`0.0.0.0` 监听所有网卡） |
+
+### 系统设置（Web UI 可管理）
+
+以下配置项可通过管理后台 **常规设置** 页面（`/admin/config`）在线修改，**修改后即时生效（部分需重启）**：
+
+| 类别 | 配置项 | 默认值 | 说明 |
+|------|--------|--------|------|
+| **常规** | 系统名称/副标题/Logo/备案号/端口 | — | 页面标题、Logo、底部备案号 |
+| **AI** | 默认模型/温度/最大Token | 自动/0.7/4096 | AI 对话默认参数 |
+| **备份** | 备份路径/间隔天数/保留份数 | backups//7/5 | 数据库自动备份策略 (#99) |
+| **日志** | 日志级别 | INFO | DEBUG/INFO/WARNING/ERROR (#99) |
+| **通知** | SMTP 服务器/Webhook URL | 空 | 邮件与 Webhook 通知地址 (#99) |
+| **采集** | 采集间隔（分钟） | 60 | 全局默认采集调度间隔 (#99) |
+| **安全** | 验证码开关/注册开关/会话过期（时） | 关/开/24 | 安全策略开关 (#99) |
+| **上传** | 上传大小限制（MB） | 10 | 文件上传大小上限 (#99) |
+
+> 系统设置的底层实现见 `app/models/system_config.py`（Repository 层）和 `app/config/settings.py` 的 `load_from_db()` 方法。
 
 ### 生产环境启动示例
 
