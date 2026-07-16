@@ -7,10 +7,20 @@ import pytest
 
 
 ACCOUNT_TEMPLATE = Path("app/templates/user_account.html")
+LOGIN_TEMPLATE = Path("app/templates/login.html")
+AUTH_CONTROLLER = Path("app/controllers/auth.py")
 
 
 def _account_template() -> str:
     return ACCOUNT_TEMPLATE.read_text(encoding="utf-8")
+
+
+def _login_template() -> str:
+    return LOGIN_TEMPLATE.read_text(encoding="utf-8")
+
+
+def _auth_controller() -> str:
+    return AUTH_CONTROLLER.read_text(encoding="utf-8")
 
 
 def test_face_registration_requires_user_confirmation_after_capture():
@@ -44,13 +54,51 @@ def test_face_registration_stops_camera_after_preview_and_before_unload():
     assert "beforeunload" in html
 
 
+
+def test_face_toggle_remains_clickable_before_registration():
+    """未注册人脸时开关也应可点击，并引导用户先拍照注册。"""
+    html = _account_template()
+    match = re.search(r'<input[^>]+id="face-toggle"[^>]*>', html, flags=re.S)
+    assert match, "缺少人脸登录开关"
+    assert "disabled" not in match.group(0), "未注册时不应禁用开关，避免用户误以为按钮坏了"
+    assert "data-face-registered" in match.group(0)
+    assert "FACE_REGISTERED" in html
+    assert "localStorage" not in html, "人脸登录启用状态不能只保存在浏览器本地"
+    assert "openCamera();" in html, "未注册时点击开关应引导打开摄像头注册"
+    assert "请先完成拍照注册" in html
+
+
+def test_face_toggle_requires_server_confirmation_and_persistence():
+    """勾选确认应提交后端持久化；登录校验也必须以后端状态为准。"""
+    account_html = _account_template()
+    login_html = _login_template()
+    auth_py = _auth_controller()
+
+    assert "formData.append('action', 'face_toggle')" in account_html
+    assert "formData.append('enabled', checked ? '1' : '0')" in account_html
+    assert "fetch('/account'" in account_html
+    assert "FACE_ENABLED" in account_html
+    assert "勾选确认后才能使用人脸登录" in account_html
+
+    assert "face_login_enabled" not in login_html
+    assert "localStorage" not in login_html
+    assert "UserRepository.is_face_login_enabled(username)" in auth_py
+    assert 'get_body_argument("face_login_enabled"' not in auth_py
+    assert 'action == "face_toggle"' in auth_py
+    assert "set_face_login_enabled" in auth_py
+    assert 'error=self.get_query_argument("error", "")' in auth_py
+
+
 def test_user_account_inline_javascript_has_valid_syntax(tmp_path):
     """账户页人脸交互脚本必须保持可解析。"""
     node = shutil.which("node")
     if not node:
         pytest.skip("node is required for JavaScript syntax validation")
 
-    scripts = re.findall(r"<script(?:[^>]*)>(.*?)</script>", _account_template(), flags=re.S)
+    rendered = _account_template()
+    rendered = rendered.replace("{{ 'true' if face_registered else 'false' }}", "false")
+    rendered = rendered.replace("{{ 'true' if face_enabled else 'false' }}", "false")
+    scripts = re.findall(r"<script(?:[^>]*)>(.*?)</script>", rendered, flags=re.S)
     assert any("function confirmFaceRegistration()" in script for script in scripts)
 
     for index, script in enumerate(scripts):

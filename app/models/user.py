@@ -81,6 +81,30 @@ class UserRepository:
             return False
 
     @staticmethod
+    def is_face_login_enabled(username: str) -> bool:
+        """检查用户是否已确认启用人脸识别登录。"""
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT face_login_enabled FROM users WHERE username = ?",
+                (username,),
+            ).fetchone()
+        return bool(row and row.get("face_login_enabled") == 1)
+
+    @staticmethod
+    def set_face_login_enabled(username: str, enabled: bool) -> bool:
+        """持久化用户的人脸识别登录开关。"""
+        try:
+            with get_db() as conn:
+                cursor = conn.execute(
+                    "UPDATE users SET face_login_enabled = ? WHERE username = ?",
+                    (1 if enabled else 0, username),
+                )
+                return cursor.rowcount > 0
+        except Exception as e:
+            logger.error(f"set_face_login_enabled 失败: {e}")
+            return False
+
+    @staticmethod
     def match_face(descriptor: list, threshold: float = 0.6) -> str:
         """在所有人脸中匹配最接近的描述符。返回匹配的用户名或空字符串。"""
         import json

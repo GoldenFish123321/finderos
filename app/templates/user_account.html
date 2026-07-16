@@ -111,10 +111,10 @@
         </div>
 
         <div style="margin-top: 8px;">
-            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;" title="未注册人脸时点击会引导先拍照注册">
                 <input type="checkbox" id="face-toggle"
                        {{ 'checked' if face_enabled else '' }}
-                       {{ 'disabled' if not face_registered else '' }}
+                       data-face-registered="{{ '1' if face_registered else '0' }}"
                        onchange="toggleFaceLogin(this.checked)">
                 启用人脸识别登录
             </label>
@@ -130,28 +130,62 @@
 <script>
 var faceStream = null;
 var facePendingBlob = null;
-var FACE_KEY = 'face_login_enabled_{{ username }}';
+var FACE_REGISTERED = {{ 'true' if face_registered else 'false' }};
+var FACE_ENABLED = {{ 'true' if face_enabled else 'false' }};
 
-// 初始化：从 localStorage 读取开关状态
+// 初始化：以后端持久化状态为准。注册人脸后，还需要用户勾选确认才允许人脸登录。
 (function() {
-    var saved = localStorage.getItem(FACE_KEY);
     var checkbox = document.getElementById('face-toggle');
     var status = document.getElementById('face-toggle-status');
-    if (checkbox && !checkbox.disabled) {
-        if (saved === null) saved = 'true';  // 首次默认启用
-        checkbox.checked = (saved === 'true');
-        status.textContent = checkbox.checked ? '✅ 人脸登录已启用' : '⏸ 人脸登录已暂停';
+    if (!checkbox) return;
+    if (!FACE_REGISTERED) {
+        checkbox.checked = false;
+        status.textContent = '请先通过摄像头拍照注册人脸，再启用人脸识别登录';
+        return;
     }
+    checkbox.checked = FACE_ENABLED;
+    status.textContent = FACE_ENABLED ? '✅ 人脸登录已启用' : '⏸ 尚未启用：勾选确认后才能使用人脸登录';
 })();
 
 function toggleFaceLogin(checked) {
+    var checkbox = document.getElementById('face-toggle');
     var status = document.getElementById('face-toggle-status');
-    localStorage.setItem(FACE_KEY, checked ? 'true' : 'false');
-    if (checked) {
-        status.textContent = '✅ 人脸登录已启用';
-    } else {
-        status.textContent = '⏸ 人脸登录已暂停';
+    if (!FACE_REGISTERED) {
+        checkbox.checked = false;
+        status.textContent = '请先完成拍照注册；注册成功后再勾选确认启用人脸登录。';
+        openCamera();
+        return;
     }
+    checkbox.disabled = true;
+    status.textContent = checked ? '⏳ 正在启用人脸登录...' : '⏳ 正在关闭人脸登录...';
+
+    var formData = new FormData();
+    formData.append('action', 'face_toggle');
+    formData.append('enabled', checked ? '1' : '0');
+
+    fetch('/account', {
+        method: 'POST',
+        headers: { 'X-Xsrftoken': getCookie('_xsrf') },
+        body: formData
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.code !== 0) {
+            checkbox.checked = !checked;
+            status.textContent = '❌ ' + (d.msg || '保存失败，请重试');
+            return;
+        }
+        FACE_ENABLED = !!d.enabled;
+        checkbox.checked = FACE_ENABLED;
+        status.textContent = FACE_ENABLED ? '✅ 人脸登录已启用' : '⏸ 人脸登录已关闭';
+    })
+    .catch(function() {
+        checkbox.checked = !checked;
+        status.textContent = '❌ 网络错误，设置未保存';
+    })
+    .finally(function() {
+        checkbox.disabled = false;
+    });
 }
 
 function stopFaceCamera() {
