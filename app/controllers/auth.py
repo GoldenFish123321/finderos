@@ -397,7 +397,7 @@ class UserAccountHandler(BaseHandler):
             if not success:
                 return render_page(error=msg)
             write_audit_log("CHANGE_PASSWORD", self.current_user, "", "用户修改密码")
-            return render_page(message="密码修改成功")
+            return render_page(msg="密码修改成功")
 
         elif action == "face_register":
             if "face_image" not in self.request.files:
@@ -411,7 +411,7 @@ class UserAccountHandler(BaseHandler):
             return self.redirect("/account?msg=人脸注册成功")
 
         elif action == "face_toggle":
-            return render_page(message="人脸登录设置已更新" if has_face else "",
+            return render_page(msg="人脸登录设置已更新" if has_face else "",
                               error="" if has_face else "请先注册人脸数据")
 
         elif action == "delete_account":
