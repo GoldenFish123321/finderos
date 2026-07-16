@@ -474,9 +474,8 @@ python migrate_db.py --status
     → 频率限制检查（IP + 用户名维度，5 次/15 分钟）
     → PBKDF2-SHA256 密码验证（60 万轮迭代）
     → 检查 is_enabled 状态
-    → 成功: set_secure_cookie + 按功能权限跳转
-        ├── 有后台功能权限 → 优先 /admin，否则跳第一个授权后台路由
-        └── 无后台功能权限 → /index（前台主页）
+    → 成功: set_secure_cookie + 默认跳转 /chat（前台智能问数）
+        └── 后台/模型 API 配置通过页面链接按权限进入
     → 失败: 记录失败次数 + 返回错误提示
     → 锁定: 超过阈值后返回"账户已锁定"提示
 ```
@@ -806,9 +805,11 @@ HTTP API 型 MCP 工具支持在 URL 中使用 `{参数名}` 占位符；GET 请
 | `context_size` | INTEGER | `8192` | 上下文窗口大小 |
 | `total_tokens` | INTEGER | `0` | Token 消耗累计（自动更新） |
 | `is_enabled` | INTEGER | `1` | 启用状态 |
-| `is_default` | INTEGER | `0` | 是否默认模型（全局唯一） |
+| `is_default` | INTEGER | `0` | 是否默认模型（在各自模型分组内唯一） |
+| `model_scope` | TEXT | `admin` | 模型分组：`admin` 管理员提供、`user` 用户自助配置 |
+| `owner_username` | TEXT | `''` | 用户模型所属用户名；管理员模型为空 |
 
-支持的操作：**新增、编辑、删除、启用/禁用、设为默认**。
+支持的操作：**新增、编辑、删除、启用/禁用、设为默认**。`/admin/model` 仅管理“管理员提供模型”分组；普通用户在 `/admin/model/config` 创建的“我的模型配置”按 `owner_username` 隔离，不会出现在管理员模型列表中。
 
 > **注**：模型流式对话功能已统一迁移至前台 `/chat/stream`（MCP 架构），后台不再提供独立对话页面。
 
@@ -896,7 +897,7 @@ HTTP API 型 MCP 工具支持在 URL 中使用 `{参数名}` 占位符；GET 请
 - **图表注入**：AI 回复中 `[CHART:...]` 标记自动渲染为 ECharts 图表
 - **表格注入**：`[TABLE:...]` 标记自动渲染为 HTML 数据表格
 - **元信息显示**：每条 AI 回复下方显示响应时间(s)和 Token 消耗
-- **模型 API 自助配置**：聊天页侧边栏模型选择区和欢迎页快捷操作会向有 `/admin/model/config` 权限的用户提供配置链接，普通用户可直接配置 API Key、API Base 与模型标识
+- **模型 API 自助配置**：聊天页侧边栏模型选择区和欢迎页快捷操作会向有 `/admin/model/config` 权限的用户提供配置链接；普通用户配置写入自己的“我的模型配置”分组，不覆盖管理员提供模型或其他用户模型
 
 #### 8.4 对话持久化
 
@@ -978,7 +979,7 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 | 类型 | 实现方式 | 适用场景 |
 |------|----------|----------|
 | **LLM 型** | 绑定 AI 模型 + 系统提示词 + 技能列表 + MCP 工具权限（含 Crawl4ai 深度采集） | 复杂推理、数据分析、文案撰写、音乐推荐、深度采集 |
-| **API 型** | HTTP/HTTPS API + 参数模板 + 响应渲染模板 | 天气查询等外部服务调用 |
+| **API 型** | HTTP/HTTPS API + 参数模板 + 响应渲染模板 | 天气查询等外部服务调用；JSON 响应模板渲染为卡片/摘要，不直接回显原始 JSON |
 
 #### 9.2 默认数字员工（8个）
 
@@ -1026,7 +1027,7 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 | GET | `/register` | 注册页面 |
 | POST | `/register` | 提交注册表单 |
 | GET | `/logout` | 登出（清除 Cookie，重定向到登录页） |
-| GET | `/index` | 前台首页（需登录，无后台功能权限用户默认跳转） |
+| GET | `/index` | 前台首页兼容入口（需登录，统一跳转 `/chat`） |
 
 ### 管理后台 (需管理员权限)
 
@@ -1108,8 +1109,9 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 #### 模型引擎
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/model` | 模型列表（`?page=&category=`） |
-| GET/POST | `/admin/model/config` | 模型 API 快速配置（普通用户默认权限，不含删除/启停/设默认） |
+| GET | `/admin/model` | 管理员提供模型列表（`?page=&category=`） |
+| GET/POST | `/admin/model/config` | 我的模型 API 快速配置（普通用户默认权限，按当前用户隔离，API Key 密码框回显且可显示/隐藏） |
+| POST | `/admin/model/config/test` | 测试模型 API 配置连通性（保存前可验证 API Base/API Key/Model Name） |
 | GET | `/admin/model/add` | 新增模型页面 |
 | POST | `/admin/model/add` | 提交新增模型 |
 | GET | `/admin/model/edit` | 编辑模型页面（`?id=`） |
@@ -1118,6 +1120,8 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 | POST | `/admin/model/toggle` | 启用/禁用模型 |
 | POST | `/admin/model/default` | 设为默认模型 |
 | GET | `/admin/api/model/list` | 模型 JSON API（返回已启用模型列表） |
+
+> 模型 API 快速配置页仅管理当前用户的 `user` 模型分组，会回显已保存 API Key（默认密码框隐藏，可手动显示）。当 Provider、API Base 或 Model Name 改变且仍在使用已保存密钥时，页面会显示醒目的“复用当前密钥”确认区；用户可重新输入新 Key，或勾选确认后继续复用当前密钥。
 
 #### 管理侧会话管理（Issue #17）
 | 方法 | 路径 | 说明 |
@@ -1206,6 +1210,8 @@ erDiagram
         int total_tokens
         int is_enabled
         int is_default
+        string model_scope
+        string owner_username
         timestamp created_at
     }
     data_warehouse {
@@ -1546,7 +1552,7 @@ python make_admin.py --reset --username admin --password newpassword
 | `admin` | `admin888` | 系统管理员 | ✅ 全部功能 | 不可删除/禁用自身 |
 
 > ⚠️ **首次登录后请立即修改默认密码！** 可使用管理后台的用户编辑功能或 `make_admin.py --reset` 命令。
-> 自助注册用户默认绑定“普通用户”角色，可访问 `/admin/model/config` 来配置模型 API；如需使用 MCP 工具管理、用户管理等页面，请由管理员在角色权限中额外授权。
+> 自助注册用户默认绑定“普通用户”角色，登录后默认进入 `/chat`；可从 Chat 页入口访问 `/admin/model/config` 配置并测试模型 API。如需使用 MCP 工具管理、用户管理等页面，请由管理员在角色权限中额外授权。
 > 生产环境必须显式设置至少 12 字符的 `ADMIN_DEFAULT_PASSWORD`。
 > 未设置时，随机初始密码只写入数据库旁权限受限的 `<database>.admin_initial_password`；首次登录并改密后应立即删除该文件。
 
@@ -1554,19 +1560,19 @@ python make_admin.py --reset --username admin --password newpassword
 
 ## 测试用例
 
-系统已覆盖 7 大模块共 30+ 项测试用例，详见 `docs/test_case.md`：
+系统已覆盖 7 大模块共 40+ 项测试用例，详见 `docs/test_case.md`：
 
 | 模块 | 测试项数 | 覆盖要点 |
 |------|---------|---------|
-| **认证模块** | 6 | 正确登录、错误密码、空表单、登录限速触发、未登录拦截、登出 |
+| **认证模块** | 7 | 正确登录、错误密码、空表单、登录限速触发、未登录拦截、登出、登录默认进入 Chat |
 | **用户管理** | 6 | 新增用户、编辑用户、禁用/启用、删除、关键词搜索、admin 账号保护 |
 | **角色管理** | 3 | 新增角色+功能授权、系统角色编辑保护（is_system）、系统角色删除保护 |
 | **瞭望采集** | 9 | 关键词采集、瞭望源选择、保存到数据仓库、SSRF 防护、空关键词、SSE 进度事件、进度条渲染、采集审计日志、日志页检索 |
-| **模型引擎** | 6 | 新增模型、设为默认、Mock 对话（无 API Key）、真实 API 流式对话、Token 统计、审计日志记录 |
+| **模型引擎** | 11 | 新增模型、设为默认、Mock 对话（无 API Key）、真实 API 流式对话、Token 统计、审计日志记录、快速配置 Key 回显、连接测试、模型分组隔离、Chat 分组展示 |
 | **会话管理** | 5 | 跨用户列表、用户筛选、消息详情、管理员删除、用户侧隔离保持 |
 | **接口管理** | 10 | 接口模板 CRUD、安全校验、敏感 Header 脱敏、安全 HTTP 调用、接口测试、API 型数字员工联动创建 |
 | **MCP 重构** | 6 | 工具表查询、CRUD、注册表加载、员工权限、技能关联、测试日志 |
-| **MCP 与默认权限** | 8 | MCP 页面使用说明、普通用户默认模型 API 配置权限、后台路由级权限匹配、禁用子路由隔离、模型快速配置入口、Chat 页配置入口、Registry 重绑定 |
+| **MCP 与默认权限** | 11 | MCP 页面使用说明、普通用户默认模型 API 配置权限、后台路由级权限匹配、禁用子路由隔离、模型快速配置入口、Chat 页配置入口、API 测试入口、登录默认 Chat、Registry 重绑定 |
 | **安全测试** | 5 | XSS 注入（采集内容）、SQL 注入（参数化查询验证）、CSRF Token 校验、密码哈希强度、安全响应头存在性 |
 
 ### 运行测试

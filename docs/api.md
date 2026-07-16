@@ -11,14 +11,14 @@
 ### POST / — 用户登录
 - **Content-Type**: `application/x-www-form-urlencoded`
 - **参数**: `username`, `password`
-- **成功**: 302 跳转（有后台功能权限→优先 `/admin`，否则第一个授权后台路由；无后台功能权限→`/index`）
+- **成功**: 302 跳转到 `/chat`，后台和模型 API 配置入口由页面链接按权限进入
 - **失败**: 渲染登录页 + 错误提示
 - **限速**: 同 IP+用户名 5次/15分钟
 
 ### POST /register — 用户注册
 - **Content-Type**: `application/x-www-form-urlencoded`
 - **参数**: `username`, `password`, `password_confirm`
-- **成功**: 自动登录并 302 跳转到 `/index`；若该用户角色拥有后台功能权限，`/index` 会继续跳转到 `/admin` 或第一个授权后台路由
+- **成功**: 自动登录并 302 跳转到 `/chat`
 - **失败**: 渲染注册页 + 错误提示（用户名已存在 / 密码不一致 / 密码强度不足等）
 
 ### GET /register — 注册页面
@@ -166,13 +166,16 @@ data: {"code":1,"msg":"请输入关键词"}
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/model` | 模型引擎列表（?page=&category=） |
-| GET/POST | `/admin/model/config` | 模型 API 快速配置（普通用户默认权限，不含删除/启停/设默认） |
+| GET | `/admin/model` | 管理员提供模型列表（?page=&category=） |
+| GET/POST | `/admin/model/config` | 我的模型 API 快速配置（普通用户默认权限，按当前用户隔离，API Key 密码框回显且可显示/隐藏） |
+| POST | `/admin/model/config/test` | 测试模型 API 配置连通性；请求体同快速配置表单，返回 `code/msg/status/elapsed_ms` |
 | GET/POST | `/admin/model/add` | 新增模型 |
 | GET/POST | `/admin/model/edit` | 编辑模型 |
 | POST | `/admin/model/delete` | 删除模型 |
 | POST | `/admin/model/toggle` | 启用/禁用 |
 | POST | `/admin/model/default` | 设为默认模型 |
+
+> 分组约束：`/admin/model` 仅管理 `model_scope=admin` 的管理员提供模型；`/admin/model/config` 仅管理当前用户 `model_scope=user + owner_username=<当前用户>` 的我的模型配置，避免多用户互相覆盖。安全约束：快速配置页修改 Provider、API Base 或 Model Name 且仍在使用已保存 API Key 时，页面会显示“复用当前密钥”确认区；用户必须重新输入新 Key，或显式勾选确认复用当前密钥，避免旧密钥被误发送到新的接口地址。
 
 ### 4.2 模型对话 (SSE) — ⚠️ 已废弃
 
@@ -270,7 +273,7 @@ data: {"code":1,"msg":"请输入关键词"}
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/chat/models` | 获取可用模型列表（JSON）。仅返回已启用模型（`is_enabled=1`），字段：`id`, `name`, `provider`, `model_name`, `category`, `is_default` |
+| GET | `/api/chat/models` | 获取当前用户可用模型列表（JSON）。返回当前用户自己的 `user` 模型 + 已启用的 `admin` 模型，字段：`id`, `name`, `provider`, `model_name`, `category`, `is_default`, `model_scope` |
 | GET | `/api/chat/employees` | 获取数字员工列表（JSON） |
 
 ### 7.3 对话管理 API

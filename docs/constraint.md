@@ -98,6 +98,7 @@
 - **默认角色**: 系统管理员(全部后台功能) / 普通用户(`/admin/model/config`，可配置模型 API)
 - **后台访问**: 按功能路由做最长前缀校验，拥有任意后台功能不代表拥有全部后台功能
 - **前台配置入口**: `/chat` 页面按 `/admin/model/config` 授权显示跳转链接，实际访问仍由后台路由权限校验兜底
+- **默认登录落点**: 登录/注册成功后进入 `/chat`，不使用后台权限决定初始页面
 - **菜单生成**: 角色 → role_functions → functions → 按 parent_id 构建树形菜单
 
 ## 7. 扩展模块 (v0.6)
@@ -146,9 +147,13 @@
 | max_tokens | INTEGER | 最大Token数 |
 | context_size | INTEGER | 上下文窗口大小 |
 | is_enabled | INTEGER DEFAULT 1 | 启用状态 |
-| is_default | INTEGER DEFAULT 0 | 是否默认模型 |
+| is_default | INTEGER DEFAULT 0 | 是否默认模型（在 admin 组或单个用户 user 组内生效） |
+| model_scope | TEXT DEFAULT 'admin' | 模型分组：`admin` 管理员提供模型，`user` 用户自助模型 |
+| owner_username | TEXT DEFAULT '' | `user` 模型所属用户名；`admin` 模型为空 |
 | total_tokens | INTEGER DEFAULT 0 | Token 消耗累计 |
 | created_at | TIMESTAMP | 创建时间 |
+
+> 分组约束：管理员模型管理页只操作 `model_scope='admin'`；普通用户快速配置页只操作 `model_scope='user' AND owner_username=<当前用户>`。聊天页合并展示当前用户自己的 user 模型与管理员提供的 admin 模型，禁止访问其他用户模型。
 
 ### data_warehouse 表（独立数据仓库）
 | 字段 | 类型 | 说明 |

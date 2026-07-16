@@ -35,10 +35,14 @@ class SensitiveWordRepository:
     ]
 
     @staticmethod
-    def init_table():
-        """创建敏感词和预警表（幂等）。"""
-        with get_db() as conn:
-            conn.execute("""
+    def init_table(conn=None):
+        """创建敏感词和预警表（幂等）。
+
+        ``init_db()`` 已经持有一个 SQLite 写连接时会传入该连接，避免
+        在同一数据库初始化事务中再次打开连接导致 ``database is locked``。
+        """
+        def _create_tables(active_conn):
+            active_conn.execute("""
                 CREATE TABLE IF NOT EXISTS sentiment_sensitive_words (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     word TEXT NOT NULL,
@@ -48,7 +52,7 @@ class SensitiveWordRepository:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            conn.execute("""
+            active_conn.execute("""
                 CREATE TABLE IF NOT EXISTS sentiment_alerts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     source_type TEXT NOT NULL,
@@ -61,12 +65,19 @@ class SensitiveWordRepository:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            conn.execute("""
+            active_conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_sa_status ON sentiment_alerts(status)
             """)
-            conn.execute("""
+            active_conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_sa_created ON sentiment_alerts(created_at)
             """)
+
+        if conn is not None:
+            _create_tables(conn)
+            return
+
+        with get_db() as standalone_conn:
+            _create_tables(standalone_conn)
 
     @staticmethod
     def seed_default():

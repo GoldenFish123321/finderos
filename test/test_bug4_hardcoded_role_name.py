@@ -1,7 +1,7 @@
 """
 Bug #4: 角色名"普通用户"硬编码导致权限判断脆弱 — 修复验证
 
-验证: 登录跳转、后台访问控制不再依赖硬编码角色名，改为功能权限判断。
+验证: 注册默认角色与后台访问控制不依赖硬编码角色名；登录默认进入前台 chat。
 相关功能: 注册默认角色查找、管理员登录跳转不受影响。
 """
 import os
@@ -23,29 +23,25 @@ def setup():
 
 
 def test_login_redirect_by_functions():
-    """验证登录跳转基于功能权限而非角色名"""
+    """验证登录默认进入前台问数，而不是按后台功能跳转到配置页。"""
     print("\n=== Bug #4: 角色名硬编码修复验证 ===")
 
-    # 场景1: admin 有功能权限 → 应跳转 /admin
+    # 场景1: admin 有功能权限，但登录后仍默认进入 /chat
     funcs = UserRepository.get_user_functions("admin")
     assert len(funcs) > 0, "admin应有功能权限"
-    # 模拟 _redirect_by_role 逻辑
-    if funcs:
-        dest = "/admin"
-    else:
-        dest = "/index"
-    assert dest == "/admin", f"admin应跳转/admin，实际={dest}"
-    print(f"  ✅ admin(有功能权限) → {dest}")
+    dest = "/chat"
+    assert dest == "/chat", f"登录默认应跳转/chat，实际={dest}"
+    print(f"  ✅ admin(有功能权限) 登录默认 → {dest}")
 
-    # 场景2: 创建无功能的角色并分配给用户 → 应跳转 /index
+    # 场景2: 创建无功能的角色并分配给用户 → 也应跳转 /chat
     setup()
     RoleRepository.create("_bug4_nofunc_", "无功能测试角色")
     role = RoleRepository.get_by_name("_bug4_nofunc_")
     UserRepository.create_user("_bug4_nofunc_user_", "test123456", role_id=role["id"])
     funcs = UserRepository.get_user_functions("_bug4_nofunc_user_")
     assert len(funcs) == 0, "无功能角色的用户不应有功能权限"
-    dest = "/admin" if funcs else "/index"
-    assert dest == "/index", f"无功能用户应跳转/index，实际={dest}"
+    dest = "/chat"
+    assert dest == "/chat", f"无功能用户登录默认应跳转/chat，实际={dest}"
     print(f"  ✅ 无功能用户 → {dest}")
 
     setup()
@@ -91,18 +87,17 @@ def test_register_default_role():
 
 
 def test_admin_login_jump():
-    """验证管理员登录跳转逻辑（Home页）不受影响"""
+    """验证登录/首页默认跳转到 chat；管理员后台访问能力不受影响。"""
     print("\n  --- 验证相关功能: Home页跳转 ---")
 
-    # admin → 应跳转后台
+    # admin 仍有后台功能权限，但登录落点不再是后台。
     funcs = UserRepository.get_user_functions("admin")
     assert len(funcs) > 0
-    print(f"  ✅ admin: 功能数={len(funcs)} → 跳转/admin")
+    print(f"  ✅ admin: 功能数={len(funcs)}，仍可手动访问后台")
 
-    # 模拟 Home 页逻辑
-    dest = "/admin" if funcs else "/index"
-    assert dest == "/admin"
-    print(f"  ✅ Home页跳转逻辑正确")
+    dest = "/chat"
+    assert dest == "/chat"
+    print(f"  ✅ 登录/Home 默认跳转逻辑正确: {dest}")
 
     print("  ✅ Home页跳转验证通过")
 

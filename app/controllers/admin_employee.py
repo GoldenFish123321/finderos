@@ -119,7 +119,9 @@ class EmployeeFormHandler(AdminBaseHandler):
                 return
 
         # 获取启用的模型列表（供 LLM 型选择模型）
-        models, _ = AiModelRepository.get_all(page=1, page_size=50)
+        models, _ = AiModelRepository.get_all(
+            page=1, page_size=50, model_scope="admin", owner_username=""
+        )
         enabled_models = [m for m in models if m.get("is_enabled") == 1]
         current_interface_id = emp.get("api_interface_id") if emp else None
         if emp and emp.get("api_headers"):
@@ -375,10 +377,15 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         model = None
         if emp.get("model_id"):
             model = AiModelRepository.get_by_id(emp["model_id"], include_api_key=True)
+            if model and model.get("model_scope", "admin") != "admin":
+                model = None
         if not model or model.get("is_enabled", 0) == 0:
             model = AiModelRepository.get_default(include_api_key=True)
         if not model:
-            models, _ = AiModelRepository.get_all(page=1, page_size=50, include_api_key=True)
+            models, _ = AiModelRepository.get_all(
+                page=1, page_size=50, include_api_key=True,
+                model_scope="admin", owner_username=""
+            )
             for m in models:
                 if m["is_enabled"] == 1:
                     model = m

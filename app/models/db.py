@@ -153,9 +153,31 @@ def init_db():
                 total_tokens    INTEGER DEFAULT 0,
                 is_enabled      INTEGER DEFAULT 1,
                 is_default      INTEGER DEFAULT 0,
+                model_scope     TEXT DEFAULT 'admin',
+                owner_username  TEXT DEFAULT '',
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # 兼容旧表迁移：模型分组。admin=管理员提供的全局模型；user=用户自助配置模型。
+        try:
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(ai_models)").fetchall()}
+            if "model_scope" not in cols:
+                conn.execute("ALTER TABLE ai_models ADD COLUMN model_scope TEXT DEFAULT 'admin'")
+                logger.info("Database migration: added model_scope column to ai_models")
+            if "owner_username" not in cols:
+                conn.execute("ALTER TABLE ai_models ADD COLUMN owner_username TEXT DEFAULT ''")
+                logger.info("Database migration: added owner_username column to ai_models")
+            conn.execute(
+                "UPDATE ai_models SET model_scope = 'admin' "
+                "WHERE model_scope IS NULL OR model_scope = ''"
+            )
+            conn.execute(
+                "UPDATE ai_models SET owner_username = '' "
+                "WHERE owner_username IS NULL"
+            )
+        except Exception as e:
+            logger.error(f"Database migration failed (ai_models scope): {e}", exc_info=True)
 
         # 兼容旧表迁移：为已存在的 ai_models 表添加 total_tokens 列
         try:
@@ -353,6 +375,7 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_watch_sources_enabled ON watch_sources(is_enabled)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_watch_results_source ON watch_results(source_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_models_default ON ai_models(is_default)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_models_scope_owner ON ai_models(model_scope, owner_username)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_api_interfaces_enabled ON api_interfaces(is_enabled)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_api_interfaces_name ON api_interfaces(name)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_digital_employees_api_interface ON digital_employees(api_interface_id)")
@@ -433,7 +456,7 @@ def init_db():
 
         # ── v1.2.0 舆情大屏（敏感词 + 预警） ──
         from app.models.sensitive_word import SensitiveWordRepository
-        SensitiveWordRepository.init_table()
+        SensitiveWordRepository.init_table(conn)
 
         conn.commit()
         logger.info(f"Database initialized: {DB_PATH}")
