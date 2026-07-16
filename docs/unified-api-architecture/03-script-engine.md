@@ -10,7 +10,7 @@
 
 - 管理员在 MCP 工具编辑页编写 Python **纯数据转换**脚本
 - 脚本**仅接收本地接口返回的数据**（接口管理层已将外部 API 代理为本地接口）
-- 脚本**返回字符串**作为 MCP 工具结果，直接映射为 MCP `text content`
+- 脚本**返回字符串**（可以是纯文本或 JSON 字符串）作为 MCP 工具结果，前端按内容自动渲染，直接映射为 MCP `text content`
 - 脚本**不能发起任何外部调用**（无 import、无网络、无文件系统）
 - **安全沙箱**：基于收紧的 AST 白名单遍历，防止恶意代码
 - 执行超时保护（signal.alarm + 递归深度限制）
@@ -67,7 +67,7 @@ _ALLOWED_NODES = {
 ```python
 # 脚本必须定义 transform 函数
 # 输入: data_sources — list[dict], 按 data_sources 配置顺序传入每个本地接口的返回
-# 输出: str — 直接作为 MCP tools/call 的 text content 返回给 LLM
+# 输出: str（纯文本或 JSON 字符串）— 直接作为 MCP tools/call 的 text content 返回给 LLM
 
 def transform(data_sources):
     """
@@ -84,14 +84,14 @@ def transform(data_sources):
 ```
 
 > **为什么返回 `str` 而不是 `dict`**: MCP 协议的 `tools/call` 返回 `{content: [{type: "text", text: "..."}]}`。
-> 返回字符串直接填入 `text` 字段，无需再 `json.dumps` 包装。LLM 擅长理解和续写自然语言文本，
+> 返回字符串（纯文本或 JSON）直接填入 `text` 字段，无需再 `json.dumps` 包装。LLM 擅长理解和续写自然语言文本，
 > 字符串结果比 JSON 嵌套结构更友好。
 
 ### 5.4 脚本执行器（收紧版）
 
 ```python
 # app/services/script_engine.py (新文件)
-"""安全的 Python 脚本执行沙箱 — 纯数据转换，无 import，返回字符串。"""
+"""安全的 Python 脚本执行沙箱 — 纯数据转换，无 import，返回字符串（纯文本或 JSON 字符串）。"""
 
 import ast
 import logging
@@ -285,7 +285,7 @@ def execute_transform_script(script: str, data_sources: list,
 
 > **设计要点**：约 130 行代码。不设 `import` 白名单（脚本无需任何模块）。
 > 内置函数限定为纯数据类型转换和集合操作。递归深度限制 200，超时 3 秒。
-> 返回值统一为 `str`，直接映射到 MCP text content。
+> 返回值统一为 `str`（纯文本或 JSON 字符串），直接映射到 MCP text content。
 
 ### 5.5 脚本示例
 

@@ -110,7 +110,7 @@ Phase 2 — 代码重构:
   1. 实现 local_api_client.py: 函数注册表 + _init_local_handlers() +
      _register_external_proxies()（external → 虚拟 local handler）
   2. 实现 local_api_registry.py: 种子数据 + sync_local_api_interfaces()
-  3. 实现 script_engine.py: 收紧的 AST 白名单沙箱（禁 import，纯数据转换，返回 str）
+  3. 实现 script_engine.py: 收紧的 AST 白名单沙箱（禁 import，纯数据转换，返回 str — 可以是纯文本或 JSON 字符串）
   4. 改造 registry.py: _build_tool_from_db_row() 新增 script 分支，所有数据源统一调 call_local_api()
 
 Phase 3 — 前端适配:
