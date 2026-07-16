@@ -274,13 +274,14 @@ class DataWarehouseRepository:
     @staticmethod
     def get_source_distribution(limit: int = 10) -> list:
         """获取数据仓库来源分布。"""
+        from app.utils.security import sanitize_html
         with get_db() as conn:
             rows = conn.execute(
                 "SELECT source_name, COUNT(*) as cnt FROM data_warehouse "
                 "WHERE source_name != '' GROUP BY source_name ORDER BY cnt DESC LIMIT ?",
                 (limit,),
             ).fetchall()
-            return [{"name": r["source_name"], "value": r["cnt"]} for r in rows]
+            return [{"name": sanitize_html(r["source_name"] or "未知"), "value": r["cnt"]} for r in rows]
 
     @staticmethod
     def get_trend_data(days: int = 14) -> dict:
@@ -316,30 +317,29 @@ class DataWarehouseRepository:
         # 常见停用词
         stop_words = {
             "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一", "一个",
-            "上", "也", "很", "到", "说", "要", "去", "你", "会", "着", "没有", "看", "好",
+            "上", "也", "很", "到", "说", "要", "去", "你", "会", "着", "看", "好",
             "自己", "这", "他", "她", "它", "们", "与", "及", "或", "从", "被", "把", "对",
-            "等", "能", "已", "将", "为", "以", "之", "其", "中", "而", "所", "如", "更",
-            "又", "但", "而", "还", "可", "让", "用", "做", "并", "且", "如果", "因为",
+            "等", "能", "已", "将", "为", "以", "之", "其", "中", "所", "如", "更",
+            "又", "但", "还", "可", "让", "用", "做", "并", "且",
             "所以", "关于", "虽然", "但是", "不仅", "而且", "或者", "还是", "通过", "进行",
-            "可以", "应该", "需要", "没有", "已经", "其中", "以及", "以及", "目前", "日前",
+            "可以", "应该", "需要", "没有", "已经", "其中", "以及", "目前", "日前",
             "今日", "今年", "昨日", "去年", "本月", "今天", "近日", "原标题", "来源", "作者",
         }
 
         freq = {}
+        sep_re = re.compile(r'[][\s,，。、；：！？""''()【】/_—+-]+')
         for row in titles:
             title = row["title"]
             if not title:
                 continue
-            # 按标点和空格分割（连字符用单独处理避免转义问题）
-            sep_re = re.compile(r'[\s,，。、；：！？""''()【】/_—+]+')
             words = sep_re.split(title)
-            words = [w.replace('[', '').replace(']', '').replace('-', '') for w in words]
             for word in words:
-                word = word.strip()
-                # 只保留 2-6 个字符的中文词
-                if len(word) < 2 or len(word) > 6:
+                word = word.strip().lower()
+                if len(word) < 2 or len(word) > 8:
                     continue
-                if not all('\u4e00' <= c <= '\u9fff' for c in word):
+                # 至少包含一个中文字符或为纯英文数字词（长度>=3）
+                has_cjk = any('\u4e00' <= c <= '\u9fff' for c in word)
+                if not has_cjk and (len(word) < 3 or not word.isalnum()):
                     continue
                 if word in stop_words:
                     continue
@@ -369,9 +369,11 @@ class DataWarehouseRepository:
                 "SELECT source_name, COUNT(*) as cnt FROM data_warehouse "
                 "WHERE source_name != '' GROUP BY source_name ORDER BY cnt DESC LIMIT 1"
             ).fetchone()
+            deep_pct = round(deep / max(total, 1) * 100, 1)
             return {
                 "total": total,
                 "deep_collected": deep,
+                "deep_pct": deep_pct,
                 "today_count": today_count,
                 "source_count": source_count,
                 "top_source": top_source["source_name"] if top_source else "无",

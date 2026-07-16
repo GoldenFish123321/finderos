@@ -20,6 +20,7 @@ ADMIN_ROUTE_PERMISSION_ALIASES = {
     "/admin/api/model/list": "/admin/model",
     "/admin/api/interface/list": "/admin/interface",
     "/admin/api/employee/list": "/admin/employee",
+    "/admin/api/dashboard": "/admin/dashboard",
     "/admin/mcp/reload": "/admin/mcp/tool",
 }
 

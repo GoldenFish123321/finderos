@@ -219,23 +219,23 @@ body.dark-theme {
     <div class="dash-grid">
         <div class="dash-stat">
             <div class="stat-label">📦 数据总量</div>
-            <div class="stat-number">{{ stats['total'] }}</div>
+            <div class="stat-number" id="stat-total">{{ stats['total'] }}</div>
             <div class="stat-sub">累计采集记录</div>
         </div>
         <div class="dash-stat">
             <div class="stat-label">📥 今日新增</div>
-            <div class="stat-number" style="background:linear-gradient(135deg,#22c55e,#5ea3ff);-webkit-background-clip:text;background-clip:text;">{{ stats['today_count'] }}</div>
+            <div class="stat-number" id="stat-today" style="background:linear-gradient(135deg,#22c55e,#5ea3ff);-webkit-background-clip:text;background-clip:text;">{{ stats['today_count'] }}</div>
             <div class="stat-sub">24小时采集数据</div>
         </div>
         <div class="dash-stat">
             <div class="stat-label">🔍 已深度采集</div>
-            <div class="stat-number" style="background:linear-gradient(135deg,#a78bfa,#f472b6);-webkit-background-clip:text;background-clip:text;">{{ stats['deep_collected'] }}</div>
-            <div class="stat-sub">占总量 {{ f'{stats["deep_collected"]/max(stats["total"],1)*100:.1f}' if stats['total'] > 0 else '0' }}%</div>
+            <div class="stat-number" id="stat-deep" style="background:linear-gradient(135deg,#a78bfa,#f472b6);-webkit-background-clip:text;background-clip:text;">{{ stats['deep_collected'] }}</div>
+            <div class="stat-sub">占总量 <span id="stat-deep-pct">{{ stats['deep_pct'] }}</span>%</div>
         </div>
         <div class="dash-stat">
             <div class="stat-label">📡 数据来源</div>
-            <div class="stat-number" style="background:linear-gradient(135deg,#f97316,#fbbf24);-webkit-background-clip:text;background-clip:text;">{{ stats['source_count'] }}</div>
-            <div class="stat-sub">最多: {{ stats['top_source'] }}</div>
+            <div class="stat-number" id="stat-sources" style="background:linear-gradient(135deg,#f97316,#fbbf24);-webkit-background-clip:text;background-clip:text;">{{ stats['source_count'] }}</div>
+            <div class="stat-sub">最多: <span id="stat-top-source">{{ stats['top_source'] }}</span></div>
         </div>
     </div>
 
@@ -294,8 +294,34 @@ body.dark-theme {
 (function() {
     var isDark = true;
     var charts = {};
+    var chartObservers = {};
+    var _initDone = false;
+
+    function disposeChart(id) {
+        if (charts[id]) { charts[id].dispose(); delete charts[id]; }
+        if (chartObservers[id]) { chartObservers[id].disconnect(); delete chartObservers[id]; }
+    }
+
+    function observeResize(dom, chart) {
+        var obs = new ResizeObserver(function() { chart.resize(); });
+        obs.observe(dom);
+        chartObservers[dom.id] = obs;
+    }
+
+    function updateStatCards(stats) {
+        var el = function(id) { return document.getElementById(id); };
+        if (el('stat-total')) el('stat-total').textContent = stats.total;
+        if (el('stat-today')) el('stat-today').textContent = stats.today_count;
+        if (el('stat-deep')) el('stat-deep').textContent = stats.deep_collected;
+        if (el('stat-deep-pct')) el('stat-deep-pct').textContent = stats.deep_pct;
+        if (el('stat-sources')) el('stat-sources').textContent = stats.source_count;
+        if (el('stat-top-source')) el('stat-top-source').textContent = stats.top_source;
+    }
 
     function initCharts() {
+        if (_initDone) return; // 防止重复初始化
+        _initDone = true;
+
         // 获取后端数据
         var statsData = {% raw json_encode(stats) %};
         var sourceData = {% raw json_encode(source_distribution) %};
@@ -405,7 +431,7 @@ body.dark-theme {
             }]
         });
 
-        new ResizeObserver(function() { chart.resize(); }).observe(dom);
+        observeResize(dom, chart);
     }
 
     // ── 词云 ──
@@ -446,7 +472,7 @@ body.dark-theme {
             }]
         });
 
-        new ResizeObserver(function() { chart.resize(); }).observe(dom);
+        observeResize(dom, chart);
     }
 
     // ── 采集趋势 ──
@@ -486,7 +512,7 @@ body.dark-theme {
             }]
         });
 
-        new ResizeObserver(function() { chart.resize(); }).observe(dom);
+        observeResize(dom, chart);
     }
 
     // ── 来源分布 ──
@@ -521,7 +547,7 @@ body.dark-theme {
             }]
         });
 
-        new ResizeObserver(function() { chart.resize(); }).observe(dom);
+        observeResize(dom, chart);
     }
 
     // ── 深度采集占比 ──
@@ -560,12 +586,15 @@ body.dark-theme {
             }]
         });
 
-        new ResizeObserver(function() { chart.resize(); }).observe(dom);
+        observeResize(dom, chart);
     }
 
     // ── 刷新 ──
     window.refreshDashboard = function() {
         document.getElementById('dash-update-time').textContent = '⟳ 刷新中...';
+        // 清理所有图表和观察器
+        Object.keys(charts).forEach(disposeChart);
+
         fetch('/admin/api/dashboard?_xsrf={{ xsrf_token }}')
             .then(function(r) { return r.json(); })
             .then(function(d) {
@@ -574,20 +603,9 @@ body.dark-theme {
                     document.getElementById('dash-update-time').textContent =
                         '🕐 ' + new Date().toLocaleString('zh-CN');
                     // 更新统计卡片
+                    updateStatCards(data.stats);
                     var stats = data.stats;
-                    // 各图表重新初始化
-                    if (charts['chart-globe']) {
-                        charts['chart-globe'].dispose();
-                        delete charts['chart-globe'];
-                    }
-                    if (charts['chart-wordcloud']) {
-                        charts['chart-wordcloud'].dispose();
-                        delete charts['chart-wordcloud'];
-                    }
-                    if (charts['chart-trend']) charts['chart-trend'].dispose();
-                    if (charts['chart-source']) charts['chart-source'].dispose();
-                    if (charts['chart-deep']) charts['chart-deep'].dispose();
-
+                    // 重新初始化所有图表
                     initGlobe('chart-globe', data.source_distribution, data.keywords);
                     initWordCloud('chart-wordcloud', data.keywords);
                     initTrendChart('chart-trend', data.trend);
@@ -614,10 +632,14 @@ body.dark-theme {
     };
 
     // 初始化
+    var retries = 0;
     var checkInterval = setInterval(function() {
         if (typeof echarts !== 'undefined') {
             clearInterval(checkInterval);
             initCharts();
+        } else if (++retries > 30) {
+            clearInterval(checkInterval);
+            console.warn('ECharts 加载超时（6秒），大屏图表未初始化');
         }
     }, 200);
 })();
