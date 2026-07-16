@@ -12,12 +12,11 @@ _LOCAL_HANDLER_MAP: Dict[str, Callable] = {}
 
 
 def _render_url_template(url: str, params: Dict[str, Any]) -> str:
-    """Substitute encoded parameters in supported API URL template formats."""
+    """Replace {key} placeholders in URL with URL-encoded values."""
     rendered = url
     for key, value in params.items():
         encoded = urllib.parse.quote(str(value), safe="")
-        rendered = rendered.replace(f"{{{{{key}}}}}", encoded)
-        rendered = rendered.replace(f"{{{key}}}", encoded)
+        rendered = rendered.replace("{" + key + "}", encoded)
     return rendered
 
 
