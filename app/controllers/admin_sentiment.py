@@ -25,6 +25,7 @@ class AdminSentimentHandler(AdminBaseHandler):
             "admin/sentiment.html",
             title="舆情大屏 — 瞭望与问数系统",
             username=self.current_user,
+            xsrf_token=self.xsrf_token.decode() if isinstance(self.xsrf_token, bytes) else self.xsrf_token,
             stats=stats,
             recent_alerts=recent,
             words=[w["word"] for w in words if w.get("is_enabled")],
