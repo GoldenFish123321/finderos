@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.4.0-beta (2026-07-16) — 系统设置配置项扩展
+
+- ✨ **新功能 #99**：系统设置配置项从 8 项扩展至 19 项，新增 6 个配置类别
+  - **备份策略**：备份路径 `db_backup_path`、间隔天数 `db_backup_interval_days`、保留份数 `db_backup_keep_count`
+  - **日志配置**：日志级别 `log_level`（DEBUG/INFO/WARNING/ERROR）
+  - **通知配置**：SMTP 服务器 `smtp_host`、Webhook URL `webhook_url`
+  - **采集配置**：全局采集间隔 `collector_interval_minutes`
+  - **安全策略**：验证码开关 `captcha_enabled`、注册开关 `registration_enabled`、会话过期 `session_expire_hours`
+  - **上传限制**：上传大小上限 `upload_max_size_mb`（Logo 上传同步适配可配置上限）
+- 🔧 **架构改进**：`load_from_db()` 类型转换重构为集合匹配（`_INT_ATTRS`/`_FLOAT_ATTRS`/`_BOOL_ATTRS`）
+- 🗄️ **数据库迁移**：`INSERT OR IGNORE` 自动补充已有数据库缺失的新配置项
+- 🧪 **测试 #99**：新增 4 组专项测试（渲染/保存/持久化/开关行为），共 27 个测试点
+- 📝 **文档 #99**：README/design/requirement 同步更新系统配置架构说明
+
 ## v1.3.4-beta (2026-07-16) — 批量 Bug 修复
 
 - 🐛 **批量修复 #58-#128**：42 个 Bug 和安全漏洞一次性修复，详见 [PR #131](https://github.com/GoldenFish123321/finderos/pull/131)
