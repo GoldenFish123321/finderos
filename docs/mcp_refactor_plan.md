@@ -648,6 +648,70 @@ Step 7.5  更新 README.md
 
 ---
 
+## 十二、Phase 8: API 型员工 MCP 统一调度（已完成 v1.6.0）
+
+> **实施日期**: 2026-07-16
+> **核心目标**: 消除 API 员工与 MCP API 型工具之间的代码和配置重复
+
+### 12.1 问题背景
+
+API 型员工（`employee_type='api'`）直接持有 HTTP 配置字段（`api_url`、`api_method`、`api_headers`、`api_params_template`、`api_secret`），与 MCP `api` 型工具的字段几乎完全重复。`_invoke_api_employee()` 方法包含约 200 行 HTTP 调用逻辑，与 `_build_tool_from_db_row()` 的 `api_handler` 闭包功能重复。
+
+### 12.2 解决方案
+
+**API 员工不再持有 HTTP 配置，而是绑定一个 MCP 工具。API 员工的调用 = 一次 MCP 工具调用。**
+
+```mermaid
+flowchart LR
+    A[用户 @ API员工] --> B{mcp_tool_id?}
+    B -->|✅ 有| C[_invoke_api_via_mcp]
+    B -->|❌ 无| D[_invoke_api_employee_legacy]
+    C --> E[MCPServer.call_tool]
+    E --> F[返回结果]
+    D --> G[直接 HTTP 调用]
+    G --> F
+```
+
+### 12.3 数据库变更
+
+```sql
+-- digital_employees 表新增
+ALTER TABLE digital_employees 
+ADD COLUMN mcp_tool_id INTEGER DEFAULT NULL 
+REFERENCES mcp_tools(id) ON DELETE SET NULL;
+```
+
+### 12.4 关键设计决策
+
+| 决策 | 选择 | 理由 |
+|------|------|------|
+| API 员工绑定几个 MCP 工具 | 1 个 (`mcp_tool_id`) | 单一端点代理，单数区别于 LLM 员工的 `mcp_tool_ids` |
+| 可绑定哪些类型 | 全部（api/builtin/crawl4ai） | builtin 工具也可被 API 员工代理 |
+| 旧员工兼容 | `mcp_tool_id=NULL` 走旧逻辑 | 零风险渐进升级 |
+| 响应模板 | 保留在员工层面 | 不同员工对同一 MCP 工具的返回可做不同卡片渲染 |
+| 参数映射 | 自动适配 input_schema | 支持 `message`/`query`/`keyword`/`prompt` 参数名 |
+
+### 12.5 涉及文件
+
+| 文件 | 变更内容 |
+|------|---------|
+| `app/models/db.py` | 新增 `mcp_tool_id` 列迁移 + 修复 `is_sensitive`/`review_status` 兼容迁移 |
+| `app/models/digital_employee.py` | `create()`/`update()` 新增 `mcp_tool_id` 参数 + `resolve_mcp_tool_info()` 辅助方法 |
+| `app/controllers/admin_employee.py` | `_invoke_api_employee` 拆分为 MCP/legacy 双路径 + 列表解析 + 表单 MCP 选择器变量传递 |
+| `app/controllers/user_chat.py` | 同 admin 侧双路径拆分 + `UserEmployeeListHandler` MCP 信息解析 |
+| `app/templates/admin/employee_form.html` | API 型区域新增 MCP 工具下拉选择器 + JS 联动隐藏旧 HTTP 配置 |
+| `app/templates/admin/employee_list.html` | API 员工卡片优先显示 MCP 工具名（🔧） |
+
+### 12.6 精简代码量
+
+| 指标 | 变更 |
+|------|------|
+| 删除重复 HTTP 逻辑 | ~200 行 |
+| 新增 MCP 集成代码 | ~90 行 |
+| 净变化 | **-110 行** |
+
+---
+
 ## 十二、总结
 
 本次重构的核心思想是 **「一切皆 MCP Tool」**，通过以下关键变更实现：

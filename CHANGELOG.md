@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased — API 型员工 MCP 统一调度架构
+
+- ✨ **架构重构**：API 型员工底层从「直接 HTTP 调用」改为「MCP 工具委托」
+  - `digital_employees` 表新增 `mcp_tool_id` 列（INTEGER FK → `mcp_tools.id`），API 型员工可绑定单个 MCP 工具
+  - `_invoke_api_employee` 拆分为 `_invoke_api_via_mcp()`（新架构）+ `_invoke_api_employee_legacy()`（旧架构兼容）
+  - 新建/编辑 API 员工时可选择绑定的 MCP 工具，选后下方 HTTP 手动配置自动隐藏
+  - 管理侧和用户侧均支持 MCP 代理调用，自动适配 input_schema 参数映射
+  - 员工列表卡片优先显示 MCP 工具名称（`🔧 工具名`），旧模式回退显示 HTTP 方法
+- 🔧 **附带修复**：`conversation_messages` 表新增 `is_sensitive` / `review_status` 列的兼容性迁移
+- 🧪 **测试**：新增 `test_mcp_api_employee_refactor.py`
+
 ## v1.5.3-beta (2026-07-16) — @数字员工 load_skill 工具调用修复
 
 - 🐛 **Bug 修复**：@数字员工 LLM 调用缺少 `tools` 参数，导致 `load_skill` 等 MCP 工具无法通过 Function Calling 调用

@@ -77,7 +77,7 @@ class DigitalEmployeeRepository:
     def create(name: str, employee_type: str = "llm", description: str = "",
                model_id: int = None, system_prompt: str = "",
                skills: str = "[]", crawl4ai_enabled: int = 0,
-               mcp_tool_ids: str = "[]",
+               mcp_tool_ids: str = "[]", mcp_tool_id: int = None,
                api_url: str = "", api_method: str = "GET",
                api_headers: str = "{}", api_params_template: str = "",
                response_render_template: str = "",
@@ -89,12 +89,12 @@ class DigitalEmployeeRepository:
             with get_db() as conn:
                 cur = conn.execute(
                     "INSERT INTO digital_employees (name, employee_type, description, "
-                    "model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids, "
+                    "model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids, mcp_tool_id, "
                     "api_url, api_method, api_headers, api_params_template, "
                     "response_render_template, api_secret, api_interface_id) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (name.strip(), employee_type, description,
-                     model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids,
+                     model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids, mcp_tool_id,
                      api_url.strip(), api_method, api_headers, api_params_template,
                      response_render_template, encrypted_secret, api_interface_id),
                 )
@@ -107,7 +107,7 @@ class DigitalEmployeeRepository:
     def update(emp_id: int, name: str, employee_type: str = "llm", description: str = "",
                model_id: int = None, system_prompt: str = "",
                skills: str = "[]", crawl4ai_enabled: int = 0,
-               mcp_tool_ids: str = "[]",
+               mcp_tool_ids: str = "[]", mcp_tool_id: int = None,
                api_url: str = "", api_method: str = "GET",
                api_headers: str = "{}", api_params_template: str = "",
                response_render_template: str = "",
@@ -122,11 +122,11 @@ class DigitalEmployeeRepository:
             with get_db() as conn:
                 conn.execute(
                     "UPDATE digital_employees SET name=?, employee_type=?, description=?, "
-                    "model_id=?, system_prompt=?, skills=?, crawl4ai_enabled=?, mcp_tool_ids=?, "
+                    "model_id=?, system_prompt=?, skills=?, crawl4ai_enabled=?, mcp_tool_ids=?, mcp_tool_id=?, "
                     "api_url=?, api_method=?, api_headers=?, api_params_template=?, "
                     "response_render_template=?, api_secret=?, api_interface_id=? WHERE id=?",
                     (name.strip(), employee_type, description,
-                     model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids,
+                     model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids, mcp_tool_id,
                      api_url.strip(), api_method, api_headers, api_params_template,
                      response_render_template, encrypted_secret, api_interface_id, emp_id),
                 )
@@ -190,6 +190,37 @@ class DigitalEmployeeRepository:
             return conn.execute(
                 "SELECT COUNT(*) as cnt FROM digital_employees"
             ).fetchone()["cnt"]
+
+    @staticmethod
+    def resolve_mcp_tool_info(emp: dict) -> dict:
+        """为 API 型员工解析绑定的 MCP 工具信息。
+        
+        如果员工绑定了 mcp_tool_id，则查询工具名称和类别添加到员工字典中。
+        返回修改后的员工字典。
+        """
+        emp = dict(emp)
+        mcp_tool_id = emp.get("mcp_tool_id")
+        if mcp_tool_id:
+            try:
+                from app.models.mcp_tool import MCPToolRepository
+                tool = MCPToolRepository.get_by_id(int(mcp_tool_id))
+                if tool:
+                    emp["mcp_tool_name"] = tool.get("display_name", tool.get("name", ""))
+                    emp["mcp_tool_category"] = tool.get("category", "")
+                    emp["mcp_tool_type"] = tool.get("tool_type", "")
+                else:
+                    emp["mcp_tool_name"] = ""
+                    emp["mcp_tool_category"] = ""
+                    emp["mcp_tool_type"] = ""
+            except Exception:
+                emp["mcp_tool_name"] = ""
+                emp["mcp_tool_category"] = ""
+                emp["mcp_tool_type"] = ""
+        else:
+            emp["mcp_tool_name"] = ""
+            emp["mcp_tool_category"] = ""
+            emp["mcp_tool_type"] = ""
+        return emp
 
 
 # ── 内部辅助 ─────────────────────────────────────────────────
