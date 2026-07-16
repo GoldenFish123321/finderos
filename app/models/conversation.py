@@ -17,7 +17,6 @@ class ConversationRepository:
                 "INSERT INTO conversations (title, model_id, username) VALUES (?, ?, ?)",
                 (title, model_id, username),
             )
-            conn.commit()
             return cur.lastrowid
 
     @staticmethod
@@ -154,8 +153,21 @@ class ConversationRepository:
 
     @staticmethod
     def add_message(conv_id: int, role: str, content: str, token_count: int = 0):
-        """向对话中添加一条消息。"""
+        """向对话中添加一条消息。如果对话不存在则自动创建。"""
         with get_db() as conn:
+            # 防御性检查：确保 conversation 存在
+            exists = conn.execute(
+                "SELECT 1 FROM conversations WHERE id = ?", (conv_id,)
+            ).fetchone()
+            if not exists:
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"add_message: 对话 {conv_id} 不存在，自动创建"
+                )
+                conn.execute(
+                    "INSERT INTO conversations (id, title) VALUES (?, ?)",
+                    (conv_id, f"(恢复的对话 #{conv_id})"),
+                )
             conn.execute(
                 "INSERT INTO conversation_messages (conversation_id, role, content, token_count) "
                 "VALUES (?, ?, ?, ?)",

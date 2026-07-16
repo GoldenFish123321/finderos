@@ -200,14 +200,23 @@ def _build_script_tool(row: Dict[str, Any]) -> Optional[MCPTool]:
             result = await call_local_api(handler_key, mapped_params)
             results.append(result)
 
-        # 2. 如果启用脚本，执行纯数据转换（返回 str）
+        # 2. 如果启用脚本，执行纯数据转换
         if script_enabled and transform_script.strip():
-            return execute_transform_script(transform_script, results)
+            raw = execute_transform_script(transform_script, results)
+            # 尝试解析为 JSON dict，供下游卡片渲染使用
+            if isinstance(raw, str):
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, dict):
+                        return parsed
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            return raw
 
-        # 3. 无脚本时，透传第一个数据源的 data 字段的字符串表示
+        # 3. 无脚本时，透传第一个数据源的 data 字段
         first = results[0] if results else {}
         data = first.get("data", first)
-        return str(data) if not isinstance(data, str) else data
+        return data if isinstance(data, (dict, list)) else str(data)
 
     return MCPTool(
         name=row["name"],
