@@ -1595,19 +1595,9 @@ def _seed_script_tools():
                 "transform_script": (
                     "def transform(data_sources):\n"
                     "    try:\n"
-                    "        w = data_sources[0]['data']\n"
-                    "        cur = w.get('current_condition', [{}])[0]\n"
-                    "        loc = w.get('nearest_area', [{}])[0]\n"
-                    "        city = loc.get('areaName', [{}])[0].get('value', '未知')\n"
-                    "        country = loc.get('country', [{}])[0].get('value', '')\n"
-                    "        return json.dumps({\n"
-                    '            "city": city,\n'
-                    '            "country": country,\n'
-                    '            "weather": cur.get(\'weatherDesc\', [{}])[0].get(\'value\', \'\'),\n'
-                    '            "temperature": cur.get(\'temp_C\', \'\'),\n'
-                    '            "humidity": cur.get(\'humidity\', \'\'),\n'
-                    '            "wind": f"{cur.get(\'winddir16Point\', \'\')} {cur.get(\'windspeedKmph\', \'\')}km/h"\n'
-                    "        }, ensure_ascii=False)\n"
+                    "        if not data_sources or not data_sources[0].get('success'):\n"
+                    '            return json.dumps({"error": "天气数据获取失败"}, ensure_ascii=False)\n'
+                    "        return json.dumps(data_sources[0].get('data', {}), ensure_ascii=False)\n"
                     "    except Exception as e:\n"
                     '        return json.dumps({"error": str(e)}, ensure_ascii=False)'
                 ),
