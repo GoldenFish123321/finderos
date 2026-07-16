@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.9.2-beta (2026-07-16) — Script 工具异常回退修复
+
+- 为安全脚本沙箱提供受限的 Exception 类型，使种子转换脚本可执行 except Exception 回退。
+- 修复天气和音乐 script 型 MCP 工具遇到数据异常时返回 NameError 的问题。
+- 更新天气工具端到端测试到 script 架构，并增加沙箱异常捕获回归测试。
+
 ## v1.9.1-beta (2026-07-16) — 账户页可选人脸组件修复
 
 - 修复 #149：缺少 OpenCV contrib 的 LBPH 模块时，访问 /account 不再返回 500。
