@@ -83,6 +83,11 @@ class EmployeeListHandler(AdminBaseHandler):
                 emp["mcp_tools_list"] = [t["display_name"] for t in mcp_tool_rows]
             else:
                 emp["mcp_tools_list"] = []
+            # v1.6.0: API 型员工解析绑定的 MCP 工具名称（原地更新 rows[i]）
+            if emp.get("employee_type") == "api":
+                resolved = DigitalEmployeeRepository.resolve_mcp_tool_info(emp)
+                for key in ("mcp_tool_name", "mcp_tool_category", "mcp_tool_type"):
+                    emp[key] = resolved.get(key, "")
             # JS 安全转义员工名称（用于 confirm 对话框）
             emp["name_js"] = _json.dumps(emp.get("name", ""), ensure_ascii=False)
 
@@ -134,7 +139,7 @@ class EmployeeFormHandler(AdminBaseHandler):
         # 获取启用的技能库（供技能选择器使用）
         skills_library = SkillRepository.get_enabled()
 
-        # 获取启用的 MCP 工具（供工具选择器使用，v0.10）
+        # 获取启用的 MCP 工具（供工具选择器使用，v0.10 / v1.6.0 API 型员工 MCP 选择）
         mcp_tools = MCPToolRepository.get_enabled()
         mcp_categories = MCPToolRepository.get_categories()
 
@@ -149,6 +154,7 @@ class EmployeeFormHandler(AdminBaseHandler):
             skills_library=skills_library,
             mcp_tools=mcp_tools,
             mcp_categories=mcp_categories,
+            mcp_tools_all=mcp_tools,
         )
 
     @tornado.web.authenticated
@@ -180,6 +186,13 @@ class EmployeeFormHandler(AdminBaseHandler):
         except (ValueError, TypeError):
             mcp_ids = []
         mcp_tool_ids_json = json.dumps(mcp_ids, ensure_ascii=False)
+
+        # v1.6.0: API 型员工绑定的单个 MCP 工具
+        mcp_tool_id_str = self.get_body_argument("mcp_tool_id", "").strip()
+        try:
+            mcp_tool_id = int(mcp_tool_id_str) if mcp_tool_id_str else None
+        except (ValueError, TypeError):
+            mcp_tool_id = None
 
         # API 型字段
         api_url = self.get_body_argument("api_url", "").strip()
@@ -266,7 +279,7 @@ class EmployeeFormHandler(AdminBaseHandler):
             ok = DigitalEmployeeRepository.update(
                 emp_id, name, employee_type, description,
                 model_id, system_prompt, skills_json, crawl4ai_enabled,
-                mcp_tool_ids_json,
+                mcp_tool_ids_json, mcp_tool_id,
                 api_url, api_method, api_headers, api_params_template,
                 response_render_template, api_secret, api_interface_id,
             )
@@ -282,7 +295,7 @@ class EmployeeFormHandler(AdminBaseHandler):
             new_id = DigitalEmployeeRepository.create(
                 name, employee_type, description,
                 model_id, system_prompt, skills_json, crawl4ai_enabled,
-                mcp_tool_ids_json,
+                mcp_tool_ids_json, mcp_tool_id,
                 api_url, api_method, api_headers, api_params_template,
                 response_render_template, api_secret, api_interface_id,
             )
@@ -715,7 +728,94 @@ class EmployeeInvokeHandler(AdminBaseHandler):
         return result
 
     async def _invoke_api_employee(self, emp: dict, message: str):
-        """API 型员工调用：HTTP 代理 → JSON 响应。"""
+        """API 型员工调用 — v1.6.0: 优先 MCP 工具委托，回退 HTTP 直连。"""
+        mcp_tool_id = emp.get("mcp_tool_id")
+
+        if mcp_tool_id:
+            # ── 新架构：通过 MCP 工具统一调度 ──
+            await self._invoke_api_via_mcp(emp, message, mcp_tool_id)
+        else:
+            # ── 旧架构兼容：直接 HTTP 调用 ──
+            await self._invoke_api_employee_legacy(emp, message)
+
+    async def _invoke_api_via_mcp(self, emp: dict, message: str, mcp_tool_id: int):
+        """通过 MCP 工具调用 API 员工（v1.6.0 新架构）。"""
+        tool_row = MCPToolRepository.get_by_id(mcp_tool_id)
+        if not tool_row or tool_row.get("is_enabled") != 1:
+            self.write({"code": 1, "msg": "绑定的 MCP 工具不存在或已禁用"})
+            return
+
+        # 尝试从已注册的 MCPServer 获取工具，失败则实时构建
+        from app.mcp.server import MCPServer
+        from app.mcp.registry import _build_tool_from_db_row  # noqa: F401
+
+        server = MCPServer.get_instance()
+        tool = server.get_tool(tool_row["name"])
+        if not tool:
+            tool = _build_tool_from_db_row(tool_row)
+
+        if not tool:
+            self.write({"code": 1, "msg": "MCP 工具加载失败，请检查工具配置"})
+            return
+
+        # 构建调用参数：优先使用 input_schema 中的 properties 作为参数
+        arguments = {"message": message}
+        try:
+            input_schema = json.loads(tool_row.get("input_schema", "{}"))
+            props = input_schema.get("properties", {})
+            if "message" in props:
+                arguments = {"message": message}
+            elif "query" in props:
+                arguments = {"query": message}
+            elif "keyword" in props:
+                arguments = {"keyword": message}
+            elif "prompt" in props:
+                arguments = {"prompt": message}
+            # 如果 schema 定义了额外必填字段，尝试给默认值
+            for key, prop in props.items():
+                if key not in arguments and "default" in prop:
+                    arguments[key] = prop["default"]
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        try:
+            result = await tool.call(arguments)
+        except Exception as e:
+            logger.error(f"MCP 工具执行失败: {tool_row['name']} — {e}", exc_info=True)
+            self.write({"code": 1, "msg": f"MCP 工具执行失败: {str(e)}"})
+            return
+
+        # 应用响应渲染模板
+        response_template = emp.get("response_render_template", "")
+        if response_template:
+            try:
+                # 简单的模板变量替换
+                rendered = response_template.replace("{message}", message)
+                for key, val in (result if isinstance(result, dict) else {}).items():
+                    if isinstance(val, (str, int, float, bool)):
+                        rendered = rendered.replace("{" + key + "}", str(val))
+                # 尝试 JSON 输出
+                try:
+                    self.write({"code": 0, "data": json.loads(rendered)})
+                except (json.JSONDecodeError, TypeError):
+                    self.write({"code": 0, "data": {"rendered": rendered, "raw": result}})
+            except Exception:
+                self.write({"code": 0, "data": result})
+        else:
+            self.write({"code": 0, "data": result})
+
+        write_audit_log(
+            action="EMPLOYEE_INVOKE",
+            username=self.current_user,
+            target=f"employee:{emp['id']}",
+            detail=f"type=api(mcp), tool={tool_row['name']}",
+            client_ip=self.request.remote_ip or "",
+        )
+
+    async def _invoke_api_employee_legacy(self, emp: dict, message: str):
+        """API 型员工调用（旧架构兼容）：HTTP 代理 → JSON 响应。"""
+        import urllib.parse
+
         api_url = emp.get("api_url", "")
         api_method = normalize_api_method(emp.get("api_method", "GET"))
         api_headers_raw = emp.get("api_headers", "{}")
@@ -728,7 +828,6 @@ class EmployeeInvokeHandler(AdminBaseHandler):
 
         # 替换模板变量（URL 编码防止参数注入）
         try:
-            import urllib.parse
             encoded_msg = urllib.parse.quote(message, safe="", encoding="utf-8")
             api_url = api_url.replace("{message}", encoded_msg).replace("{message_raw}", encoded_msg)
             api_params = api_params.replace("{message}", encoded_msg).replace("{message_raw}", message)
@@ -737,7 +836,6 @@ class EmployeeInvokeHandler(AdminBaseHandler):
 
         # 确保 URL 不含未编码的非 ASCII 字符
         try:
-            import urllib.parse
             api_url = urllib.parse.quote(api_url, safe=":/?#[]@!$&'()*+,;=%-", encoding="utf-8")
         except Exception:
             pass
@@ -809,7 +907,7 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             action="EMPLOYEE_INVOKE",
             username=self.current_user,
             target=f"employee:{emp['id']}",
-            detail=f"type=api, status={status}",
+            detail=f"type=api(legacy), status={status}",
             client_ip=self.request.remote_ip or "",
         )
 

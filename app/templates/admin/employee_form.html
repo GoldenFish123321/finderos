@@ -156,6 +156,31 @@
 
             <!-- === API 型字段 === -->
             <div class="api-fields {{ 'active' if employee and employee['employee_type'] == 'api' else '' }}">
+                <!-- v1.6.0: MCP 工具选择（API 员工底层调用 MCP 工具） -->
+                <div class="layui-form-item">
+                    <label class="layui-form-label">
+                        <span class="layui-badge layui-bg-blue" style="margin-right:4px;">推荐</span>MCP 工具
+                    </label>
+                    <div class="layui-input-block">
+                        <select name="mcp_tool_id" id="mcp-tool-select" lay-filter="mcpToolSelect">
+                            <option value="">-- 手动配置 HTTP（旧模式） --</option>
+                            {% for tool in mcp_tools_all %}
+                            <option value="{{ tool['id'] }}"
+                                {% if employee and employee.get('mcp_tool_id') == tool['id'] %}selected{% end %}>
+                                [{{ tool.get('category', 'general') }}] {{ tool.get('display_name', tool['name']) }}
+                                {% if tool.get('tool_type') == 'api' %}🔗{% elif tool.get('tool_type') == 'builtin' %}⚙️{% else %}📡{% end %}
+                            </option>
+                            {% end %}
+                        </select>
+                        <div class="layui-form-mid layui-word-aux">
+                            💡 选择 MCP 工具后，API 员工将委托该工具处理请求，下方 HTTP 配置将被忽略。
+                            未选择时使用旧的 HTTP 直连模式。
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 旧 HTTP 配置区域（选择 MCP 工具后隐藏） -->
+                <div id="api-http-fields" style="{{ 'display:none;' if employee and employee.get('mcp_tool_id') else '' }}">
                 <div class="layui-form-item">
                     <label class="layui-form-label">接口模板</label>
                     <div class="layui-input-block">
@@ -227,6 +252,7 @@
                         <div class="layui-form-mid layui-word-aux">若已选择含密钥的接口模板且此处留空，将复用接口模板密钥。</div>
                     </div>
                 </div>
+                </div><!-- /api-http-fields -->
             </div>
 
             <div class="layui-form-item" style="margin-top:20px;">
@@ -289,6 +315,18 @@ layui.use(['form'], function(){
     if (interfaceSelect) {
         interfaceSelect.addEventListener('change', fillApiFromSelectedInterface);
         form.on('select(apiInterface)', fillApiFromSelectedInterface);
+    }
+
+    // v1.6.0: MCP 工具选择联动 — 选 MCP 工具时隐藏 HTTP 配置区
+    var mcpToolSelect = document.getElementById('mcp-tool-select');
+    var httpFields = document.getElementById('api-http-fields');
+    if (mcpToolSelect && httpFields) {
+        mcpToolSelect.addEventListener('change', function(){
+            httpFields.style.display = this.value ? 'none' : '';
+        });
+        form.on('select(mcpToolSelect)', function(data){
+            httpFields.style.display = data.value ? 'none' : '';
+        });
     }
 });
 </script>

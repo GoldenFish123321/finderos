@@ -732,6 +732,12 @@ class UserEmployeeListHandler(BaseHandler):
                 item["mcp_tools_list"] = [t["display_name"] for t in mcp_tool_rows]
             else:
                 item["mcp_tools_list"] = []
+            # v1.6.0: API 型员工绑定的 MCP 工具 — 统一调用 resolve_mcp_tool_info
+            if e.get("employee_type") == "api":
+                resolved = DigitalEmployeeRepository.resolve_mcp_tool_info(e)
+                for key in ("mcp_tool_name", "mcp_tool_category"):
+                    if resolved.get(key):
+                        item[key] = resolved[key]
             items.append(item)
         self.write({"code": 0, "items": items})
 
@@ -2206,7 +2212,144 @@ class UserEmployeeInvokeHandler(BaseHandler):
         return _estimate_tokens(full_reply)
 
     async def _invoke_api_employee(self, emp: dict, message: str, conv_id: int = None):
-        """API 型员工调用 — SSE 流式返回（含卡片渲染 + 元信息）。"""
+        """API 型员工调用 — v1.6.0: 优先 MCP 工具委托，回退 HTTP 直连。"""
+        mcp_tool_id = emp.get("mcp_tool_id")
+
+        if mcp_tool_id:
+            await self._invoke_api_via_mcp(emp, message, mcp_tool_id, conv_id)
+        else:
+            await self._invoke_api_employee_legacy(emp, message, conv_id)
+
+    async def _invoke_api_via_mcp(self, emp: dict, message: str, mcp_tool_id: int, conv_id: int = None):
+        """通过 MCP 工具调用 API 员工 — SSE 流式 + 卡片渲染（v1.6.0 新架构）。"""
+        import time as _time
+        _start = _time.time()
+
+        from app.models.mcp_tool import MCPToolRepository
+        tool_row = MCPToolRepository.get_by_id(mcp_tool_id)
+        if not tool_row or tool_row.get("is_enabled") != 1:
+            self.set_header("Content-Type", "text/event-stream")
+            self.set_header("Cache-Control", "no-cache")
+            await _sse_write(self, "绑定的 MCP 工具不存在或已禁用")
+            await _sse_done(self)
+            return
+
+        # 尝试从已注册的 MCPServer 获取工具，失败则实时构建
+        from app.mcp.server import MCPServer
+        from app.mcp.registry import _build_tool_from_db_row
+        server = MCPServer.get_instance()
+        tool = server.get_tool(tool_row["name"])
+        if not tool:
+            tool = _build_tool_from_db_row(tool_row)
+
+        if not tool:
+            self.set_header("Content-Type", "text/event-stream")
+            self.set_header("Cache-Control", "no-cache")
+            await _sse_write(self, "MCP 工具加载失败，请检查工具配置")
+            await _sse_done(self)
+            return
+
+        # SSE 响应头
+        self.set_header("Content-Type", "text/event-stream")
+        self.set_header("Cache-Control", "no-cache")
+        self.set_header("Connection", "keep-alive")
+        self.set_header("X-Accel-Buffering", "no")
+
+        emp_name = emp.get("name", "数字员工")
+        self.write(
+            f"event: employee\ndata: {json.dumps({'name': emp_name, 'type': 'api', 'mcp_tool': tool_row.get('display_name', tool_row['name'])}, ensure_ascii=False)}\n\n"
+        )
+        await self.flush()
+
+        # 构建调用参数
+        arguments = {"message": message}
+        try:
+            input_schema = json.loads(tool_row.get("input_schema", "{}"))
+            props = input_schema.get("properties", {})
+            if "query" in props:
+                arguments = {"query": message}
+            elif "keyword" in props:
+                arguments = {"keyword": message}
+            elif "prompt" in props:
+                arguments = {"prompt": message}
+            for key, prop in props.items():
+                if key not in arguments and "default" in prop:
+                    arguments[key] = prop["default"]
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        try:
+            result = await tool.call(arguments)
+        except Exception as e:
+            logger.error(f"MCP 工具执行失败: {tool_row['name']} — {e}")
+            await self._mock_api_employee_fallback(emp, message, _start, str(e), conv_id)
+            return
+
+        # 响应模板渲染
+        response_template = emp.get("response_render_template", "")
+        api_data = result if isinstance(result, dict) else {"raw": str(result)}
+
+        # 构建卡片
+        card_data = _build_employee_card(emp, api_data, message)
+        if card_data:
+            self.write(
+                f"event: card\ndata: {json.dumps(card_data, ensure_ascii=False)}\n\n"
+            )
+            await self.flush()
+
+        # 响应文本
+        rendered_body = ""
+        template_is_card_json = False
+        if response_template:
+            try:
+                template_obj = json.loads(response_template)
+                template_is_card_json = isinstance(template_obj, dict) and any(
+                    key in template_obj for key in ("type", "fields", "mapping")
+                )
+            except (json.JSONDecodeError, TypeError):
+                template_obj = None
+            if template_is_card_json:
+                rendered_body = _card_to_plain_text(card_data, "")
+            else:
+                rendered_body = _render_value_template(response_template, api_data)
+        if not rendered_body:
+            rendered_body = _card_to_plain_text(card_data, "")
+        if not rendered_body:
+            rendered_body = json.dumps(api_data, ensure_ascii=False, indent=2)[:5000]
+        rendered_body = html.escape(str(rendered_body))
+
+        # 流式输出
+        for ch in rendered_body[:5000]:
+            await _sse_write(self, ch)
+            await asyncio.sleep(0.01)
+        await _sse_done(self)
+
+        elapsed = round(_time.time() - _start, 2)
+        tokens = _estimate_tokens(rendered_body)
+        await _sse_stats(self, tokens, False, elapsed, conv_id)
+
+        if conv_id:
+            ConversationRepository.add_message(conv_id, "user", message, 0)
+            if rendered_body:
+                ConversationRepository.add_message(
+                    conv_id, "assistant", rendered_body[:5000], tokens
+                )
+            conv = ConversationRepository.get_by_id(conv_id)
+            if conv and (conv.get("title") or "").strip() in ("新对话", ""):
+                auto_title = ("@" + emp_name + " " + message.strip())[:200]
+                if auto_title:
+                    ConversationRepository.update_title(conv_id, auto_title)
+
+        write_audit_log(
+            action="USER_EMPLOYEE_INVOKE",
+            username=self.current_user,
+            target=f"employee:{emp['id']}",
+            detail=f"api_mcp_call, tool={tool_row['name']}, elapsed={elapsed}s, tokens={tokens}",
+            client_ip=self.request.remote_ip or "",
+        )
+
+    async def _invoke_api_employee_legacy(self, emp: dict, message: str, conv_id: int = None):
+        """API 型员工调用（旧架构兼容）— SSE 流式返回（含卡片渲染 + 元信息）。"""
         import time as _time
         import urllib.parse
         _start = _time.time()

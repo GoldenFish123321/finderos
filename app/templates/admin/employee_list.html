@@ -83,7 +83,7 @@
             <span>🤖 {{ emp.get('model_name') or '默认模型' }}</span>
             <!-- v0.8: crawl4ai_enabled 已废弃，MCP 工具显示在下方 -->
             {% else %}
-            <span>📡 {{ emp.get('api_method', 'GET') }}</span>
+            <span>📡 {% if emp.get('mcp_tool_name') %}🔧 {{ emp['mcp_tool_name'] }}{% else %}{{ emp.get('api_method', 'GET') }}{% end %}</span>
             {% end %}
             <span>🕐 {{ emp.get('created_at', '')[:10] }}</span>
         </div>

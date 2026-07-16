@@ -20,6 +20,7 @@ edge-tts>=6.1
 
 # 测试
 pytest>=8.0
+pytest-asyncio>=1.0
 
 # 可选：如需异步 HTTP 客户端（提升 AI 对话并发性能）
 # aiohttp>=3.9

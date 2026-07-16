@@ -377,7 +377,17 @@ def init_db():
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_msgs_conv ON conversation_messages(conversation_id)")
-        # v1.3.5 Issue #18: 消息管理索引
+        # v1.3.5 Issue #18: 消息管理索引（先确保列存在再建索引）
+        try:
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(conversation_messages)").fetchall()}
+            if "is_sensitive" not in cols:
+                conn.execute("ALTER TABLE conversation_messages ADD COLUMN is_sensitive INTEGER DEFAULT 0")
+                logger.info("Database migration: added is_sensitive column to conversation_messages")
+            if "review_status" not in cols:
+                conn.execute("ALTER TABLE conversation_messages ADD COLUMN review_status TEXT DEFAULT 'pending'")
+                logger.info("Database migration: added review_status column to conversation_messages")
+        except Exception as e:
+            logger.error(f"Database migration failed (conversation_messages): {e}", exc_info=True)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_msgs_sensitive ON conversation_messages(is_sensitive)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_msgs_review ON conversation_messages(review_status)")
 
@@ -453,6 +463,15 @@ def init_db():
                 logger.info("Database migration: added mcp_tool_ids column to digital_employees")
         except Exception as e:
             logger.error(f"Database migration failed (digital_employees.mcp_tool_ids): {e}", exc_info=True)
+
+        # ── v1.6.0 digital_employees 表新增 mcp_tool_id 列（API 型员工绑定单个 MCP 工具）──
+        try:
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(digital_employees)").fetchall()}
+            if "mcp_tool_id" not in cols:
+                conn.execute("ALTER TABLE digital_employees ADD COLUMN mcp_tool_id INTEGER DEFAULT NULL REFERENCES mcp_tools(id) ON DELETE SET NULL")
+                logger.info("Database migration: added mcp_tool_id column to digital_employees")
+        except Exception as e:
+            logger.error(f"Database migration failed (digital_employees.mcp_tool_id): {e}", exc_info=True)
 
         # ── v0.11 系统配置表 (key-value) ──
         conn.execute("""
