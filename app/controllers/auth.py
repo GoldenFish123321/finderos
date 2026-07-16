@@ -276,7 +276,7 @@ class FaceRegisterHandler(BaseHandler):
 
 
 class FaceLoginHandler(BaseHandler):
-    """人脸登录 — 上传人脸特征，匹配后自动登录"""
+    """人脸登录 — 上传人脸图片，OpenCV LBPH 匹配后自动登录"""
 
     def post(self):
         if self.current_user:
@@ -289,32 +289,23 @@ class FaceLoginHandler(BaseHandler):
             self.write({"code": 1, "msg": rate_limit_error})
             return
 
-        try:
-            descriptor_str = self.get_body_argument("descriptor", "")
-        except Exception:
-            self.write({"code": 1, "msg": "参数错误"})
-            return
-        if not descriptor_str:
-            self.write({"code": 1, "msg": "人脸数据不能为空"})
+        # 接收上传的图片
+        if "face_image" not in self.request.files:
+            self.write({"code": 1, "msg": "未上传人脸图片"})
             return
 
-        import json
-        try:
-            descriptor = json.loads(descriptor_str)
-        except (json.JSONDecodeError, TypeError):
-            self.write({"code": 1, "msg": "人脸数据格式错误"})
-            return
-        if not isinstance(descriptor, list) or len(descriptor) != 128:
-            self.write({"code": 1, "msg": "人脸数据维度错误（需要 128 维）"})
-            return
+        image_file = self.request.files["face_image"][0]
+        image_bytes = image_file["body"]
 
-        username = UserRepository.match_face(descriptor)
-        if not username:
+        from app.services.face_auth import recognize_face
+        result = recognize_face(image_bytes)
+        if result is None:
             login_limiter.record_failure(client_ip, "*face*")
             write_audit_log("FACE_LOGIN_FAIL", "", "", "人脸匹配失败", client_ip)
             self.write({"code": 1, "msg": "人脸识别失败，请重试或使用密码登录"})
             return
 
+        username, confidence = result
         user = UserRepository.get_user_by_username(username)
         if not user or user.get("is_enabled") == 0:
             self.write({"code": 1, "msg": "账户已被禁用"})

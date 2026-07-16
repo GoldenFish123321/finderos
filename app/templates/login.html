@@ -271,71 +271,88 @@
         <!-- 人脸登录模态框 -->
         <div class="face-modal" id="face-modal">
             <div class="face-box">
-                <h3 style="margin:0 0 12px;color:var(--text-primary);font-size:16px;">📷 人脸识别</h3>
+                <h3 style="margin:0 0 12px;color:var(--text-primary);font-size:16px;">📷 人脸识别登录</h3>
                 <video id="face-video" autoplay playsinline style="width:100%;border-radius:12px;transform:scaleX(-1);background:#000;"></video>
+                <canvas id="face-canvas" style="display:none;"></canvas>
                 <div class="face-status" id="face-status">请正对摄像头...</div>
                 <div class="face-actions">
                     <button class="btn-cancel" onclick="closeFaceLogin()">取消</button>
-                    <button class="btn-register" id="btn-face-capture" onclick="captureFace()" style="display:none;">注册人脸</button>
+                    <button class="btn-register" id="btn-face-capture" onclick="captureFaceLogin()">📸 拍照登录</button>
                 </div>
             </div>
         </div>
 
-        <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
         <script>
         var faceStream = null;
-        var faceLoginMode = 'login';
         function openFaceLogin() {
             document.getElementById('face-modal').classList.add('active');
-            document.getElementById('face-status').textContent = '正在加载模型...';
-            Promise.all([
-                faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights'),
-                faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights'),
-                faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights'),
-            ]).then(function() {
-                document.getElementById('face-status').textContent = '启动摄像头...';
-                navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'}})
-                .then(function(s) {
-                    faceStream = s;
-                    document.getElementById('face-video').srcObject = s;
-                    document.getElementById('face-status').textContent = '请正对摄像头...';
-                    if (faceLoginMode==='login') setTimeout(autoFaceLogin,1000);
-                }).catch(function(e){document.getElementById('face-status').textContent='摄像头失败: '+e.message;});
-            }).catch(function(e){document.getElementById('face-status').textContent='模型加载失败';});
+            document.getElementById('face-status').textContent = '正在启动摄像头...';
+            navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } })
+                .then(function(stream) {
+                    faceStream = stream;
+                    document.getElementById('face-video').srcObject = stream;
+                    document.getElementById('face-status').textContent = '请正对摄像头，点击「拍照登录」';
+                })
+                .catch(function(e) {
+                    document.getElementById('face-status').textContent = '摄像头访问失败: ' + e.message;
+                });
         }
         function closeFaceLogin() {
-            if (faceStream) { faceStream.getTracks().forEach(function(t){t.stop();}); faceStream = null; }
+            if (faceStream) { faceStream.getTracks().forEach(function(t) { t.stop(); }); faceStream = null; }
             document.getElementById('face-modal').classList.remove('active');
-            document.getElementById('btn-face-capture').style.display = 'none';
+            document.getElementById('face-status').textContent = '请正对摄像头...';
         }
-        async function autoFaceLogin() {
-            var v = document.getElementById('face-video'), st = document.getElementById('face-status');
-            if (!v||!v.videoWidth) { setTimeout(autoFaceLogin,500); return; }
-            try {
-                var det = await faceapi.detectAllFaces(v, new faceapi.TinyFaceDetectorOptions({inputSize:320,scoreThreshold:0.5}))
-                    .withFaceLandmarks().withFaceDescriptors();
-                if (!det.length) { st.textContent='未检测到人脸'; setTimeout(autoFaceLogin,800); return; }
-                var fd = new URLSearchParams(); fd.append('descriptor', JSON.stringify(Array.from(det[0].descriptor)));
-                var r = await fetch('/api/face/login', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:fd});
-                var d = await r.json();
-                if (d.code===0) { closeFaceLogin(); window.location.href = d.redirect||'/index'; }
-                else { st.textContent='❌ '+d.msg; setTimeout(autoFaceLogin,1500); }
-            } catch(e) { st.textContent='检测出错'; setTimeout(autoFaceLogin,1500); }
+        function captureFaceLogin() {
+            var video = document.getElementById('face-video');
+            var canvas = document.getElementById('face-canvas');
+            var status = document.getElementById('face-status');
+            var btn = document.getElementById('btn-face-capture');
+
+            if (!faceStream || !video.videoWidth) {
+                status.textContent = '摄像头未就绪，请稍后重试';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '识别中...';
+            status.textContent = '正在识别，请稍候...';
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            var ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+
+            canvas.toBlob(function(blob) {
+                var formData = new FormData();
+                formData.append('face_image', blob, 'face.jpg');
+
+                fetch('/face/login', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d.code === 0) {
+                        status.textContent = '✅ 登录成功';
+                        closeFaceLogin();
+                        window.location.href = d.redirect || '/index';
+                    } else {
+                        status.textContent = '❌ ' + (d.msg || '识别失败');
+                        btn.disabled = false;
+                        btn.textContent = '📸 拍照登录';
+                    }
+                })
+                .catch(function() {
+                    status.textContent = '网络错误，请重试';
+                    btn.disabled = false;
+                    btn.textContent = '📸 拍照登录';
+                });
+            }, 'image/jpeg');
         }
-        async function captureFace() {
-            var v = document.getElementById('face-video'), st = document.getElementById('face-status');
-            var btn = document.getElementById('btn-face-capture'); btn.disabled=true; btn.textContent='处理中...';
-            try {
-                var det = await faceapi.detectAllFaces(v, new faceapi.TinyFaceDetectorOptions({inputSize:320,scoreThreshold:0.5}))
-                    .withFaceLandmarks().withFaceDescriptors();
-                if (!det.length) { st.textContent='未检测到人脸'; btn.disabled=false;btn.textContent='注册人脸'; return; }
-                var fd = new URLSearchParams(); fd.append('descriptor', JSON.stringify(Array.from(det[0].descriptor)));
-                var r = await fetch('/api/face/register', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:fd});
-                var d = await r.json();
-                if (d.code===0) { st.textContent='✅ 注册成功'; setTimeout(closeFaceLogin,1500); }
-                else { st.textContent='❌ 注册失败'; btn.disabled=false;btn.textContent='注册人脸'; }
-            } catch(e) { st.textContent='检测出错'; btn.disabled=false;btn.textContent='注册人脸'; }
-        }
+        // 离开时关闭摄像头
+        window.addEventListener('beforeunload', function() {
+            if (faceStream) { faceStream.getTracks().forEach(function(t) { t.stop(); }); }
+        });
         </script>
     </div>
 </div>
