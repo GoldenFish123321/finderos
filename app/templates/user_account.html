@@ -37,8 +37,17 @@
     .btn { padding: 10px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; }
     .btn-primary { background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple)); color: white; }
     .btn-danger { background: rgba(255,87,34,0.16); color: #ff8a65; border: 1px solid rgba(255,87,34,0.22); }
+    .btn-secondary { background: rgba(255,255,255,0.08); color: var(--text-secondary); border: 1px solid var(--border-subtle); }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
     .link-row { margin-top: 16px; font-size: 13px; color: var(--text-muted); }
     .link-row a { color: var(--accent-blue); text-decoration: none; }
+    .face-confirm-actions {
+        display: none;
+        gap: 8px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-top: 8px;
+    }
 </style>
 
 <div class="account-card">
@@ -83,14 +92,20 @@
         <div style="text-align:center;margin-bottom:12px;">
             <video id="face-video" autoplay playsinline
                    style="width:100%;max-width:320px;border-radius:8px;border:1px solid var(--border-subtle);background:#000;"></video>
-            <canvas id="face-canvas" style="display:none;"></canvas>            <!-- 截图预览 -->
+            <canvas id="face-canvas" style="display:none;"></canvas>
+            <!-- 截图预览 -->
             <div id="face-preview-area" style="display:none;margin-top:8px;">
                 <img id="face-preview-img" style="max-width:200px;max-height:200px;border-radius:8px;border:2px solid var(--accent-blue);">
-                <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">已拍照，正在注册...</p>
-            </div>            <div style="margin-top:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+                <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">已拍照，请确认是否使用这张照片注册人脸。</p>
+                <div class="face-confirm-actions" id="face-confirm-actions">
+                    <button type="button" class="btn btn-primary" id="face-confirm-btn" onclick="confirmFaceRegistration()">✅ 确认使用</button>
+                    <button type="button" class="btn btn-secondary" id="face-retake-btn" onclick="retakeFace()">🔄 重新拍照</button>
+                </div>
+            </div>
+            <div style="margin-top:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
                 <button type="button" class="btn btn-primary" id="face-open-cam" onclick="openCamera()">📷 打开摄像头</button>
                 <button type="button" class="btn btn-primary" id="face-capture-btn"
-                        style="display:none;" onclick="captureFace()">📸 拍照注册</button>
+                        style="display:none;" onclick="captureFace()">📸 拍照预览</button>
             </div>
             <div id="face-capture-status" style="margin-top:8px;font-size:13px;color:var(--text-muted);"></div>
         </div>
@@ -114,6 +129,7 @@
 
 <script>
 var faceStream = null;
+var facePendingBlob = null;
 var FACE_KEY = 'face_login_enabled_{{ username }}';
 
 // 初始化：从 localStorage 读取开关状态
@@ -138,16 +154,28 @@ function toggleFaceLogin(checked) {
     }
 }
 
-function openCamera() {
-    var video = document.getElementById('face-video');
-    var status = document.getElementById('face-capture-status');
+function stopFaceCamera() {
     if (faceStream) {
         faceStream.getTracks().forEach(function(t) { t.stop(); });
         faceStream = null;
     }
-    // 隐藏之前的预览
+}
+
+function resetFacePreview() {
+    facePendingBlob = null;
     document.getElementById('face-preview-area').style.display = 'none';
+    document.getElementById('face-confirm-actions').style.display = 'none';
+    document.getElementById('face-confirm-btn').disabled = false;
+    document.getElementById('face-confirm-btn').textContent = '✅ 确认使用';
+}
+
+function openCamera() {
+    var video = document.getElementById('face-video');
+    var status = document.getElementById('face-capture-status');
+    stopFaceCamera();
+    resetFacePreview();
     video.style.display = '';
+    status.textContent = '正在启动摄像头...';
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 } })
         .then(function(stream) {
             faceStream = stream;
@@ -155,7 +183,9 @@ function openCamera() {
             video.play();
             document.getElementById('face-open-cam').textContent = '🔄 切换摄像头';
             document.getElementById('face-capture-btn').style.display = '';
-            status.textContent = '✅ 摄像头已开启，请正对镜头后点击「拍照注册」';
+            document.getElementById('face-capture-btn').disabled = false;
+            document.getElementById('face-capture-btn').textContent = '📸 拍照预览';
+            status.textContent = '✅ 摄像头已开启，请正对镜头后点击「拍照预览」';
         })
         .catch(function(err) {
             status.textContent = '❌ 无法访问摄像头：' + err.message;
@@ -170,8 +200,8 @@ function captureFace() {
     var previewArea = document.getElementById('face-preview-area');
     var previewImg = document.getElementById('face-preview-img');
 
-    if (!faceStream) {
-        status.textContent = '❌ 请先打开摄像头';
+    if (!faceStream || !video.videoWidth) {
+        status.textContent = '❌ 摄像头未就绪，请先打开摄像头或稍后重试';
         return;
     }
 
@@ -180,34 +210,57 @@ function captureFace() {
     var ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0);
 
-    // 显示预览
-    previewImg.src = canvas.toDataURL('image/jpeg');
-    previewArea.style.display = '';
+    canvas.toBlob(function(blob) {
+        if (!blob) {
+            status.textContent = '❌ 拍照失败，请重试';
+            return;
+        }
+        facePendingBlob = blob;
+        previewImg.src = canvas.toDataURL('image/jpeg');
+        previewArea.style.display = '';
+        document.getElementById('face-confirm-actions').style.display = 'flex';
+        btn.style.display = 'none';
+        stopFaceCamera();
+        video.style.display = 'none';
+        status.textContent = '请确认是否使用这张照片；不满意可重新拍照。';
+    }, 'image/jpeg');
+}
+
+function confirmFaceRegistration() {
+    var status = document.getElementById('face-capture-status');
+    var btn = document.getElementById('face-confirm-btn');
+    if (!facePendingBlob) {
+        status.textContent = '❌ 请先拍照预览后再确认';
+        return;
+    }
 
     btn.disabled = true;
     btn.textContent = '⏳ 注册中...';
     status.textContent = '⏳ 正在注册人脸，请稍候...';
 
-    canvas.toBlob(function(blob) {
-        var formData = new FormData();
-        formData.append('action', 'face_register');
-        formData.append('face_image', blob, 'face.jpg');
+    var formData = new FormData();
+    formData.append('action', 'face_register');
+    formData.append('face_image', facePendingBlob, 'face.jpg');
 
-        fetch('/account', {
-            method: 'POST',
-            headers: { 'X-Xsrftoken': getCookie('_xsrf') },
-            body: formData
-        })
-        .then(function(r) {
-            // 跟随重定向到 /account?msg=... 并加载该页面
-            window.location.href = r.url;
-        })
-        .catch(function(err) {
-            status.textContent = '❌ 注册失败，请重试';
-            btn.disabled = false;
-            btn.textContent = '📸 拍照注册';
-        });
-    }, 'image/jpeg');
+    fetch('/account', {
+        method: 'POST',
+        headers: { 'X-Xsrftoken': getCookie('_xsrf') },
+        body: formData
+    })
+    .then(function(r) {
+        window.location.href = r.url;
+    })
+    .catch(function(err) {
+        status.textContent = '❌ 注册失败，请重试';
+        btn.disabled = false;
+        btn.textContent = '✅ 确认使用';
+    });
+}
+
+function retakeFace() {
+    resetFacePreview();
+    document.getElementById('face-capture-status').textContent = '请重新打开摄像头拍照。';
+    openCamera();
 }
 
 function getCookie(name) {
@@ -217,9 +270,7 @@ function getCookie(name) {
 
 // 离开页面时关闭摄像头
 window.addEventListener('beforeunload', function() {
-    if (faceStream) {
-        faceStream.getTracks().forEach(function(t) { t.stop(); });
-    }
+    stopFaceCamera();
 });
 </script>
 

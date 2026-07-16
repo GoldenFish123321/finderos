@@ -474,6 +474,37 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
         cursor: default;
     }
     .gesture-hint .gesture-icon .emoji { margin-right: 3px; }
+    .gesture-guide {
+        padding: 10px 12px;
+        border-top: 1px solid var(--border-subtle);
+        background: rgba(15,18,32,0.82);
+        color: var(--text-muted);
+        font-size: 11px;
+        line-height: 1.7;
+    }
+    .gesture-guide-title {
+        color: var(--text-primary);
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+    .gesture-guide-list {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        margin-top: 6px;
+    }
+    .gesture-guide-item {
+        padding: 6px 8px;
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+        background: rgba(255,255,255,0.04);
+        color: var(--text-secondary);
+    }
+    .gesture-guide-item strong {
+        display: block;
+        color: var(--accent-blue);
+        margin-bottom: 2px;
+    }
 
     /* 摄像头开关按钮 */
     .btn-camera {
@@ -499,6 +530,7 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
         color: #22c55e;
         background: rgba(34,197,94,0.1);
     }
+    .btn-gesture-help { padding: 3px 7px; }
 
     /* 天气/信息卡片 */
     .info-card {
@@ -618,6 +650,7 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
         .chat-input-area { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; }
         .input-hints { overflow-x: auto; white-space: nowrap; }
         .btn-camera { display: none; }
+        .btn-gesture-help { display: none; }
         .chart-container { min-width: 0; width: 100% !important; }
     }
     .mobile-menu-btn {
@@ -727,6 +760,7 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
             <div style="display:flex;align-items:center;gap:10px;">
                 <span class="meta-info" id="header-meta"></span>
                 <button class="btn-camera" id="btn-camera" onclick="toggleCamera()" title="开启摄像头手势识别">✋ 手势</button>
+                <button class="btn-camera btn-gesture-help" id="btn-gesture-help" onclick="showGestureHelp()" title="查看手势识别功能说明">❔说明</button>
                 <button onclick="exportConversation('md')" title="导出 Markdown" style="background:none;border:1px solid var(--border-subtle);color:var(--text-muted);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;">📥 MD</button>
                 <button onclick="exportConversation('pdf')" title="导出 PDF（通过浏览器打印）" style="background:none;border:1px solid var(--border-subtle);color:var(--text-muted);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;">📄 PDF</button>
                 <button onclick="exportConversation('excel')" title="导出表格数据为 CSV" style="background:none;border:1px solid var(--border-subtle);color:var(--text-muted);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;">📊 Excel</button>
@@ -766,6 +800,15 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
             <canvas id="gesture-canvas"></canvas>
             <div class="gesture-hint" id="gesture-hint">
                 识别到: <span class="gesture-icon" id="gesture-hint-icon"></span>
+            </div>
+            <div class="gesture-guide" id="gesture-guide">
+                <div class="gesture-guide-title">手势识别说明</div>
+                <div>打开摄像头后，系统会识别连续稳定的手势，并自动在输入框中触发对应数字员工。触发后有短暂冷却时间，避免重复发送。</div>
+                <div class="gesture-guide-list">
+                    <div class="gesture-guide-item"><strong>✌️ 剪刀手</strong>@天气 查看当前天气</div>
+                    <div class="gesture-guide-item"><strong>✊ 握拳</strong>@随机音乐 推荐一首歌</div>
+                    <div class="gesture-guide-item"><strong>✋ 手掌</strong>@新闻聚合 获取最新新闻</div>
+                </div>
             </div>
         </div>
 
@@ -1736,6 +1779,37 @@ function renderInfoCard(container, card) {
 var gestureDetector = null;
 var gestureCamActive = false;
 var gestureHintTimer = null;
+
+function showGestureHelp() {
+    var helpHtml =
+        '<div style="line-height:1.8;color:#cbd5e1;">' +
+        '<p style="margin:0 0 8px;">打开“手势”后，浏览器会请求摄像头权限。识别到连续稳定手势后，系统会自动填入并发送对应数字员工指令。</p>' +
+        '<ul style="padding-left:18px;margin:0 0 8px;">' +
+        '<li>✌️ 剪刀手：@天气 查看当前天气</li>' +
+        '<li>✊ 握拳：@随机音乐 推荐一首歌</li>' +
+        '<li>✋ 手掌：@新闻聚合 获取最新新闻</li>' +
+        '</ul>' +
+        '<p style="margin:0;color:#94a3b8;">建议保持手部完整出现在画面中；每次触发后会冷却约 2.5 秒，避免重复发送。</p>' +
+        '</div>';
+    if (typeof layui !== 'undefined') {
+        layui.use(['layer'], function() {
+            var layer = layui.layer;
+            if (!layer || !layer.open) {
+                alert('手势识别说明\\n\\n✌️ 剪刀手：@天气 查看当前天气\\n✊ 握拳：@随机音乐 推荐一首歌\\n✋ 手掌：@新闻聚合 获取最新新闻\\n\\n触发后会冷却约 2.5 秒。');
+                return;
+            }
+            layer.open({
+                type: 1,
+                title: '手势识别功能说明',
+                area: ['420px', 'auto'],
+                shadeClose: true,
+                content: '<div style="padding:18px;background:#161827;">' + helpHtml + '</div>'
+            });
+        });
+    } else {
+        alert('手势识别说明\\n\\n✌️ 剪刀手：@天气 查看当前天气\\n✊ 握拳：@随机音乐 推荐一首歌\\n✋ 手掌：@新闻聚合 获取最新新闻\\n\\n触发后会冷却约 2.5 秒。');
+    }
+}
 
 function toggleCamera() {
     var btn = document.getElementById('btn-camera');
