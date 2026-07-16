@@ -309,6 +309,12 @@
                 document.getElementById('face-status').textContent = '请先输入用户名';
                 return;
             }
+            // 检查该用户是否暂停了人脸登录
+            var disabled = localStorage.getItem('face_login_enabled_' + uname);
+            if (disabled === 'false') {
+                document.getElementById('face-status').textContent = '⏸ 该用户已暂停人脸登录，请在账户设置中重新启用';
+                return;
+            }
             document.getElementById('face-status').textContent = '正在启动摄像头...';
             document.getElementById('face-video').style.display = '';
             navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } })
@@ -355,6 +361,9 @@
                 formData.append('face_image', blob, 'face.jpg');
                 formData.append('username', uname);
                 formData.append('_xsrf', getXsrftoken());
+                // 发送人脸登录开关状态，供后端验证
+                var enabled = localStorage.getItem('face_login_enabled_' + uname);
+                formData.append('face_login_enabled', (enabled !== 'false') ? '1' : '0');
 
                 fetch('/face/login', {
                     method: 'POST',

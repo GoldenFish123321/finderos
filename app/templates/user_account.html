@@ -114,10 +114,11 @@
 
 <script>
 var faceStream = null;
+var FACE_KEY = 'face_login_enabled_{{ username }}';
 
 // 初始化：从 localStorage 读取开关状态
 (function() {
-    var saved = localStorage.getItem('face_login_enabled');
+    var saved = localStorage.getItem(FACE_KEY);
     var checkbox = document.getElementById('face-toggle');
     var status = document.getElementById('face-toggle-status');
     if (checkbox && !checkbox.disabled) {
@@ -129,7 +130,7 @@ var faceStream = null;
 
 function toggleFaceLogin(checked) {
     var status = document.getElementById('face-toggle-status');
-    localStorage.setItem('face_login_enabled', checked ? 'true' : 'false');
+    localStorage.setItem(FACE_KEY, checked ? 'true' : 'false');
     if (checked) {
         status.textContent = '✅ 人脸登录已启用';
     } else {

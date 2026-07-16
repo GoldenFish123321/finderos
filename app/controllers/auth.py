@@ -312,6 +312,15 @@ class FaceLoginHandler(BaseHandler):
             self.write({"code": 1, "msg": "该用户未注册人脸，请先用密码登录后在账户设置中注册"})
             return
 
+        # 检查用户是否启用了人脸登录（前端 localStorage 传递）
+        try:
+            face_login_enabled = self.get_body_argument("face_login_enabled", "1")
+        except Exception:
+            face_login_enabled = "1"
+        if face_login_enabled == "0":
+            self.write({"code": 1, "msg": "该用户已暂停人脸登录，请在账户设置中重新启用"})
+            return
+
         # 接收上传的图片
         if "face_image" not in self.request.files:
             self.write({"code": 1, "msg": "未上传人脸图片"})
