@@ -1,4 +1,4 @@
-# 瞭望与问数系统 (DataFinderAgentOS) v1.0.0-beta
+# 瞭望与问数系统 (DataFinderAgentOS) v1.5.1-beta (merged)
 # =========================================
 # 核心依赖
 tornado>=6.4
@@ -11,6 +11,9 @@ brotli>=1.1
 
 # 可选：AI 爬虫组件（深度采集增强）
 crawl4ai>=0.4
+
+# 人脸识别：OpenCV 人脸检测与 LBPH 识别
+opencv-contrib-python>=4.9
 
 # TTS：Edge TTS 语音合成（Microsoft Edge 免费 TTS 服务）
 edge-tts>=6.1

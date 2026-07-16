@@ -286,7 +286,7 @@ class FaceRegisterHandler(BaseHandler):
 
 
 class FaceLoginHandler(BaseHandler):
-    """人脸登录 — 上传人脸特征，匹配后自动登录"""
+    """人脸登录 — 先输入用户名，再拍照验证人脸与用户名匹配"""
 
     def post(self):
         if self.current_user:
@@ -294,43 +294,56 @@ class FaceLoginHandler(BaseHandler):
             return
 
         client_ip = self.request.remote_ip or "0.0.0.0"
-        allowed, rate_limit_error = login_limiter.check(client_ip, "*face*")
+
+        # 获取用户名
+        try:
+            username = self.get_body_argument("username", "").strip()
+        except Exception:
+            username = ""
+        if not username:
+            self.write({"code": 1, "msg": "请先输入用户名"})
+            return
+
+        allowed, rate_limit_error = login_limiter.check(client_ip, username)
         if not allowed:
             self.write({"code": 1, "msg": rate_limit_error})
             return
 
-        try:
-            descriptor_str = self.get_body_argument("descriptor", "")
-        except Exception:
-            self.write({"code": 1, "msg": "参数错误"})
-            return
-        if not descriptor_str:
-            self.write({"code": 1, "msg": "人脸数据不能为空"})
+        # 验证用户存在且启用
+        user = UserRepository.get_user_by_username(username)
+        if not user or user.get("is_enabled") == 0:
+            login_limiter.record_failure(client_ip, username)
+            self.write({"code": 1, "msg": "用户不存在或已被禁用"})
             return
 
-        import json
-        try:
-            descriptor = json.loads(descriptor_str)
-        except (json.JSONDecodeError, TypeError):
-            self.write({"code": 1, "msg": "人脸数据格式错误"})
-            return
-        if not isinstance(descriptor, list) or len(descriptor) != 128:
-            self.write({"code": 1, "msg": "人脸数据维度错误（需要 128 维）"})
+        # 检查该用户是否已注册人脸
+        from app.services.face_auth import has_face as face_has_image, recognize_face
+        if not face_has_image(username):
+            self.write({"code": 1, "msg": "该用户未注册人脸，请先用密码登录后在账户设置中注册"})
             return
 
-        username = UserRepository.match_face(descriptor)
-        if not username:
-            login_limiter.record_failure(client_ip, "*face*")
-            write_audit_log("FACE_LOGIN_FAIL", "", "", "人脸匹配失败", client_ip)
+        # 接收上传的图片
+        if "face_image" not in self.request.files:
+            self.write({"code": 1, "msg": "未上传人脸图片"})
+            return
+
+        image_file = self.request.files["face_image"][0]
+        image_bytes = image_file["body"]
+
+        result = recognize_face(image_bytes)
+        if result is None:
+            login_limiter.record_failure(client_ip, username)
+            write_audit_log("FACE_LOGIN_FAIL", username, "", "人脸匹配失败", client_ip)
             self.write({"code": 1, "msg": "人脸识别失败，请重试或使用密码登录"})
             return
 
-        user = UserRepository.get_user_by_username(username)
-        if not user or user.get("is_enabled") == 0:
-            self.write({"code": 1, "msg": "账户已被禁用"})
+        recognized_username, confidence = result
+        if recognized_username != username:
+            login_limiter.record_failure(client_ip, username)
+            write_audit_log("FACE_LOGIN_FAIL", username, "", f"人脸不匹配（识别为:{recognized_username}）", client_ip)
+            self.write({"code": 1, "msg": "人脸与用户名不匹配，请确认后重试"})
             return
 
-        login_limiter.clear(client_ip, "*face*")
         login_limiter.clear(client_ip, username)
         is_https = self.request.protocol == "https"
         self.set_secure_cookie(
@@ -340,12 +353,105 @@ class FaceLoginHandler(BaseHandler):
         )
         write_audit_log("FACE_LOGIN_SUCCESS", username, "", "人脸登录成功", client_ip)
 
-        role = UserRepository.get_user_role(username)
-        if role:
-            routes = [r for r in UserRepository.get_user_function_routes(username)
-                      if r.startswith("/admin")]
-            redirect = "/admin" if "/admin" in routes else (routes[0] if routes else "/index")
-        else:
-            redirect = "/index"
+        self.write({"code": 0, "msg": "登录成功", "redirect": "/chat"})
 
-        self.write({"code": 0, "msg": "登录成功", "redirect": redirect})
+
+class UserAccountHandler(BaseHandler):
+    """用户账户设置页 — 修改密码、人脸注册/启用人脸登录、删除账号"""
+
+    @tornado.web.authenticated
+    def get(self):
+        from app.services.face_auth import has_face as face_has_image
+        has_face = face_has_image(self.current_user)
+        self.render(
+            "user_account.html",
+            title="账户设置 — 瞭望与问数系统",
+            username=self.current_user,
+            face_registered=has_face,
+            face_enabled=has_face,
+            message=self.get_query_argument("msg", ""),
+            error="",
+        )
+
+    @tornado.web.authenticated
+    def post(self):
+        from app.services.face_auth import has_face as face_has_image, register_face, delete_face
+
+        action = self.get_body_argument("action", "")
+        has_face = face_has_image(self.current_user)
+
+        def render_page(msg="", error=""):
+            self.render(
+                "user_account.html",
+                title="账户设置 — 瞭望与问数系统",
+                username=self.current_user,
+                face_registered=has_face,
+                face_enabled=has_face,
+                message=msg,
+                error=error,
+            )
+
+        if action == "change_password":
+            old_password = self.get_body_argument("old_password", "")
+            new_password = self.get_body_argument("new_password", "")
+            confirm_password = self.get_body_argument("confirm_password", "")
+
+            if not old_password or not new_password or not confirm_password:
+                return render_page(error="请填写所有密码字段")
+            if new_password != confirm_password:
+                return render_page(error="两次输入的新密码不一致")
+
+            user = UserRepository.get_user_by_username(self.current_user)
+            success, msg = UserRepository.update_password(
+                user["id"], old_password, new_password
+            )
+            if not success:
+                return render_page(error=msg)
+            write_audit_log("CHANGE_PASSWORD", self.current_user, "", "用户修改密码")
+            return render_page(message="密码修改成功")
+
+        elif action == "face_register":
+            if "face_image" not in self.request.files:
+                return self.write({"code": 1, "msg": "未上传图片"})
+            image_file = self.request.files["face_image"][0]
+            image_bytes = image_file["body"]
+            ok = register_face(self.current_user, image_bytes)
+            if not ok:
+                return self.redirect("/account?error=未检测到人脸，请正对镜头重试")
+            write_audit_log("FACE_REGISTER", self.current_user, "", "用户注册人脸")
+            return self.redirect("/account?msg=人脸注册成功")
+
+        elif action == "face_toggle":
+            return render_page(message="人脸登录设置已更新" if has_face else "",
+                              error="" if has_face else "请先注册人脸数据")
+
+        elif action == "delete_account":
+            delete_password = self.get_body_argument("delete_password", "")
+            if not delete_password:
+                return render_page(error="请输入密码确认删除")
+            user = UserRepository.get_user_by_username(self.current_user)
+            # 验证密码
+            from app.utils.security import _hash_password
+            import secrets
+            from app.models.db import get_db
+            with get_db() as conn:
+                row = conn.execute(
+                    "SELECT password_hash, salt FROM users WHERE id=?",
+                    (user["id"],),
+                ).fetchone()
+                expected = _hash_password(
+                    delete_password, bytes.fromhex(row["salt"])
+                )
+                import hmac
+                if not hmac.compare_digest(expected, row["password_hash"]):
+                    return render_page(error="密码错误，无法删除账号")
+                # 清理人脸数据
+                delete_face(self.current_user)
+                # 删除用户
+                conn.execute("DELETE FROM users WHERE id=?", (user["id"],))
+                conn.commit()
+            write_audit_log("DELETE_ACCOUNT", self.current_user, "", "用户自行删除账号")
+            self.clear_cookie("username")
+            return self.redirect("/?msg=账号已删除")
+
+        return render_page(error="未知操作")
