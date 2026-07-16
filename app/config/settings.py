@@ -70,6 +70,7 @@ class Settings:
             "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "img-src 'self' data: https: blob:; "
+            "media-src 'self' https:; "
             "font-src 'self' https://cdn.jsdelivr.net; "
             "connect-src 'self' https://cdn.jsdelivr.net blob:; "
             "worker-src 'self' blob:; "
