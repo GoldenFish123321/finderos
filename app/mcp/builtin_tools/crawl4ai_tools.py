@@ -6,7 +6,6 @@ crawl4ai_tools.py — Crawl4ai 爬虫增强类 MCP 工具处理函数 (v0.10 新
 - batch_deep_collect: 批量深度采集
 """
 
-import asyncio
 import logging
 from typing import Any, Dict, List
 
@@ -33,11 +32,17 @@ async def _collect_with_crawl4ai(url: str, extract_mode: str = "auto") -> Dict[s
     if _HAS_CRAWL4AI:
         try:
             from crawl4ai import AsyncWebCrawler
-            from app.utils.safe_http import safe_http_request
-            fetched = await asyncio.get_running_loop().run_in_executor(
-                None, lambda: safe_http_request(url, timeout=30, max_bytes=5 * 1024 * 1024)
-            )
-            html = fetched.body.decode("utf-8", errors="replace")
+            # 惰性 import 避免循环引用
+            from app.services.local_api_client import call_local_api
+
+            result = await call_local_api("collector/deep-fetch", {
+                "url": url, "timeout": 30,
+            })
+            if not result.get("success"):
+                logger.warning("Deep fetch failed for crawl4ai %s: %s", url, result.get("error"))
+                raise Exception(result.get("error", "深度采集失败"))
+
+            html = result["data"]["html"]
             async with AsyncWebCrawler() as crawler:
                 crawled = await crawler.arun(url="raw:" + html)
             if getattr(crawled, "success", False):

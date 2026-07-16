@@ -13,8 +13,8 @@ from tornado.ioloop import PeriodicCallback
 from app.models.watch_source import WatchSourceRepository
 from app.models.watch_result import WatchResultRepository
 from app.models.data_warehouse import DataWarehouseRepository
-from app.services.collector import fetch_and_parse
-from app.utils.security import write_audit_log, validate_url_safe
+from app.services.collector import fetch_and_parse_via_handler
+from app.utils.security import write_audit_log
 
 logger = logging.getLogger(__name__)
 
@@ -151,11 +151,10 @@ class CollectionScheduler:
             logger.error(f"定时采集调度器 tick 异常: {e}")
 
     def _collect_source(self, source: dict):
-        """对单个瞭望源执行采集。"""
+        """对单个瞭望源执行采集（通过统一出口 fetch_and_parse_via_handler）。"""
         source_id = source["id"]
         name = source.get("name", "unknown")
         url_template = source.get("url_template", "")
-        request_headers_str = source.get("request_headers", "{}")
 
         if not url_template:
             return
@@ -169,33 +168,20 @@ class CollectionScheduler:
 
         try:
             import json
-            import urllib.parse
-            headers = json.loads(request_headers_str) if request_headers_str else {}
 
             total_collected = 0
             for keyword in keywords:
-                encoded_kw = urllib.parse.quote(keyword, encoding="utf-8")
-                request_url = url_template.replace("{keyword}", encoded_kw).replace("{page}", "0")
-                if "{" in request_url or "}" in request_url:
-                    logger.warning("定时采集跳过含未解析占位符的 URL 模板: %s", url_template)
-                    continue
-
-                safe, reason, _ = validate_url_safe(request_url)
-                if not safe:
-                    logger.warning(f"定时采集 SSRF 拦截: {request_url}, reason={reason}")
-                    continue
-
                 try:
-                    status, size, text, parsed_news = fetch_and_parse(
-                        request_url, headers, parser, timeout=20
+                    status, size, text, parsed_news = fetch_and_parse_via_handler(
+                        source_id=source_id, keyword=keyword, page=0,
+                        parser=parser, timeout=20,
                     )
                     for news in parsed_news:
                         link = news.get("link", "")
-                        # request_url 优先存新闻链接（用于去重），空则回退到搜索URL
                         result_id, is_new = WatchResultRepository.create_if_not_exists(
                             source_id=source_id,
                             keyword=keyword,
-                            request_url=link or request_url,
+                            request_url=link or url_template,
                             response_status=status,
                             response_size=size,
                             result_data=json.dumps(news, ensure_ascii=False),

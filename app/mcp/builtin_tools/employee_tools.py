@@ -61,7 +61,27 @@ async def _invoke_digital_employee(employee_name: str, message: str) -> Dict[str
     emp_type = emp.get("employee_type", "llm")
 
     if emp_type == "api":
-        # API 型：直接 HTTP 调用
+        # API 型员工：优先走统一出口 proxy/{api_interface_id}
+        api_interface_id = emp.get("api_interface_id")
+        if api_interface_id:
+            # 惰性 import 避免循环引用
+            from app.services.local_api_client import call_local_api
+            import urllib.parse
+            params = {"message": message}
+            result = await call_local_api(f"proxy/{api_interface_id}", params)
+            if result.get("success"):
+                return {
+                    "success": True,
+                    "employee": emp["name"],
+                    "type": "api",
+                    "data": result.get("data", ""),
+                }
+            return {
+                "success": False,
+                "error": result.get("error", "API调用失败"),
+            }
+
+        # 无 api_interface_id 时，使用员工自身的 api_url 直接调用
         from app.utils.safe_http import SafeHttpError, safe_http_request
         api_url = emp.get("api_url", "")
         api_method = emp.get("api_method", "GET")

@@ -161,7 +161,7 @@ def _build_script_tool(row: Dict[str, Any]) -> Optional[MCPTool]:
         data_sources = []
 
     transform_script = row.get("transform_script", "")
-    script_enabled = bool(row.get("script_enabled", 0))
+    script_enabled = int(row.get("script_enabled", 0)) if row.get("script_enabled") is not None else 0
 
     if not data_sources:
         logger.warning(f"script 型工具 {row['name']} 未配置 data_sources")
@@ -283,20 +283,28 @@ def _build_tool_from_db_row(row: Dict[str, Any]) -> Optional[MCPTool]:
                     f"{{{key}}}", urllib.parse.quote(str(value), safe="")
                 )
 
-            # 对于 GET 请求，剩余参数作为 query string
+            # 规范化 HTTP 方法（兼容小写输入）
+            normalized_method = api_method.upper()
+
+            # 剩余参数：GET/DELETE 等追加到 URL；POST/PUT/PATCH 编码为 body
             query_params = {k: v for k, v in kwargs.items() if f"{{{k}}}" not in api_url}
-            if query_params and api_method.upper() == "GET":
-                qs = urllib.parse.urlencode(query_params)
-                final_url += ("&" if "?" in final_url else "?") + qs
+            body_params_methods = {"POST", "PUT", "PATCH"}
+            if query_params:
+                if normalized_method in body_params_methods:
+                    data = json.dumps(query_params).encode("utf-8")
+                    api_headers["Content-Type"] = "application/json"
+                else:
+                    # GET / DELETE / HEAD / OPTIONS：追加到 URL
+                    qs = urllib.parse.urlencode(query_params)
+                    final_url += ("&" if "?" in final_url else "?") + qs
+                    data = None
+            else:
+                data = None
 
             def _sync_call():
                 try:
-                    data = None
-                    if api_method.upper() == "POST" and query_params:
-                        data = json.dumps(query_params).encode("utf-8")
-                        api_headers["Content-Type"] = "application/json"
                     response = safe_http_request(
-                        final_url, method=api_method, headers=api_headers,
+                        final_url, method=normalized_method, headers=api_headers,
                         body=data, timeout=30, max_bytes=1024 * 1024,
                     )
                     if 300 <= response.status < 400:

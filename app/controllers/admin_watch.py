@@ -30,7 +30,7 @@ atexit.register(_watch_collect_executor.shutdown, wait=True)
 # 深度采集线程池（模块级复用，避免每个请求创建销毁）
 _watch_deep_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="watch-deep")
 atexit.register(_watch_deep_executor.shutdown, wait=True)
-from app.services.collector import fetch_and_parse
+from app.services.collector import fetch_and_parse_via_handler
 
 
 # 向后兼容别名
@@ -80,7 +80,7 @@ def _get_collect_request(source: dict, keyword: str) -> tuple[str, dict, str]:
 
 
 def _collect_source(keyword: str, source_id: int) -> dict:
-    """采集单个瞭望源并持久化结果，供普通 POST 和 SSE 共用。"""
+    """采集单个瞭望源并持久化结果（通过统一出口 fetch_and_parse_via_handler）。"""
     source = WatchSourceRepository.get_by_id(source_id)
     if not source or source["is_enabled"] == 0:
         return {
@@ -94,13 +94,15 @@ def _collect_source(keyword: str, source_id: int) -> dict:
             "ok": False,
         }
 
-    request_url, headers, parser = _get_collect_request(source, keyword)
+    url_template = source.get("url_template", "")
+    parser = "sogou_news" if "sogou" in url_template.lower() else "baidu_news"
+    request_url = url_template.replace("{keyword}", keyword).replace("{page}", "0")
     try:
-        status, size, text, parsed_news = fetch_and_parse(
-            request_url, headers=headers, parser=parser,
+        status, size, text, parsed_news = fetch_and_parse_via_handler(
+            source_id=source_id, keyword=keyword, page=0, parser=parser,
         )
     except Exception as e:
-        logger.error(f"瞭望采集失败: source={source_id}, url={request_url}, error={e}", exc_info=True)
+        logger.error(f"瞭望采集失败: source={source_id}, keyword={keyword}, error={e}", exc_info=True)
         return {
             "source_id": source_id,
             "source_name": source["name"],

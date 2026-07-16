@@ -108,6 +108,8 @@ def _check_ast_node(node, depth=0, max_depth=50):
 
 def validate_script(script: str) -> tuple[bool, str]:
     """预检脚本安全性。返回 (is_valid, error_message)。"""
+    if not isinstance(script, str):
+        return False, "脚本内容必须为字符串"
     try:
         tree = ast.parse(script, mode="exec")
     except SyntaxError as e:

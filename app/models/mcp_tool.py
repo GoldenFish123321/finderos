@@ -181,12 +181,19 @@ class MCPToolRepository:
                script_enabled: int = 0) -> int:
         """创建 MCP 工具。返回新 ID 或 -1。"""
         try:
-            # 校验 JSON 字段
-            for field in [input_schema, output_schema, api_headers, config, data_sources]:
+            # 校验 JSON 字段，无效 JSON 拒绝创建
+            for field_name, field_val in [
+                ("input_schema", input_schema),
+                ("output_schema", output_schema),
+                ("api_headers", api_headers),
+                ("config", config),
+                ("data_sources", data_sources),
+            ]:
                 try:
-                    json.loads(field)
+                    json.loads(field_val)
                 except (json.JSONDecodeError, TypeError):
-                    pass  # 容错
+                    logger.warning(f"创建 MCP 工具失败: {field_name} 不是有效 JSON")
+                    return -1
             with get_db() as conn:
                 cur = conn.execute(
                     "INSERT INTO mcp_tools (name, display_name, description, "

@@ -61,6 +61,10 @@ def _init_local_handlers():
     register_local_handler("system/stats", _get_system_stats)
     register_local_handler("skill/load", _load_skill)
 
+    # 触发自注册模块（模块加载时自动调用 register_local_handler）
+    import app.services.collector  # noqa: F401  → collector/fetch
+    import app.services.deep_collector  # noqa: F401  → collector/deep-fetch
+
 
 async def call_local_api(handler_key: str, params: Dict[str, Any]) -> Dict[str, Any]:
     """调用本地接口（进程内函数直调）。

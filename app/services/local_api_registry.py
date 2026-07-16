@@ -31,6 +31,10 @@ LOCAL_API_SEEDS = [
     # ── 系统 ──
     {"name": "系统状态", "handler": "system/stats", "desc": "获取系统的运行状态和资源使用情况。"},
     {"name": "加载技能", "handler": "skill/load", "desc": "加载指定的系统技能模块。"},
+    # ── 统一对外出口（方案B新增）──
+    {"name": "瞭望采集", "handler": "collector/fetch", "desc": "根据瞭源ID和关键词采集网页HTML（统一对外出口）。"},
+    {"name": "深度采集", "handler": "collector/deep-fetch", "desc": "采集任意URL的网页HTML内容（统一对外出口）。"},
+    {"name": "网易云音乐", "handler": "music/netease", "desc": "从网易云音乐热歌榜获取推荐歌曲列表（统一对外出口）。"},
 ]
 
 
