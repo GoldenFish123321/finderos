@@ -19,8 +19,22 @@ from app.utils.security import write_audit_log
 # Logo 上传配置
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "uploads")
 ALLOWED_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
-MAX_LOGO_SIZE = 2 * 1024 * 1024  # 2 MB
 LOGO_FILE_PREFIX = "logo_"
+
+
+def _get_max_logo_size() -> int:
+    """从系统配置读取上传大小限制（MB），转换为字节。"""
+    try:
+        row = SystemConfigRepository.get_by_key("upload_max_size_mb")
+        if row and row.get("value"):
+            mb = int(row["value"])
+        else:
+            mb = 10
+        if mb <= 0:
+            mb = 10
+    except Exception:
+        mb = 10
+    return mb * 1024 * 1024
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +45,9 @@ class SystemConfigHandler(AdminBaseHandler):
     @tornado.web.authenticated
     def get(self):
         configs = SystemConfigRepository.get_all()
-        # 分组：general / ai
-        general_configs = [c for c in configs if c["category"] == "general"]
-        ai_configs = [c for c in configs if c["category"] == "ai"]
         # 构造 key→value 查找字典
         config_dict = {c["key"]: c for c in configs}
+
         # 加载已启用的 AI 模型列表供下拉选择
         enabled_models, _ = AiModelRepository.get_all(page=1, page_size=999, enabled_only=True)
 
@@ -47,8 +59,6 @@ class SystemConfigHandler(AdminBaseHandler):
             "admin/config.html",
             title=f"常规设置 — {settings.SYSTEM_NAME}",
             username=self.current_user,
-            general_configs=general_configs,
-            ai_configs=ai_configs,
             config_dict=config_dict,
             enabled_models=enabled_models,
             feedback_msg=msg,
@@ -64,6 +74,8 @@ class SystemConfigHandler(AdminBaseHandler):
         logo_filename = None
         logo_removed = False
         remove_logo = self.get_body_argument("remove_logo", "0")
+        max_logo_size = _get_max_logo_size()
+        max_logo_size_mb = max_logo_size // (1024 * 1024)
 
         # 1a. 移除 Logo
         if remove_logo == "1":
@@ -94,9 +106,9 @@ class SystemConfigHandler(AdminBaseHandler):
                         "不支持的图片格式，仅允许：png/jpg/jpeg/gif/webp/svg"))
                     return
 
-                if len(file_obj.get("body", b"")) > MAX_LOGO_SIZE:
+                if len(file_obj.get("body", b"")) > max_logo_size:
                     self.redirect("/admin/config?error=" + urllib.parse.quote(
-                        "图片大小不能超过 2MB"))
+                        f"图片大小不能超过 {max_logo_size_mb}MB"))
                     return
 
                 # 确保上传目录存在
@@ -118,14 +130,34 @@ class SystemConfigHandler(AdminBaseHandler):
             self.redirect("/admin/config?error=" + urllib.parse.quote("系统错误，请重试"))
             return
 
-        # 2. 读取文本配置项
-        for key in (
+        # 2. 读取文本配置项（#99 扩展：从 7 个字段增加到 17 个字段）
+        _FORM_KEYS = (
+            # general
             "system_name", "system_subtitle", "icp_number", "default_port",
+            # ai
             "ai_default_model", "ai_default_temperature", "ai_default_max_tokens",
-        ):
+            # backup (#99)
+            "db_backup_path", "db_backup_interval_days", "db_backup_keep_count",
+            # logging (#99)
+            "log_level",
+            # notification (#99)
+            "smtp_host", "webhook_url",
+            # collector (#99)
+            "collector_interval_minutes",
+            # security (#99)
+            "captcha_enabled", "registration_enabled", "session_expire_hours",
+            # upload (#99)
+            "upload_max_size_mb",
+        )
+        for key in _FORM_KEYS:
             val = self.get_body_argument(key, None)
             if val is not None:
                 updates[key] = val.strip()
+
+        # #99: 处理 switch/checkbox 字段 — 未选中时不提交值，显式设为 "false"
+        for switch_key in ("captcha_enabled", "registration_enabled"):
+            if switch_key not in updates:
+                updates[switch_key] = "false"
 
         # Logo 路径单独处理（仅当有上传时更新）
         if logo_path:

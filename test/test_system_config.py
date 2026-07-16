@@ -187,6 +187,68 @@ try:
 except urllib.error.HTTPError as e:
     t(f"Unauthenticated → {e.code}", e.code in (302, 403))
 
+# ── 8b. #99: New config sections visible ──
+print("\n── 8b. #99 New config sections ──")
+body_cfg2, _ = get(op, "/admin/config")
+xsrf = extract_xsrf(body_cfg2)
+t("#99 backup section visible", "备份策略" in body_cfg2)
+t("#99 logging section visible", "日志与通知" in body_cfg2)
+t("#99 security section visible", "采集与安全" in body_cfg2)
+t("#99 upload section visible", "上传限制" in body_cfg2)
+t("#99 db_backup_path field", 'name="db_backup_path"' in body_cfg2)
+t("#99 log_level field", 'name="log_level"' in body_cfg2)
+t("#99 smtp_host field", 'name="smtp_host"' in body_cfg2)
+t("#99 captcha_enabled switch", 'name="captcha_enabled"' in body_cfg2)
+t("#99 registration_enabled switch", 'name="registration_enabled"' in body_cfg2)
+t("#99 session_expire_hours field", 'name="session_expire_hours"' in body_cfg2)
+t("#99 upload_max_size_mb field", 'name="upload_max_size_mb"' in body_cfg2)
+t("#99 default upload_max_size=10", 'value="10"' in body_cfg2)
+
+# ── 8c. #99: Save new configs and verify persistence ──
+print("\n── 8c. #99 Save new configs ──")
+save_new = {
+    "_xsrf": xsrf,
+    "system_name": "瞭望与问数系统",
+    "db_backup_path": "test_backups/",
+    "db_backup_interval_days": "14",
+    "db_backup_keep_count": "20",
+    "log_level": "WARNING",
+    "smtp_host": "smtp.example.com:465",
+    "webhook_url": "https://hooks.example.com/alert",
+    "collector_interval_minutes": "120",
+    "captcha_enabled": "true",
+    "registration_enabled": "true",
+    "session_expire_hours": "72",
+    "upload_max_size_mb": "50",
+}
+body_save, st_save = post(op, "/admin/config", save_new)
+t("#99 save processed", st_save == 200)
+
+body_v, _ = get(op, "/admin/config")
+t("#99 db_backup_path=test_backups", 'test_backups/' in body_v)
+t("#99 backup_interval=14", 'value="14"' in body_v)
+t("#99 backup_keep=20", 'value="20"' in body_v)
+t("#99 log_level=WARNING", 'WARNING' in body_v)
+t("#99 smtp_host persisted", 'smtp.example.com:465' in body_v)
+t("#99 webhook_url persisted", 'hooks.example.com' in body_v)
+t("#99 collector_interval=120", 'value="120"' in body_v)
+t("#99 session_expire=72", 'value="72"' in body_v)
+t("#99 upload_max_size=50", 'value="50"' in body_v)
+
+# ── 8d. #99: Switch OFF test ──
+print("\n── 8d. #99 Switch OFF test ──")
+body_cfg3, _ = get(op, "/admin/config")
+xsrf = extract_xsrf(body_cfg3)
+save_off = {
+    "_xsrf": xsrf,
+    "system_name": "瞭望与问数系统",
+    # captcha_enabled NOT sent → should be "false"
+    "registration_enabled": "true",
+}
+post(op, "/admin/config", save_off)
+row_captcha = SystemConfigRepository.get_by_key("captcha_enabled")
+t("#99 captcha_enabled=false when unchecked", row_captcha is not None and row_captcha["value"] == "false")
+
 # ── 9. Restore defaults ──
 print("\n── 9. Restore defaults ──")
 body_cfg, _ = get(op, "/admin/config")
@@ -199,6 +261,18 @@ restore = {
     "default_port": "10010",
     "ai_default_temperature": "0.7",
     "ai_default_max_tokens": "4096",
+    # #99: restore new config defaults
+    "db_backup_path": "backups/",
+    "db_backup_interval_days": "7",
+    "db_backup_keep_count": "5",
+    "log_level": "INFO",
+    "smtp_host": "",
+    "webhook_url": "",
+    "collector_interval_minutes": "60",
+    "captcha_enabled": "false",
+    "registration_enabled": "true",
+    "session_expire_hours": "24",
+    "upload_max_size_mb": "10",
 }
 body_r, st_r = post(op, "/admin/config", restore)
 t("Restore processed", st_r == 200)
