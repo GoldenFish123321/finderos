@@ -953,7 +953,7 @@ def _seed_default_interfaces():
                         {"label": "风向", "value": "{{current_condition.0.winddir16Point}}"},
                     ]
                 }, ensure_ascii=False),
-                1,
+                0,
                 1,
             ),
         )
@@ -1384,7 +1384,7 @@ def _seed_script_tools():
             cur = conn.execute(
                 "INSERT INTO api_interfaces (name, description, api_url, api_method, "
                 "api_headers, api_params_template, interface_type, is_system, is_enabled, sort_order) "
-                "VALUES (?, ?, ?, ?, ?, ?, 'external', 0, 1, 1)",
+                "VALUES (?, ?, ?, ?, ?, ?, 'external', 0, 1, 0)",
                 ("天气查询接口", "wttr.in 天气查询 JSON 接口",
                  "https://wttr.in/{message}?format=j1", "GET",
                  json.dumps({"Accept": "application/json"}), ""),
@@ -1401,7 +1401,7 @@ def _seed_script_tools():
             cur = conn.execute(
                 "INSERT INTO api_interfaces (name, description, api_url, api_method, "
                 "api_headers, api_params_template, interface_type, is_system, is_enabled, sort_order) "
-                "VALUES (?, ?, ?, ?, ?, ?, 'external', 0, 1, 1)",
+                "VALUES (?, ?, ?, ?, ?, ?, 'external', 0, 1, 0)",
                 ("网易云音乐热歌榜", "从网易云音乐热歌榜获取推荐歌曲列表（外部API接口）。",
                  "https://api.injahow.cn/meting/?server=netease&type=playlist&id=3778678", "GET",
                  "{}", ""),
@@ -1416,7 +1416,7 @@ def _seed_script_tools():
         ).fetchone()
         if not collect_web_iface:
             cur = conn.execute(
-                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 0)",
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 1)",
                 ("网页数据采集", "采集指定网页的数据（HTTP抓取+解析）。", "collect/web"),
             )
             collect_web_id = cur.lastrowid
@@ -1429,7 +1429,7 @@ def _seed_script_tools():
         ).fetchone()
         if not deep_collect_iface:
             cur = conn.execute(
-                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 0)",
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 1)",
                 ("深度网页采集", "对单条URL执行深度网页内容采集。", "collect/deep"),
             )
             deep_collect_id = cur.lastrowid
@@ -1442,7 +1442,7 @@ def _seed_script_tools():
         ).fetchone()
         if not batch_collect_iface:
             cur = conn.execute(
-                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 0)",
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 1)",
                 ("Crawl4ai批量", "使用Crawl4ai引擎批量采集多个URL。", "crawl4ai/batch"),
             )
             batch_collect_id = cur.lastrowid
@@ -1455,7 +1455,7 @@ def _seed_script_tools():
         ).fetchone()
         if not crawl4ai_collect_iface:
             cur = conn.execute(
-                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 0)",
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 1)",
                 ("Crawl4ai采集", "使用Crawl4ai引擎采集网页内容。", "crawl4ai/collect"),
             )
             crawl4ai_collect_id = cur.lastrowid
@@ -1895,7 +1895,7 @@ def _seed_script_tools():
         ).fetchone()
         if not img_iface:
             cur = conn.execute(
-                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 0)",
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 1)",
                 ("AI图像生成", "使用AI模型生成图片。", "media/generate_image"),
             )
             img_iface_id = cur.lastrowid
@@ -1908,7 +1908,7 @@ def _seed_script_tools():
         ).fetchone()
         if not vid_iface:
             cur = conn.execute(
-                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 0)",
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 1)",
                 ("AI视频生成", "使用AI模型生成视频。", "media/generate_video"),
             )
             vid_iface_id = cur.lastrowid

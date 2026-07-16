@@ -76,7 +76,7 @@ def sync_local_api_interfaces():
                     """INSERT INTO api_interfaces
                     (name, description, api_url, api_method, api_headers, api_params_template,
                      interface_type, is_system, local_handler, is_enabled, sort_order)
-                    VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 0)""",
+                    VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 1)""",
                     (seed["name"], seed["desc"], seed["handler"]),
                 )
 
