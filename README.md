@@ -1,7 +1,7 @@
-# 🔭 瞭望与问数系统 (DataFinderAgentOS) v1.1.0-beta
+# 🔭 瞭望与问数系统 (DataFinderAgentOS) v1.2.0-beta
 
 > 基于 Tornado 异步 Web 框架构建的轻量级智能数据采集与 AI 问数一体化平台。
-> **v1.2.0 新增**：管理侧数智大屏（3D 地球 + 词云 + 数据可视化、ECharts-GL/Wordcloud）
+> **v1.2.0 新增**：管理侧数智大屏（3D 地球 + 词云 + 数据可视化、ECharts-GL/Wordcloud）、舆情大屏（敏感词预警 + AI 风析、实时扫描）。
 > **v1.1.0 新增**：手势与数字员工交互（✌️ 剪刀手→查天气、✊ 握拳→随机音乐、✋ 手掌→新闻聚合）、MediaPipe Hands 实时手势识别、系统设置管理模块。
 > **v0.10 完成**：MCP 重构剩余阶段全部完成 — 18 个工具种子数据迁移、三色徽章系统（蓝/绿/橙黄）、crawl4ai 废弃、Skill 绑定 MCP 工具、旧 TAG → Skill ID 迁移、测试验证通过。
 > **v0.9 新增**：Edge TTS 语音合成播报（🔊 AI 回复一键朗读）、管理侧接口管理模块（接口模板 CRUD/测试、安全 HTTP 调用、API 型数字员工联动）。
@@ -366,7 +366,7 @@ python main.py
 
 ```
 ==================================================
-  瞭望与问数系统 (DataFinderAgentOS) v1.0.3-beta
+  瞭望与问数系统 (DataFinderAgentOS) v1.2.0-beta
   Server started: http://localhost:10010/
 ==================================================
 ```

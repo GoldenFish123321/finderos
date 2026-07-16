@@ -1,22 +1,6 @@
 # Changelog
 
-## v1.1.1-beta (2026-07-16) — 模板路径修复
-
-- 🐛 **修复**：`template_path` 和 `static_path` 从相对路径改为基于 `__file__` 的绝对路径，解决因工作目录不同导致 `FileNotFoundError: login.html` 的问题
-
-## v1.0.3-beta (2026-07-16) - Security issue hardening
-
-- Fixed Issues #57-#76 covering Mock runtime errors, URL/FTS injection, DOM XSS,
-  rate-limit races, stale TTS locks, response secret exposure, and Brotli handling.
-- AI model reads no longer decrypt API keys unless explicitly required.
-- Random administrator bootstrap passwords are no longer written to process logs.
-- Added focused regression tests for the new trust-boundary and concurrency fixes.
-
-本文档记录瞭望与问数系统 (DataFinderAgentOS) 所有版本的变更历史。
-
----
-
-## v1.2.0-beta (2026-07-16) — 数智大屏 + 手势交互
+## v1.2.0-beta (2026-07-16) — 数智大屏 + 舆情大屏 + 手势交互
 
 - 📊 **新功能 #23**：管理侧数智大屏 `/admin/dashboard` — 3D 地球 + 词云 + 数据可视化 (@GoldenFish123321)
 - 🌍 **ECharts-GL 3D 地球**：全球数据采集分布热力图，自动旋转，深色主题
@@ -59,6 +43,23 @@
 - 📝 **审计日志**：配置保存、Logo 上传/移除均写入审计记录
 - 🧪 **测试新增**：31 项端到端功能测试
 - 🐛 **安全修复**：消除 self.write() 中直接拼接异常消息的 XSS 风险
+- 🐛 **修复**：`template_path` 和 `static_path` 从相对路径改为基于 `__file__` 的绝对路径，解决因工作目录不同导致 `FileNotFoundError: login.html` 的问题
+- 🐛 **修复**：数智大屏 review 问题修复（仪表板模板优化与数据展示调整）
+- 🧹 **杂项**：清理临时测试文件
+
+---
+
+本文档记录瞭望与问数系统 (DataFinderAgentOS) 所有版本的变更历史。
+
+---
+
+## v1.0.3-beta (2026-07-16) — Security issue hardening
+
+- Fixed Issues #57-#76 covering Mock runtime errors, URL/FTS injection, DOM XSS,
+  rate-limit races, stale TTS locks, response secret exposure, and Brotli handling.
+- AI model reads no longer decrypt API keys unless explicitly required.
+- Random administrator bootstrap passwords are no longer written to process logs.
+- Added focused regression tests for the new trust-boundary and concurrency fixes.
 
 ---
 
