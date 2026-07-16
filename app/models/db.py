@@ -1849,7 +1849,7 @@ def _seed_script_tools():
             "api_url, api_method, api_headers, input_schema, "
             "data_sources, transform_script, script_enabled, "
             "is_enabled, is_system, sort_order) "
-            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 0, ?)",
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, ?, 1, 0, ?)",
             (
                 tools[2]["name"], tools[2]["display_name"], tools[2]["description"],
                 tools[2]["category"], tools[2]["input_schema"],
@@ -1880,7 +1880,7 @@ def _seed_script_tools():
             "api_url, api_method, api_headers, input_schema, "
             "data_sources, transform_script, script_enabled, "
             "is_enabled, is_system, sort_order) "
-            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 0, ?)",
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, ?, 1, 0, ?)",
             (
                 tools[3]["name"], tools[3]["display_name"], tools[3]["description"],
                 tools[3]["category"], tools[3]["input_schema"],
@@ -1911,7 +1911,7 @@ def _seed_script_tools():
             "api_url, api_method, api_headers, input_schema, "
             "data_sources, transform_script, script_enabled, "
             "is_enabled, is_system, sort_order) "
-            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 0, ?)",
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, ?, 1, 0, ?)",
             (
                 tools[4]["name"], tools[4]["display_name"], tools[4]["description"],
                 tools[4]["category"], tools[4]["input_schema"],
@@ -1942,7 +1942,7 @@ def _seed_script_tools():
             "api_url, api_method, api_headers, input_schema, "
             "data_sources, transform_script, script_enabled, "
             "is_enabled, is_system, sort_order) "
-            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 0, ?)",
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, ?, 1, 0, ?)",
             (
                 tools[5]["name"], tools[5]["display_name"], tools[5]["description"],
                 tools[5]["category"], tools[5]["input_schema"],

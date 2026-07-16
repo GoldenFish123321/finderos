@@ -27,6 +27,13 @@ _SAFE_BUILTINS = {
     "json": __import__("json"),  # 允许 json
     "re": __import__("re"),      # 允许 re
     "random": __import__("random"),  # 允许 random
+    # 异常类型（transform 脚本中使用 try/except 需要）
+    "Exception": Exception,
+    "ValueError": ValueError,
+    "TypeError": TypeError,
+    "KeyError": KeyError,
+    "IndexError": IndexError,
+    "AttributeError": AttributeError,
 }
 
 # AST 节点白名单
