@@ -55,15 +55,7 @@ class AdminMessageBaseHandler(AdminBaseHandler):
                 client_ip=self.request.remote_ip or "",
             )
             self.set_status(403)
-            self.write("""
-            <div style="text-align:center;padding:60px 20px;">
-                <i class="layui-icon layui-icon-close-fill" style="font-size:60px;color:#FF5722;"></i>
-                <h2 style="margin-top:20px;">403 权限不足</h2>
-                <p style="color:#999;margin-top:10px;">您没有消息管理权限，请联系系统管理员。</p>
-                <a href="/admin" style="margin-top:20px;display:inline-block;">返回后台首页</a>
-            </div>
-            """)
-            self.finish()
+            self.render("admin/403.html", message="您没有消息管理权限，请联系系统管理员。", link="/admin", link_text="返回后台首页")
 
 
 class AdminMessageListHandler(AdminMessageBaseHandler):

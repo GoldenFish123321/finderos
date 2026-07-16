@@ -199,12 +199,4 @@ class AdminBaseHandler(BaseHandler):
                 (r for r in sorted(allowed_routes) if r.startswith("/admin")), "/chat"
             )
             text = "返回可用功能" if href != "/chat" else "返回前台"
-        self.write(f"""
-        <div style="text-align:center;padding:60px 20px;">
-            <i class="layui-icon layui-icon-close-fill" style="font-size:60px;color:#FF5722;"></i>
-            <h2 style="margin-top:20px;">403 权限不足</h2>
-            <p style="color:#999;margin-top:10px;">{message}</p>
-            <a href="{href}" style="margin-top:20px;display:inline-block;">{text}</a>
-        </div>
-        """)
-        self.finish()
+        self.render("admin/403.html", message=message, link=href, link_text=text)
