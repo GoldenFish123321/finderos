@@ -146,7 +146,13 @@ class TestGestureTemplate:
         with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
             content = f.read()
 
-        assert "isStreaming" in content.split("sendGestureMessage")[1].split("\n")[0] if "sendGestureMessage" in content else True
+        # sendGestureMessage 中应检查 isStreaming
+        assert "sendGestureMessage" in content, "缺少 sendGestureMessage 函数"
+        # 从 sendGestureMessage 内部查找 isStreaming 检查
+        func_start = content.index("function sendGestureMessage")
+        func_end = content.index("\n}", func_start) + 2
+        func_body = content[func_start:func_end]
+        assert "isStreaming" in func_body, "sendGestureMessage 应检查 isStreaming"
 
     def test_beforeunload_cleanup(self):
         """页面离开时释放摄像头资源"""
@@ -282,15 +288,16 @@ class TestEdgeCases:
         with open(template_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-        # 检查 MediaPipe CDN 是否包含版本号
+        # 检查 MediaPipe CDN 是否包含版本号（如 @0.4.1675469240）
         camera_utils_match = re.search(r'@mediapipe/camera_utils[^"\']*', content)
         hands_match = re.search(r'@mediapipe/hands[^"\']*', content)
 
         if camera_utils_match:
-            assert "@" in camera_utils_match.group(0).split("/")[-1] or \
-                   camera_utils_match.group(0).count("/") >= 4, \
-                   "camera_utils CDN 应固定版本号"
+            url = camera_utils_match.group(0)
+            # 版本号格式为 @x.y.z 出现在路径中
+            assert re.search(r'@\d+\.\d+\.\d+', url), \
+                f"camera_utils CDN 应固定版本号，当前: {url}"
         if hands_match:
-            assert "@" in hands_match.group(0).split("/")[-1] or \
-                   hands_match.group(0).count("/") >= 4, \
-                   "hands CDN 应固定版本号"
+            url = hands_match.group(0)
+            assert re.search(r'@\d+\.\d+\.\d+', url), \
+                f"hands CDN 应固定版本号，当前: {url}"
