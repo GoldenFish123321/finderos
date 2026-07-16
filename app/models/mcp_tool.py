@@ -30,6 +30,7 @@ TOOL_TYPES = [
     {"value": "builtin", "name": "内置函数"},
     {"value": "api", "name": "HTTP API"},
     {"value": "crawl4ai", "name": "Crawl4ai"},
+    {"value": "script", "name": "脚本工具"},
 ]
 
 
@@ -175,11 +176,13 @@ class MCPToolRepository:
                api_params_template: str = "",
                input_schema: str = "{}", output_schema: str = "{}",
                is_enabled: int = 1, is_system: int = 0,
-               sort_order: int = 0, config: str = "{}") -> int:
+               sort_order: int = 0, config: str = "{}",
+               data_sources: str = "[]", transform_script: str = "",
+               script_enabled: int = 0) -> int:
         """创建 MCP 工具。返回新 ID 或 -1。"""
         try:
             # 校验 JSON 字段
-            for field in [input_schema, output_schema, api_headers, config]:
+            for field in [input_schema, output_schema, api_headers, config, data_sources]:
                 try:
                     json.loads(field)
                 except (json.JSONDecodeError, TypeError):
@@ -189,13 +192,15 @@ class MCPToolRepository:
                     "INSERT INTO mcp_tools (name, display_name, description, "
                     "category, tool_type, handler_module, api_url, api_method, "
                     "api_headers, api_params_template, input_schema, output_schema, "
-                    "is_enabled, is_system, sort_order, config) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "is_enabled, is_system, sort_order, config, "
+                    "data_sources, transform_script, script_enabled) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (name.strip(), display_name.strip(), description.strip(),
                      category, tool_type, handler_module.strip(), api_url.strip(),
                      api_method, api_headers, api_params_template,
                      input_schema, output_schema,
-                     is_enabled, is_system, sort_order, config),
+                     is_enabled, is_system, sort_order, config,
+                     data_sources, transform_script, script_enabled),
                 )
                 conn.commit()
                 return cur.lastrowid
@@ -209,7 +214,8 @@ class MCPToolRepository:
         allowed = ["name", "display_name", "description", "category", "tool_type",
                     "handler_module", "api_url", "api_method", "api_headers",
                     "api_params_template", "input_schema", "output_schema",
-                    "is_enabled", "is_system", "sort_order", "config"]
+                    "is_enabled", "is_system", "sort_order", "config",
+                    "data_sources", "transform_script", "script_enabled"]
         updates = {k: v for k, v in kwargs.items() if k in allowed}
         if not updates:
             return False

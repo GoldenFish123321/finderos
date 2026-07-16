@@ -44,8 +44,9 @@ class InterfaceListHandler(AdminBaseHandler):
         except (ValueError, TypeError):
             page = 1
         keyword = self.get_query_argument("keyword", "").strip()
+        iface_type = self.get_query_argument("iface_type", "").strip()
         rows, total = ApiInterfaceRepository.get_all(
-            page=page, page_size=20, keyword=keyword
+            page=page, page_size=20, keyword=keyword, iface_type=iface_type
         )
         total_pages = max(1, (total + 20 - 1) // 20)
         stats = ApiInterfaceRepository.get_stats()
@@ -59,6 +60,7 @@ class InterfaceListHandler(AdminBaseHandler):
             total=total,
             total_pages=total_pages,
             keyword=keyword,
+            iface_type=iface_type,
             stats=stats,
             msg=self.get_query_argument("msg", ""),
             xsrf_token=self.xsrf_token.decode() if isinstance(self.xsrf_token, bytes) else self.xsrf_token,
@@ -106,6 +108,10 @@ class InterfaceFormHandler(AdminBaseHandler):
         response_render_template = self.get_body_argument("response_render_template", "").strip()
         api_secret_raw = self.get_body_argument("api_secret", "").strip()
         clear_secret = self.get_body_argument("clear_secret", "0") == "1"
+        interface_type = self.get_body_argument("interface_type", "").strip()
+        is_system = int(self.get_body_argument("is_system", "0"))
+        local_handler = self.get_body_argument("local_handler", "").strip()
+        response_content_type = self.get_body_argument("response_content_type", "json").strip()
         try:
             sort_order = int(self.get_body_argument("sort_order", 0))
         except (ValueError, TypeError):
@@ -147,6 +153,7 @@ class InterfaceFormHandler(AdminBaseHandler):
                 api_headers, api_params_template, response_render_template,
                 api_secret_raw if api_secret_raw else None,
                 sort_order, clear_secret,
+                interface_type, is_system, local_handler, response_content_type,
             )
             msg = "更新成功" if ok else "更新失败"
             write_audit_log(
@@ -161,6 +168,7 @@ class InterfaceFormHandler(AdminBaseHandler):
                 name, description, api_url, api_method, api_headers,
                 api_params_template, response_render_template,
                 api_secret_raw, sort_order,
+                interface_type, is_system, local_handler, response_content_type,
             )
             msg = "创建成功" if new_id > 0 else "创建失败"
             if new_id > 0:

@@ -44,6 +44,18 @@
                 </div>
             </div>
 
+            <div class="layui-form-item" id="resp-content-type-group">
+                <label class="layui-form-label">响应类型</label>
+                <div class="layui-input-inline">
+                    <select name="response_content_type">
+                        <option value="json" {{ 'selected' if interface and interface.get('response_content_type') == 'json' else '' }}>JSON</option>
+                        <option value="html" {{ 'selected' if interface and interface.get('response_content_type') == 'html' else '' }}>HTML</option>
+                        <option value="text" {{ 'selected' if interface and interface.get('response_content_type') == 'text' else '' }}>Text</option>
+                        <option value="xml" {{ 'selected' if interface and interface.get('response_content_type') == 'xml' else '' }}>XML</option>
+                    </select>
+                </div>
+            </div>
+
             <div class="layui-form-item">
                 <label class="layui-form-label">接口 URL</label>
                 <div class="layui-input-block">

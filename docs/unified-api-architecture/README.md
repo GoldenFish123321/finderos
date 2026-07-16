@@ -1,7 +1,8 @@
 # 统一接口驱动架构重构方案 (Unified API-Driven Architecture)
 
 > 文档日期: 2026-07-15  
-> 目标版本: 待定（MRP 完成后确定）  
+> 目标版本: v2.0  
+> 实施状态: ✅ 已完成 (2026-07-16)  
 > 前置依赖: `docs/mcp_refactor_plan.md`（MRP）全部 Phase 完成后  
 > 基于: DataFinderAgentOS v1.0.0-beta 当前代码  
 
@@ -29,7 +30,7 @@
 
 本文档是 `mcp_refactor_plan.md`（MRP）的**远期上层建筑**，不是替代方案。
 
-| 维度 | MRP (待定) | 本文档 (待定) |
+| 维度 | MRP (✅ 已完成) | 本文档 (✅ 已完成) |
 |------|-------------|-------------------|
 | **核心目标** | MCP 工具数据库驱动 + 管理后台 + 员工权限 | 接口统一管理 + MCP 工具可配置脚本化 |
 | **tool_type** | `builtin` / `api` / `crawl4ai` 三分类 | 新增 `script` 型，与现有三分类**共存** |
@@ -194,6 +195,21 @@ flowchart TD
 | **内部能力复用** | 18 个系统内置 + N 个代理接口全部注册在 `_LOCAL_HANDLER_MAP`，可被任意 script 型工具组合引用 |
 | **MCP 协议原生对齐** | 脚本返回 `str`，直接映射为 MCP `text content`，LLM 友好，无需额外 JSON 包装 |
 | **自定义 MCP 工具灵活自由** | 管理员可在后台自由组合本地接口数据源 + 编写转换脚本，无需修改代码即可创建新的 MCP 工具，大大降低扩展门槛 |
+
+---
+
+## 实施状态 (2026-07-16)
+
+全部 6 个 Phase 已完成 ✅：
+
+| Phase | 内容 | 状态 |
+|-------|------|------|
+| Phase 1 | 数据层准备：`api_interfaces` / `mcp_tools` 表字段扩展 + 迁移脚本 | ✅ 已完成 |
+| Phase 2 | 本地接口注册表 + 外部代理：`local_api_client.py` + `local_api_registry.py` + 启动集成 | ✅ 已完成 |
+| Phase 3 | 脚本引擎：`script_engine.py` AST 白名单沙箱 + 在线测试 API + 预置模板 | ✅ 已完成 |
+| Phase 4 | MCP 注册中心改造：`_build_script_tool()` + `registry.py` script 分支 | ✅ 已完成 |
+| Phase 5 | 前端适配：接口管理/MCP 工具表单/脚本编辑器/测试按钮 | ✅ 已完成 |
+| Phase 6 | 安全加固 + 文档：`safe_http_request` 迁移 + URL 校验 + 网络防火墙 | ✅ 已完成 |
 
 ---
 
