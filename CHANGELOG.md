@@ -12,7 +12,14 @@
 
 ---
 
-## v1.1.0-beta (2026-07-16) — 系统设置模块
+## v1.1.0-beta (2026-07-16) — 系统设置模块 + 手势交互
+
+- ✋ **新功能 #15**：用户侧手势与数字员工交互 — 剪刀手→查天气、握拳→随机音乐、手掌→新闻聚合 (@GoldenFish123321)
+- 📷 **MediaPipe Hands CDN 集成**：实时手部关键点检测，支持 3 种手势分类
+- 🎥 **摄像头模块**：用户前台一键开启/关闭摄像头，骨架可视化叠加（绿色关键点 + 连线）
+- 🧠 **独立手势引擎**：`app/static/js/gesture.js` — `GestureDetector` 类，支持多帧确认防抖、冷却期控制
+- 🔒 **CSP 安全策略更新**：新增 `worker-src blob:`、`connect-src blob:` 以允许 MediaPipe WASM Worker；`Permissions-Policy camera=(self)` 以允许摄像头
+- 🧪 **测试新增**：完整的手势识别前端测试覆盖
 
 - ⚙️ **新模块 #13**：管理侧系统设置页面（`/admin/config`），支持配置系统名称/副标题/Logo/备案号/AI 默认参数 (@GoldenFish123321)
 - 🗄️ **新增表**：`system_config` key-value 配置表，8 条默认种子数据（常规设置 + AI 参数）

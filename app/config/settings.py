@@ -61,15 +61,18 @@ class Settings:
         "X-Content-Type-Options": "nosniff",
         "X-XSS-Protection": "1; mode=block",
         "Referrer-Policy": "strict-origin-when-cross-origin",
-        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        # Issue #15: 允许摄像头以供手势识别
+        "Permissions-Policy": "camera=(self), microphone=(), geolocation=()",
         # 严格化 CSP（借鉴陈子墨）：移除 unsafe-eval，收窄 connect-src，增加 frame-ancestors/base-uri/form-action
+        # Issue #15: 添加 blob: 以允许 MediaPipe Hands WASM Worker
         "Content-Security-Policy": (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-            "img-src 'self' data: https:; "
+            "img-src 'self' data: https: blob:; "
             "font-src 'self' https://cdn.jsdelivr.net; "
-            "connect-src 'self'; "
+            "connect-src 'self' https://cdn.jsdelivr.net blob:; "
+            "worker-src 'self' blob:; "
             "frame-ancestors 'none'; "
             "base-uri 'self'; "
             "form-action 'self'"
