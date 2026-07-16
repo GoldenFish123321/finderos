@@ -2304,6 +2304,16 @@ class UserEmployeeInvokeHandler(BaseHandler):
                 arguments = {"keyword": message}
             elif "prompt" in props:
                 arguments = {"prompt": message}
+            else:
+                # 通用兜底：取 schema 中第一个参数名（如 weather_query 的 city）
+                required = input_schema.get("required", [])
+                if required:
+                    first_param = required[0]
+                    if first_param in props:
+                        arguments = {first_param: message}
+                elif props:
+                    first_param = next(iter(props))
+                    arguments = {first_param: message}
             for key, prop in props.items():
                 if key not in arguments and "default" in prop:
                     arguments[key] = prop["default"]
