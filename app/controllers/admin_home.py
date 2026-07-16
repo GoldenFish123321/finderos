@@ -103,6 +103,7 @@ class AdminDashboardHandler(AdminBaseHandler):
             "admin/dashboard.html",
             title="数智大屏 — 瞭望与问数系统",
             username=self.current_user,
+            xsrf_token=self.xsrf_token.decode() if isinstance(self.xsrf_token, bytes) else self.xsrf_token,
             stats=stats,
             source_distribution=source_dist,
             trend=trend,
