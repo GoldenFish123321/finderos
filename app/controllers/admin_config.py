@@ -4,9 +4,11 @@ admin_config.py — 系统设置控制器
 管理后台常规设置页面：系统名称/Logo/备案号/端口/AI默认参数。
 支持 Logo 图片上传。
 """
+import logging
 import os
 import time
 import urllib.parse
+
 import tornado.web
 from app.config.settings import settings
 from app.controllers.admin_base import AdminBaseHandler
@@ -19,6 +21,8 @@ UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", 
 ALLOWED_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
 MAX_LOGO_SIZE = 2 * 1024 * 1024  # 2 MB
 LOGO_FILE_PREFIX = "logo_"
+
+logger = logging.getLogger(__name__)
 
 
 class SystemConfigHandler(AdminBaseHandler):
@@ -121,7 +125,8 @@ class SystemConfigHandler(AdminBaseHandler):
                     client_ip=self.request.remote_ip or "",
                 )
         except Exception as e:
-            self.redirect("/admin/config?error=" + urllib.parse.quote(f"Logo 上传失败：{e}"))
+            logger.error(f"Logo 上传失败: {e}")
+            self.redirect("/admin/config?error=" + urllib.parse.quote("Logo 上传失败，请重试"))
             return
 
         # 2. 读取文本配置项
