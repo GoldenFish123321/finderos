@@ -258,9 +258,9 @@ body.dark-theme {
             <div class="dash-panel" style="flex:1;">
                 <div class="dash-panel-title">🏆 热门关键词 Top 10 <span class="badge">实时</span></div>
                 <ul class="keyword-list" id="keyword-list">
-                    {% for kw in keywords[:10] %}
+                    {% for i, kw in enumerate(keywords[:10]) %}
                     <li class="keyword-item">
-                        <span class="rank {{ 'rank-' + loop.index|string if loop.index <= 3 else 'rank-n' }}">{{ loop.index }}</span>
+                        <span class="rank {{ 'rank-' + str(i+1) if i+1 <= 3 else 'rank-n' }}">{{ i + 1 }}</span>
                         <span class="kw-name">{{ kw['name'] }}</span>
                         <span class="kw-count">{{ kw['value'] }} 次</span>
                     </li>

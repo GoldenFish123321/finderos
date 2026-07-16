@@ -796,9 +796,9 @@ def seed_default_data():
     _seed_default_sources()
     _seed_default_models()
     _seed_default_mcp_tools()
-    _seed_script_tools()
     skills_created = _seed_default_skills()
     _seed_default_interfaces()
+    _seed_script_tools()
     employees_created = _seed_default_employees()
 
     # ── v1.2.0 舆情大屏：默认敏感词 ──
@@ -1480,23 +1480,43 @@ def _seed_default_mcp_tools():
 
 
 def _seed_script_tools():
-    """v2.0 种子: script 型 MCP 工具。按名称动态查询 api_interfaces 获取 interface_id。"""
+    """v2.0 种子: script 型 MCP 工具。按名称动态查询 api_interfaces 获取 interface_id。
+    如果接口不存在则自动创建（幂等），不依赖外部调用顺序。"""
     import json
     with get_db() as conn:
-        # 按名称查询接口ID，不硬编码
+        # ── 确保天气接口存在 ──
         weather_iface = conn.execute(
             "SELECT id FROM api_interfaces WHERE name='天气查询接口' AND interface_type='external'"
         ).fetchone()
+        if not weather_iface:
+            cur = conn.execute(
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, "
+                "api_headers, api_params_template, interface_type, is_system, is_enabled, sort_order) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'external', 0, 1, 1)",
+                ("天气查询接口", "wttr.in 天气查询 JSON 接口",
+                 "https://wttr.in/{message}?format=j1", "GET",
+                 json.dumps({"Accept": "application/json"}), ""),
+            )
+            weather_id = cur.lastrowid
+        else:
+            weather_id = weather_iface["id"]
+
+        # ── 确保音乐接口存在 ──
         music_iface = conn.execute(
             "SELECT id FROM api_interfaces WHERE name='网易云音乐热歌榜' AND interface_type='external'"
         ).fetchone()
-
-        if not weather_iface or not music_iface:
-            logger.warning("[种子] 外部接口未就绪，跳过 script 工具种子")
-            return
-
-        weather_id = weather_iface["id"]
-        music_id = music_iface["id"]
+        if not music_iface:
+            cur = conn.execute(
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, "
+                "api_headers, api_params_template, interface_type, is_system, is_enabled, sort_order) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'external', 0, 1, 1)",
+                ("网易云音乐热歌榜", "从网易云音乐热歌榜获取推荐歌曲列表（外部API接口）。",
+                 "https://api.injahow.cn/meting/?server=netease&type=playlist&id=3778678", "GET",
+                 "{}", ""),
+            )
+            music_id = cur.lastrowid
+        else:
+            music_id = music_iface["id"]
 
         tools = [
             # ── 天气 script 型工具 ──

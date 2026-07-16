@@ -79,10 +79,18 @@ async def call_local_api(handler_key: str, params: Dict[str, Any]) -> Dict[str, 
         result = func(**params)
         if asyncio.iscoroutine(result):
             result = await result
-        return {"success": True, "data": result}
     except Exception as e:
         logger.error(f"本地接口 {handler_key} 调用失败: {e}", exc_info=True)
         return {"success": False, "error": str(e)}
+
+    # 统一解包: handler 若已返回 {success, data} 格式，提取 data
+    # 否则视为原始数据，包装为 {success: True, data: result}
+    if isinstance(result, dict) and "success" in result:
+        if result["success"]:
+            return {"success": True, "data": result.get("data", result)}
+        else:
+            return result  # 透传错误
+    return {"success": True, "data": result}
 
 
 def _register_external_proxies():
