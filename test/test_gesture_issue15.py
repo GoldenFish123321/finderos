@@ -166,6 +166,75 @@ class TestGestureTemplate:
         func_body = content[func_start:func_end]
         assert "isStreaming" in func_body, "sendGestureMessage 应检查 isStreaming"
 
+    def test_send_gesture_message_returns_bool(self):
+        """sendGestureMessage 返回布尔值表示是否成功发送"""
+        with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        func_start = content.index("function sendGestureMessage")
+        func_end = content.index("\n}", func_start) + 2
+        func_body = content[func_start:func_end]
+        # 流式输出中应 return false，成功发送应 return true
+        assert "return false" in func_body, "sendGestureMessage 流式保护时应返回 false"
+        assert "return true" in func_body, "sendGestureMessage 成功发送时应返回 true"
+
+    def test_close_gesture_camera_function(self):
+        """closeGestureCamera 函数存在且包含完整清理逻辑"""
+        with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        assert "function closeGestureCamera" in content, "缺少 closeGestureCamera 函数"
+
+        func_start = content.index("function closeGestureCamera")
+        # 找到下一个顶层函数作为结束边界
+        next_func = content.find("\nfunction ", func_start + 1)
+        if next_func == -1:
+            next_func = len(content)
+        func_body = content[func_start:next_func]
+
+        assert "destroy()" in func_body, "closeGestureCamera 应调用 destroy()"
+        assert "classList.remove('active')" in func_body, "closeGestureCamera 应隐藏容器"
+        assert 'btn.textContent = ' in func_body or "btn.textContent=" in func_body, \
+            "closeGestureCamera 应重置按钮文字"
+        assert "gestureCamActive = false" in func_body, \
+            "closeGestureCamera 应重置 gestureCamActive"
+
+    def test_handle_gesture_auto_close(self):
+        """handleGesture 识别成功后自动关闭摄像头"""
+        with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        func_start = content.index("function handleGesture")
+        next_func = content.find("\nfunction ", func_start + 1)
+        if next_func == -1:
+            next_func = len(content)
+        func_body = content[func_start:next_func]
+
+        # 应包含 closeGestureCamera 调用
+        assert "closeGestureCamera()" in func_body, \
+            "handleGesture 识别成功后应调用 closeGestureCamera()"
+
+        # 应根据 sendGestureMessage 返回值决定是否关闭（流式保护）
+        assert "sendGestureMessage(msg)" in func_body, \
+            "handleGesture 应调用 sendGestureMessage"
+
+    def test_handle_gesture_no_close_on_streaming(self):
+        """流式输出时手势识别不应关闭摄像头（sendGestureMessage 返回 false）"""
+        with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        func_start = content.index("function handleGesture")
+        next_func = content.find("\nfunction ", func_start + 1)
+        if next_func == -1:
+            next_func = len(content)
+        func_body = content[func_start:next_func]
+
+        # 当 sendGestureMessage 返回 false 时不关闭
+        # 条件: if (sendGestureMessage(msg)) { closeGestureCamera(); }
+        assert "if (sendGestureMessage(msg))" in func_body or \
+               "if(sendGestureMessage(msg))" in func_body, \
+            "handleGesture 应对 sendGestureMessage 返回值做条件判断"
+
     def test_beforeunload_cleanup(self):
         """页面离开时释放摄像头资源"""
         with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
