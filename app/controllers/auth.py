@@ -276,7 +276,7 @@ class FaceRegisterHandler(BaseHandler):
 
 
 class FaceLoginHandler(BaseHandler):
-    """人脸登录 — 上传人脸图片，OpenCV LBPH 匹配后自动登录"""
+    """人脸登录 — 先输入用户名，再拍照验证人脸与用户名匹配"""
 
     def post(self):
         if self.current_user:
@@ -284,9 +284,32 @@ class FaceLoginHandler(BaseHandler):
             return
 
         client_ip = self.request.remote_ip or "0.0.0.0"
-        allowed, rate_limit_error = login_limiter.check(client_ip, "*face*")
+
+        # 获取用户名
+        try:
+            username = self.get_body_argument("username", "").strip()
+        except Exception:
+            username = ""
+        if not username:
+            self.write({"code": 1, "msg": "请先输入用户名"})
+            return
+
+        allowed, rate_limit_error = login_limiter.check(client_ip, username)
         if not allowed:
             self.write({"code": 1, "msg": rate_limit_error})
+            return
+
+        # 验证用户存在且启用
+        user = UserRepository.get_user_by_username(username)
+        if not user or user.get("is_enabled") == 0:
+            login_limiter.record_failure(client_ip, username)
+            self.write({"code": 1, "msg": "用户不存在或已被禁用"})
+            return
+
+        # 检查该用户是否已注册人脸
+        from app.services.face_auth import has_face as face_has_image, recognize_face
+        if not face_has_image(username):
+            self.write({"code": 1, "msg": "该用户未注册人脸，请先用密码登录后在账户设置中注册"})
             return
 
         # 接收上传的图片
@@ -297,21 +320,20 @@ class FaceLoginHandler(BaseHandler):
         image_file = self.request.files["face_image"][0]
         image_bytes = image_file["body"]
 
-        from app.services.face_auth import recognize_face
         result = recognize_face(image_bytes)
         if result is None:
-            login_limiter.record_failure(client_ip, "*face*")
-            write_audit_log("FACE_LOGIN_FAIL", "", "", "人脸匹配失败", client_ip)
+            login_limiter.record_failure(client_ip, username)
+            write_audit_log("FACE_LOGIN_FAIL", username, "", "人脸匹配失败", client_ip)
             self.write({"code": 1, "msg": "人脸识别失败，请重试或使用密码登录"})
             return
 
-        username, confidence = result
-        user = UserRepository.get_user_by_username(username)
-        if not user or user.get("is_enabled") == 0:
-            self.write({"code": 1, "msg": "账户已被禁用"})
+        recognized_username, confidence = result
+        if recognized_username != username:
+            login_limiter.record_failure(client_ip, username)
+            write_audit_log("FACE_LOGIN_FAIL", username, "", f"人脸不匹配（识别为:{recognized_username}）", client_ip)
+            self.write({"code": 1, "msg": "人脸与用户名不匹配，请确认后重试"})
             return
 
-        login_limiter.clear(client_ip, "*face*")
         login_limiter.clear(client_ip, username)
         is_https = self.request.protocol == "https"
         self.set_secure_cookie(

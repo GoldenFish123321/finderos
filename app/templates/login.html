@@ -272,25 +272,51 @@
         <div class="face-modal" id="face-modal">
             <div class="face-box">
                 <h3 style="margin:0 0 12px;color:var(--text-primary);font-size:16px;">📷 人脸识别登录</h3>
-                <video id="face-video" autoplay playsinline style="width:100%;border-radius:12px;transform:scaleX(-1);background:#000;"></video>
+                <div class="input-group" style="margin-bottom:12px;">
+                    <label>请先输入用户名</label>
+                    <input type="text" id="face-username" placeholder="请输入用户名" autocomplete="off"
+                           style="width:100%;padding:10px 14px;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:8px;color:var(--text-primary);font-size:14px;box-sizing:border-box;">
+                </div>
+                <video id="face-video" autoplay playsinline style="width:100%;border-radius:12px;transform:scaleX(-1);background:#000;display:none;"></video>
                 <canvas id="face-canvas" style="display:none;"></canvas>
-                <div class="face-status" id="face-status">请正对摄像头...</div>
+                <div class="face-status" id="face-status">输入用户名后点击「打开摄像头」</div>
                 <div class="face-actions">
                     <button class="btn-cancel" onclick="closeFaceLogin()">取消</button>
-                    <button class="btn-register" id="btn-face-capture" onclick="captureFaceLogin()">📸 拍照登录</button>
+                    <button class="btn-register" id="btn-face-open-cam" onclick="openFaceCam()">📷 打开摄像头</button>
+                    <button class="btn-register" id="btn-face-capture" onclick="captureFaceLogin()" style="display:none;">📸 拍照登录</button>
                 </div>
             </div>
         </div>
 
         <script>
         var faceStream = null;
+        function getXsrftoken() {
+            var m = document.cookie.match('\\b_xsrf=([^;]*)\\b');
+            return m ? m[1] : '';
+        }
         function openFaceLogin() {
+            var uname = document.getElementById('face-username');
+            uname.value = document.getElementById('login-form') ? document.querySelector('#login-form input[name=username]').value : '';
             document.getElementById('face-modal').classList.add('active');
+            document.getElementById('face-video').style.display = 'none';
+            document.getElementById('btn-face-open-cam').style.display = '';
+            document.getElementById('btn-face-capture').style.display = 'none';
+            document.getElementById('face-status').textContent = '输入用户名后点击「打开摄像头」';
+        }
+        function openFaceCam() {
+            var uname = document.getElementById('face-username').value.trim();
+            if (!uname) {
+                document.getElementById('face-status').textContent = '请先输入用户名';
+                return;
+            }
             document.getElementById('face-status').textContent = '正在启动摄像头...';
+            document.getElementById('face-video').style.display = '';
             navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } })
                 .then(function(stream) {
                     faceStream = stream;
                     document.getElementById('face-video').srcObject = stream;
+                    document.getElementById('btn-face-open-cam').style.display = 'none';
+                    document.getElementById('btn-face-capture').style.display = '';
                     document.getElementById('face-status').textContent = '请正对摄像头，点击「拍照登录」';
                 })
                 .catch(function(e) {
@@ -300,18 +326,20 @@
         function closeFaceLogin() {
             if (faceStream) { faceStream.getTracks().forEach(function(t) { t.stop(); }); faceStream = null; }
             document.getElementById('face-modal').classList.remove('active');
-            document.getElementById('face-status').textContent = '请正对摄像头...';
+            document.getElementById('face-video').style.display = 'none';
+            document.getElementById('btn-face-open-cam').style.display = '';
+            document.getElementById('btn-face-capture').style.display = 'none';
+            document.getElementById('face-status').textContent = '输入用户名后点击「打开摄像头」';
         }
         function captureFaceLogin() {
             var video = document.getElementById('face-video');
             var canvas = document.getElementById('face-canvas');
             var status = document.getElementById('face-status');
             var btn = document.getElementById('btn-face-capture');
+            var uname = document.getElementById('face-username').value.trim();
 
-            if (!faceStream || !video.videoWidth) {
-                status.textContent = '摄像头未就绪，请稍后重试';
-                return;
-            }
+            if (!uname) { status.textContent = '请先输入用户名'; return; }
+            if (!faceStream || !video.videoWidth) { status.textContent = '摄像头未就绪，请稍后重试'; return; }
 
             btn.disabled = true;
             btn.textContent = '识别中...';
@@ -325,6 +353,8 @@
             canvas.toBlob(function(blob) {
                 var formData = new FormData();
                 formData.append('face_image', blob, 'face.jpg');
+                formData.append('username', uname);
+                formData.append('_xsrf', getXsrftoken());
 
                 fetch('/face/login', {
                     method: 'POST',
@@ -349,6 +379,10 @@
                 });
             }, 'image/jpeg');
         }
+        // 关闭模态框时重置状态
+        document.getElementById('face-modal').addEventListener('click', function(e) {
+            if (e.target === this) closeFaceLogin();
+        });
         // 离开时关闭摄像头
         window.addEventListener('beforeunload', function() {
             if (faceStream) { faceStream.getTracks().forEach(function(t) { t.stop(); }); }
