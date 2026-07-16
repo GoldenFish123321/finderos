@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — API 型员工 MCP 统一调度架构
+## v1.7.0-beta (2026-07-16) — API 型员工 MCP 统一调度架构
 
 - ✨ **架构重构**：API 型员工底层从「直接 HTTP 调用」改为「MCP 工具委托」
   - `digital_employees` 表新增 `mcp_tool_id` 列（INTEGER FK → `mcp_tools.id`），API 型员工可绑定单个 MCP 工具
