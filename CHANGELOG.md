@@ -1,5 +1,32 @@
 # Changelog
 
+## v1.3.0-beta (2026-07-16) — 多模态 AI 媒体生成 + 数智大屏 + 舆情大屏 + 手势交互
+
+- 🖼️ **新功能 #22**：AI 文生图 — 接入 wan2.6-t2i 模型，支持 `generate_image` MCP 工具
+- 🎨 **新功能 #22**：AI 图生图 — 接入 qwen-image-2.0 模型，支持图编辑
+- 🎬 **新功能 #21**：AI 文生视频 — 接入 wan2.6-t2v 模型，`generate_video` MCP 工具
+- 🎥 **新功能 #21**：AI 图生视频 — 接入 wan2.6-i2v 模型
+- 📦 **视频代理下载**：OSS 签名链接本地化缓存至 `/static/media/`，避免过期
+- 🔌 **MCP 工具扩展**：20 个工具（含 `generate_image` / `generate_video`），自动发现注册
+- 💬 **SSE 卡片推送**：`event: card` 实时渲染图片/视频媒体卡片
+- 🛡️ **安全加固**：视频下载 URL SSRF 校验、500MB 下载上限
+
+- 📊 **新功能 #23**：管理侧数智大屏 `/admin/dashboard` — 3D 地球 + 词云 + 数据可视化
+- 🌍 **ECharts-GL 3D 地球**：全球数据采集分布热力图，自动旋转
+- ☁️ **词云分析**：`echarts-wordcloud` 从数据仓库标题提取关键词
+
+- 🛡️ **新功能 #16**：管理侧舆情大屏 `/admin/sentiment` — 敏感词预警 + AI 风析
+- 📋 **敏感词库**：24 个种子敏感词（高危/中危/低危三级）
+- ⚠️ **实时预警**：预警滚动列表，按严重级别标记
+
+- ✋ **新功能 #15**：用户侧手势与数字员工交互
+- 📷 **MediaPipe Hands CDN 集成**：实时手部关键点检测
+- 🧠 **独立手势引擎**：支持多帧确认防抖、冷却期控制
+
+- ⚙️ **新模块 #13**：管理侧系统设置页面（`/admin/config`）
+
+---
+
 ## v1.0.3-beta (2026-07-16) - Security issue hardening
 
 - Fixed Issues #57-#76 covering Mock runtime errors, URL/FTS injection, DOM XSS,
@@ -9,6 +36,25 @@
 - Added focused regression tests for the new trust-boundary and concurrency fixes.
 
 本文档记录瞭望与问数系统 (DataFinderAgentOS) 所有版本的变更历史。
+
+---
+
+## v1.1.0-beta (2026-07-16) — 系统设置模块 + 手势交互
+
+- ✋ **新功能 #15**：用户侧手势与数字员工交互 — 剪刀手→查天气、握拳→随机音乐、手掌→新闻聚合 (@GoldenFish123321)
+- 📷 **MediaPipe Hands CDN 集成**：实时手部关键点检测，支持 3 种手势分类
+- 🎥 **摄像头模块**：用户前台一键开启/关闭摄像头，骨架可视化叠加（绿色关键点 + 连线）
+- 🧠 **独立手势引擎**：`app/static/js/gesture.js` — `GestureDetector` 类，支持多帧确认防抖、冷却期控制
+- 🔒 **CSP 安全策略更新**：新增 `worker-src blob:`、`connect-src blob:` 以允许 MediaPipe WASM Worker；`Permissions-Policy camera=(self)` 以允许摄像头
+- 🧪 **测试新增**：完整的手势识别前端测试覆盖
+
+- ⚙️ **新模块 #13**：管理侧系统设置页面（`/admin/config`），支持配置系统名称/副标题/Logo/备案号/AI 默认参数 (@GoldenFish123321)
+- 🗄️ **新增表**：`system_config` key-value 配置表，8 条默认种子数据（常规设置 + AI 参数）
+- 🖼️ **Logo 上传**：支持 PNG/JPG/GIF/WebP/SVG 上传，含类型/大小校验、预览、移除、旧文件清理
+- 🔄 **动态标题**：系统名称从 DB 加载，页面标题和头部导航栏实时反映配置变更（保存后即时刷新生效）
+- 📝 **审计日志**：配置保存、Logo 上传/移除均写入审计记录
+- 🧪 **测试新增**：31 项端到端功能测试
+- 🐛 **安全修复**：消除 self.write() 中直接拼接异常消息的 XSS 风险
 
 ---
 

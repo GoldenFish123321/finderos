@@ -19,9 +19,10 @@ class BaseHandler(tornado.web.RequestHandler):
     """
 
     def get_template_namespace(self):
-        """注入全局模板变量，包括统一版本号。"""
+        """注入全局模板变量，包括统一版本号和系统设置。"""
         namespace = super().get_template_namespace()
         namespace["app_version"] = settings.VERSION
+        namespace["settings"] = settings
         return namespace
 
     def set_default_headers(self):

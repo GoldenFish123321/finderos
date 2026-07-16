@@ -18,7 +18,7 @@ from app.utils.security import _ensure_secret_key
 logger = logging.getLogger(__name__)
 from app.controllers.auth import LoginHandler, LogoutHandler, RegisterHandler
 from app.controllers.home import IndexHandler
-from app.controllers.admin_home import AdminIndexHandler
+from app.controllers.admin_home import AdminIndexHandler, AdminDashboardHandler, AdminDashboardApiHandler
 from app.controllers.admin_user import (
     UserListHandler, UserFormHandler, UserDeleteHandler, UserToggleHandler,
     UserBatchDeleteHandler, UserBatchToggleHandler, ChangePasswordHandler,
@@ -61,6 +61,12 @@ from app.controllers.admin_conversation import (
 from app.controllers.admin_skill import (
     SkillListHandler, SkillFormHandler, SkillDeleteHandler, SkillToggleHandler,
 )
+from app.controllers.admin_config import SystemConfigHandler
+from app.controllers.admin_sentiment import (
+    AdminSentimentHandler, AdminSentimentApiHandler,
+    AdminSentimentScanHandler, AdminSentimentAlertDetailHandler,
+    AdminSentimentResolveHandler,
+)
 from app.controllers.admin_mcp import (
     MCPToolListHandler, MCPToolFormHandler, MCPToolDeleteHandler,
     MCPToolToggleHandler, MCPToolTestHandler, MCPToolReloadHandler,
@@ -74,7 +80,7 @@ from app.controllers.user_chat import (
     UserChatTTSHandler,
 )
 from app.models.db import init_db, seed_default_data
-from app.services.scheduler import CollectionScheduler
+from app.services.scheduler import CollectionScheduler, SentimentScanner
 
 # 配置结构化日志
 logging.basicConfig(
@@ -90,6 +96,11 @@ def make_app() -> tornado.web.Application:
     """
     # cookie_secret: 使用 settings 中已有的值（在 __main__ 块中已初始化）
     cookie_secret = settings.COOKIE_SECRET
+
+    # 计算相对于 main.py 所在目录的绝对路径
+    _base_dir = os.path.dirname(os.path.abspath(__file__))
+    _template_dir = os.path.join(_base_dir, "app", "templates")
+    _static_dir = os.path.join(_base_dir, "app", "static")
 
     return tornado.web.Application(
         [
@@ -193,6 +204,20 @@ def make_app() -> tornado.web.Application:
             (r"/admin/skill/delete", SkillDeleteHandler),
             (r"/admin/skill/toggle", SkillToggleHandler),
 
+            # ========== v0.11 系统设置 ==========
+            (r"/admin/config", SystemConfigHandler),
+
+            # ========== v1.2.0 数智大屏 ==========
+            (r"/admin/dashboard", AdminDashboardHandler),
+            (r"/admin/api/dashboard", AdminDashboardApiHandler),
+
+            # ========== v1.2.0 舆情大屏 ==========
+            (r"/admin/sentiment", AdminSentimentHandler),
+            (r"/admin/api/sentiment", AdminSentimentApiHandler),
+            (r"/admin/api/sentiment/scan", AdminSentimentScanHandler),
+            (r"/admin/api/sentiment/detail", AdminSentimentAlertDetailHandler),
+            (r"/admin/api/sentiment/resolve", AdminSentimentResolveHandler),
+
             # ========== v0.10 MCP 工具管理 ==========
             (r"/admin/mcp/tool", MCPToolListHandler),
             (r"/admin/mcp/tool/add", MCPToolFormHandler),
@@ -222,8 +247,8 @@ def make_app() -> tornado.web.Application:
             # TTS 语音合成（Edge TTS）
             (r"/api/chat/tts", UserChatTTSHandler),
         ],
-        template_path="app/templates",
-        static_path="app/static",
+        template_path=_template_dir,
+        static_path=_static_dir,
         cookie_secret=cookie_secret,
         login_url=settings.LOGIN_URL,
         xsrf_cookies=settings.XSRF_COOKIES,
@@ -242,6 +267,9 @@ if __name__ == "__main__":
     # 插入种子数据（默认角色、管理员、功能）
     seed_default_data()
 
+    # v0.11: 从数据库加载可配置的系统设置，覆盖默认值
+    settings.load_from_db()
+
     # v0.10: 显式注册 MCP 工具（确保数据库驱动工具在启动时加载）
     from app.mcp.tools import register_all_tools
     register_all_tools()
@@ -252,6 +280,10 @@ if __name__ == "__main__":
     # 启动定时采集调度器 (v0.6)
     scheduler = CollectionScheduler(app, check_interval_ms=60000)
     scheduler.start()
+
+    # 启动定时舆情扫描器 (v1.2.0) — 每5分钟
+    _sentiment_scanner = SentimentScanner(check_interval_ms=300000)
+    _sentiment_scanner.start()
 
     # 启动 HTTP 服务器
     bind_address = os.environ.get("BIND_ADDRESS", "127.0.0.1")

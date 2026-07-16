@@ -4,15 +4,40 @@ settings.py — 应用配置管理中心
 所有配置支持环境变量覆盖，适用于开发/测试/生产环境切换。
 """
 
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 
 class Settings:
     """全局应用配置"""
 
     # === 应用版本（唯一硬编码位置） ===
-    VERSION = "1.0.3-beta"
+    VERSION = "1.3.0-beta"
     """应用版本号。项目中所有版本展示均由此处统一管理。"""
+
+    # === UI 可配置项（默认值，启动后被 DB system_config 表覆盖） ===
+    SYSTEM_NAME = "瞭望与问数系统"
+    """系统名称，显示在页面标题和头部导航栏。可通过管理后台 → 常规设置修改。"""
+
+    SYSTEM_SUBTITLE = "DataFinderAgentOS"
+    """系统副标题/英文名称，显示在头部版本号旁。"""
+
+    SYSTEM_LOGO = ""
+    """系统 Logo 图片路径（相对 static 目录），为空则显示文字 Logo。"""
+
+    ICP_NUMBER = ""
+    """ICP 备案号，显示在页面底部。"""
+
+    AI_DEFAULT_MODEL = ""
+    """AI 默认模型 ID（空 = 使用 is_default=1 的模型）。"""
+
+    AI_DEFAULT_TEMPERATURE = 0.7
+    """AI 默认温度参数（0-2），控制回复随机性。"""
+
+    AI_DEFAULT_MAX_TOKENS = 4096
+    """AI 默认最大输出 Token 数。"""
 
     # === 安全配置 ===
     COOKIE_SECRET = os.environ.get("COOKIE_SECRET", "")
@@ -36,15 +61,19 @@ class Settings:
         "X-Content-Type-Options": "nosniff",
         "X-XSS-Protection": "1; mode=block",
         "Referrer-Policy": "strict-origin-when-cross-origin",
-        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        # Issue #15: 允许摄像头以供手势识别
+        "Permissions-Policy": "camera=(self), microphone=(), geolocation=()",
         # 严格化 CSP（借鉴陈子墨）：移除 unsafe-eval，收窄 connect-src，增加 frame-ancestors/base-uri/form-action
+        # Issue #15: 添加 blob: 以允许 MediaPipe Hands WASM Worker
         "Content-Security-Policy": (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-            "img-src 'self' data: https:; "
+            "img-src 'self' data: https: blob:; "
+            "media-src 'self' https:; "
             "font-src 'self' https://cdn.jsdelivr.net; "
-            "connect-src 'self'; "
+            "connect-src 'self' https://cdn.jsdelivr.net blob: https://*.jsdelivr.net; "
+            "worker-src 'self' blob:; "
             "frame-ancestors 'none'; "
             "base-uri 'self'; "
             "form-action 'self'"
@@ -95,6 +124,57 @@ class Settings:
         ).split(",") if kw.strip()
     ]
     """定时采集默认关键词列表（逗号分隔，支持环境变量覆盖）。"""
+
+    # === 数据库配置加载 ===
+
+    def load_from_db(self) -> None:
+        """从 system_config 表加载 UI 可配置项，覆盖默认值。
+
+        调用时机：init_db() + seed_default_data() 完成之后（main.py 中调用）。
+        容错：DB 读取失败时静默回退到类属性默认值。
+        优先级：环境变量 > DB 值 > 类属性默认值（已在 __init__ 后生效）。
+        """
+        try:
+            from app.models.system_config import SystemConfigRepository
+            db_config = SystemConfigRepository.get_all_as_dict()
+            if not db_config:
+                logger.info("system_config 表为空，使用默认配置")
+                return
+
+            # 白名单：仅允许以下 key 覆盖 Settings 属性
+            _DB_KEY_MAP = {
+                "system_name": "SYSTEM_NAME",
+                "system_subtitle": "SYSTEM_SUBTITLE",
+                "system_logo": "SYSTEM_LOGO",
+                "icp_number": "ICP_NUMBER",
+                "ai_default_model": "AI_DEFAULT_MODEL",
+                "ai_default_temperature": "AI_DEFAULT_TEMPERATURE",
+                "ai_default_max_tokens": "AI_DEFAULT_MAX_TOKENS",
+            }
+
+            for db_key, attr_name in _DB_KEY_MAP.items():
+                if db_key in db_config and db_config[db_key]:
+                    raw_value = db_config[db_key]
+                    # 类型转换：数值型属性
+                    if attr_name in ("AI_DEFAULT_TEMPERATURE",):
+                        try:
+                            setattr(self, attr_name, float(raw_value))
+                        except (ValueError, TypeError):
+                            logger.warning(f"system_config.{db_key} 值 '{raw_value}' 无效，使用默认值")
+                    elif attr_name in ("AI_DEFAULT_MAX_TOKENS",):
+                        try:
+                            setattr(self, attr_name, int(raw_value))
+                        except (ValueError, TypeError):
+                            logger.warning(f"system_config.{db_key} 值 '{raw_value}' 无效，使用默认值")
+                    elif attr_name in ("AI_DEFAULT_MODEL",):
+                        # 模型 ID 保留为字符串（模板中统一用字符串比较）
+                        setattr(self, attr_name, raw_value)
+                    else:
+                        setattr(self, attr_name, raw_value)
+
+            logger.info(f"已从 system_config 表加载 {len(db_config)} 项配置")
+        except Exception as e:
+            logger.warning(f"从 system_config 表加载配置失败（将使用默认值）: {e}")
 
 
 settings = Settings()

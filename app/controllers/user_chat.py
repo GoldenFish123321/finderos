@@ -97,6 +97,16 @@ _TOOL_USAGE_INSTRUCTION = (
     "- ✅ 涉及数据来源时，只说「数据仓库」「瞭望采集」，不说表名/字段名"
 )
 
+_MEDIA_INSTRUCTION = (
+    "\n\n[多模态生成能力]\n"
+    "你具备 AI 图像和视频生成能力。当用户要求生成图片或视频时，使用以下工具：\n"
+    "1. **generate_image**: 文生图。用户说「画一张」「生成图片」「文生图」时调用。\n"
+    "   参数: prompt(描述词,必填)、size(尺寸,默认1024x1024)、n(数量,默认1)。\n"
+    "2. **generate_video**: 视频生成。用户说「生成视频」「制作视频」「文生视频」时调用。\n"
+    "   参数: prompt(描述词,必填)、image_url(可选,图生视频时传入)。\n"
+    "生成完成后，系统会自动在对话中展示生成的图片或视频。"
+)
+
 
 # ============================================================
 # 辅助函数
@@ -110,6 +120,7 @@ def _build_system_prompt(custom_prompt: str = "") -> str:
     parts.append(_SYSTEM_IDENTITY)
     parts.append(_CHART_INSTRUCTION)
     parts.append(_TOOL_USAGE_INSTRUCTION)
+    parts.append(_MEDIA_INSTRUCTION)
     return "\n\n".join(parts)
 
 
@@ -649,21 +660,38 @@ class UserChatStreamHandler(BaseHandler):
         temperature = model.get("temperature", 0.7)
         max_tokens = model.get("max_tokens", 4096)
 
-        # ── 多轮对话历史 ──
-        history_messages = []
+        # ── 解析对话 ID ──
         conv_id = None
         if conversation_id:
             try:
                 conv_id = int(conversation_id)
-                conv = ConversationRepository.get_by_id(conv_id)
-                if conv and conv.get("username", "") == self.current_user:
-                    history_messages = ConversationRepository.get_recent_messages(
-                        conv_id, limit=10
-                    )
-                else:
-                    conv_id = None
             except (ValueError, TypeError):
                 pass
+
+        # ── 模型分类快捷路由：图像/视频模型跳过 LLM 直接生成 ──
+        model_category = (model.get("category") or "text").strip().lower()
+        if model_category in ("image", "video"):
+            if not api_key:
+                self.write({"code": 1, "msg": f"{model_category} 模型未配置 API Key"})
+                return
+            # 设置 SSE 响应头（必须在 _handle_media_direct 之前）
+            self.set_header("Content-Type", "text/event-stream")
+            self.set_header("Cache-Control", "no-cache")
+            self.set_header("Connection", "keep-alive")
+            self.set_header("X-Accel-Buffering", "no")
+            await self._handle_media_direct(model, model_category, message, conv_id)
+            return
+
+        # ── 多轮对话历史 ──
+        history_messages = []
+        if conv_id:
+            conv = ConversationRepository.get_by_id(conv_id)
+            if not conv or conv.get("username", "") != self.current_user:
+                conv_id = None
+            else:
+                history_messages = ConversationRepository.get_recent_messages(
+                    conv_id, limit=10
+                )
 
         # ── 设置 MCP 上下文 ──
         set_mcp_context(username=self.current_user)
@@ -845,6 +873,14 @@ class UserChatStreamHandler(BaseHandler):
                                 await self.flush()
                         except Exception:
                             pass
+                    # 图像/视频生成工具：发送媒体卡片
+                    if tool_name in ("generate_image", "generate_video"):
+                        try:
+                            result_data = json.loads(tr.get("content", "{}"))
+                            if isinstance(result_data, dict) and result_data.get("success"):
+                                await self._send_media_card(tool_name, result_data)
+                        except Exception:
+                            pass
                 continue
 
             elif tool_calls:
@@ -863,7 +899,7 @@ class UserChatStreamHandler(BaseHandler):
                         + sanitize_untrusted_llm_context(tr.get("content", ""))
                     )
                     messages.append(safe_tr)
-                    # 音乐工具：发送卡片事件
+                    # 音乐 + 媒体生成工具：发送卡片事件
                     try:
                         tool_name_2 = ""
                         for tc in tool_calls:
@@ -887,6 +923,10 @@ class UserChatStreamHandler(BaseHandler):
                                     f"event: card\ndata: {json.dumps(music_card, ensure_ascii=False)}\n\n"
                                 )
                                 await self.flush()
+                        if tool_name_2 in ("generate_image", "generate_video"):
+                            result_data = json.loads(tr.get("content", "{}"))
+                            if isinstance(result_data, dict) and result_data.get("success"):
+                                await self._send_media_card(tool_name_2, result_data)
                     except Exception:
                         pass
                 continue
@@ -996,6 +1036,9 @@ class UserChatStreamHandler(BaseHandler):
                             f"event: card\ndata: {json.dumps(music_card, ensure_ascii=False)}\n\n"
                         )
                         await self.flush()
+                    # 图像/视频生成工具：发送媒体卡片
+                    if tool_name in ("generate_image", "generate_video") and isinstance(result, dict) and result.get("success"):
+                        await self._send_media_card(tool_name, result)
                     reply = self._format_tool_result_as_reply(
                         tool_name, arguments, result, user_message, model
                     )
@@ -1148,6 +1191,113 @@ class UserChatStreamHandler(BaseHandler):
                 f"🔧 工具 **{tool_name}** 执行结果：\n\n"
                 f"```json\n{json.dumps(result, ensure_ascii=False, indent=2)[:2000]}\n```"
             )
+
+    # ═══════════════════════════════════════════════════════════
+    # 媒体生成：卡片推送 + 直连路由
+    # ═══════════════════════════════════════════════════════════
+
+    async def _send_media_card(self, tool_name: str, result: dict):
+        """根据工具结果发送 SSE 媒体卡片事件。"""
+        if tool_name == "generate_image":
+            urls = result.get("urls", [])
+            prompt = result.get("prompt", "")
+            card = {
+                "type": "image",
+                "title": prompt[:100] or "AI 生成图片",
+                "data": {"urls": urls, "prompt": prompt, "model": result.get("model", "")},
+            }
+            self.write(f"event: card\ndata: {json.dumps(card, ensure_ascii=False)}\n\n")
+            await self.flush()
+
+        elif tool_name == "generate_video":
+            local_url = result.get("local_url", "")
+            card = {
+                "type": "video",
+                "title": result.get("prompt", "")[:100] or "AI 生成视频",
+                "data": {
+                    "url": local_url,
+                    "content_type": result.get("content_type", "video/mp4"),
+                    "model": result.get("model", ""),
+                },
+            }
+            self.write(f"event: card\ndata: {json.dumps(card, ensure_ascii=False)}\n\n")
+            await self.flush()
+
+    async def _handle_media_direct(self, model: dict, category: str, message: str, conv_id):
+        """用户直接选中 image/video 模型时，跳过 LLM 直接调用生成 API。"""
+        import asyncio as _asyncio
+        import time as _time
+
+        _start = _time.time()
+        model_name = model.get("model_name") or model.get("name")
+        api_base = (model.get("api_base") or "").rstrip("/")
+        api_key = model.get("api_key") or ""
+        model_id = model.get("id", 0)
+
+        if category == "image":
+            await _sse_write(self, f"🎨 正在生成图片：{message[:50]}...", event="tool_status")
+            from app.services.media_generator import call_image_gen_in_thread
+
+            loop = _asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                _user_chat_executor,
+                lambda: call_image_gen_in_thread(
+                    prompt=message, model_name=model_name,
+                    api_base=api_base, api_key=api_key,
+                ),
+            )
+            if result.get("success"):
+                await self._send_media_card("generate_image", result)
+                reply = f"✅ 已按你的描述生成图片：{message[:60]}"
+                await _sse_write(self, reply)
+            else:
+                reply = f"❌ 图像生成失败：{result.get('error', '未知错误')}"
+                for ch in reply:
+                    await _sse_write(self, ch)
+                    await _asyncio.sleep(0.01)
+
+        elif category == "video":
+            await _sse_write(self, f"🎬 正在生成视频：{message[:50]}...", event="tool_status")
+            from app.services.media_generator import call_video_gen_in_thread
+
+            loop = _asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                _user_chat_executor,
+                lambda: call_video_gen_in_thread(
+                    prompt=message, model_name=model_name,
+                    api_base=api_base, api_key=api_key,
+                ),
+            )
+            if result.get("success"):
+                await self._send_media_card("generate_video", result)
+                reply = f"✅ 已按你的描述生成视频：{message[:60]}"
+                await _sse_write(self, reply)
+            else:
+                reply = f"❌ 视频生成失败：{result.get('error', '未知错误')}"
+                for ch in reply:
+                    await _sse_write(self, ch)
+                    await _asyncio.sleep(0.01)
+
+        else:
+            reply = f"不支持的模型分类：{category}"
+
+        await _sse_done(self)
+        elapsed = round(_time.time() - _start, 2)
+        tokens = _estimate_tokens(reply)
+        await _sse_stats(self, tokens, False, elapsed, conv_id)
+
+        # 审计日志
+        write_audit_log(
+            action="MEDIA_GENERATE",
+            username=self.current_user,
+            target=f"model:{model_id}",
+            detail=f"category={category}, tokens={tokens}, elapsed={elapsed}s, msg_len={len(message)}",
+            client_ip=self.request.remote_ip or "",
+        )
+
+        if conv_id and reply:
+            ConversationRepository.add_message(conv_id, "user", message, 0)
+            ConversationRepository.add_message(conv_id, "assistant", reply, tokens)
 
     # ═══════════════════════════════════════════════════════════
     # 快捷指令 / Mock 回复

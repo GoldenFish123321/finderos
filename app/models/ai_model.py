@@ -341,3 +341,50 @@ class AiModelRepository:
                 f"SELECT COUNT(*) as cnt FROM ai_models {default_where}", params
             ).fetchone()["cnt"]
             return {"total": total, "enabled": enabled, "has_default": has_default}
+
+    @staticmethod
+    def get_default_by_category(category: str):
+        """获取指定分类的默认/首个启用模型（含解密的 api_key）。
+
+        Args:
+            category: 模型分类（image / video / text 等）
+
+        Returns:
+            模型字典或 None
+        """
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT * FROM ai_models WHERE category = ? AND is_enabled = 1 "
+                "ORDER BY is_default DESC, id ASC LIMIT 1",
+                (category,),
+            ).fetchone()
+        if row:
+            row_dict = dict(row)
+            row_dict["has_api_key"] = bool(row_dict.get("api_key"))
+            row_dict["api_key"] = decrypt_api_key(row_dict.get("api_key", ""))
+            return row_dict
+        return None
+
+    @staticmethod
+    def get_by_category(category: str):
+        """获取指定分类的所有启用模型（含解密的 api_key）。
+
+        Args:
+            category: 模型分类（image / video / text 等）
+
+        Returns:
+            模型字典列表
+        """
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT * FROM ai_models WHERE category = ? AND is_enabled = 1 "
+                "ORDER BY is_default DESC, id ASC",
+                (category,),
+            ).fetchall()
+        result = []
+        for row in rows:
+            row_dict = dict(row)
+            row_dict["has_api_key"] = bool(row_dict.get("api_key"))
+            row_dict["api_key"] = decrypt_api_key(row_dict.get("api_key", ""))
+            result.append(row_dict)
+        return result

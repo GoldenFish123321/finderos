@@ -415,6 +415,106 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
         border: 1px solid var(--border-subtle);
     }
 
+    /* ====== 手势摄像头区域 ====== */
+    .gesture-container {
+        position: relative;
+        margin: 0 0 8px 0;
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        background: rgba(0,0,0,0.3);
+        border: 1px solid var(--border-subtle);
+        display: none;
+    }
+    .gesture-container.active { display: block; }
+    .gesture-container video {
+        width: 100%;
+        height: auto;
+        display: block;
+        border-radius: var(--radius-md);
+        transform: scaleX(-1);
+    }
+    .gesture-container canvas {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        transform: scaleX(-1);
+    }
+    .gesture-overlay {
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        padding: 6px 10px;
+        background: linear-gradient(180deg, rgba(0,0,0,0.6), transparent);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 11px;
+        color: #fff;
+        pointer-events: none;
+    }
+    .gesture-overlay .gesture-status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .gesture-overlay .gesture-status .indicator {
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        background: #22c55e;
+        animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+    }
+    .gesture-hint {
+        text-align: center;
+        padding: 6px;
+        font-size: 11px;
+        color: var(--text-muted);
+        border-top: 1px solid var(--border-subtle);
+        background: rgba(0,0,0,0.15);
+        display: none;
+    }
+    .gesture-hint.active { display: block; }
+    .gesture-hint .gesture-icon {
+        display: inline-block;
+        margin: 0 10px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        background: rgba(94,163,255,0.12);
+        color: var(--accent-blue);
+        font-size: 12px;
+        cursor: default;
+    }
+    .gesture-hint .gesture-icon .emoji { margin-right: 3px; }
+
+    /* 摄像头开关按钮 */
+    .btn-camera {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: none;
+        border: 1px solid var(--border-subtle);
+        color: var(--text-muted);
+        font-size: 11px;
+        padding: 3px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+    }
+    .btn-camera:hover {
+        border-color: var(--accent-blue);
+        color: var(--accent-blue);
+        background: rgba(94,163,255,0.08);
+    }
+    .btn-camera.active {
+        border-color: #22c55e;
+        color: #22c55e;
+        background: rgba(34,197,94,0.1);
+    }
+
     /* 天气/信息卡片 */
     .info-card {
         margin: 8px 0; padding: 14px 16px;
@@ -632,6 +732,7 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
             </span>
             <div style="display:flex;align-items:center;gap:10px;">
                 <span class="meta-info" id="header-meta"></span>
+                <button class="btn-camera" id="btn-camera" onclick="toggleCamera()" title="开启摄像头手势识别">✋ 手势</button>
                 <button onclick="exportConversation('md')" title="导出 Markdown" style="background:none;border:1px solid var(--border-subtle);color:var(--text-muted);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;">📥 MD</button>
                 <button onclick="exportConversation('pdf')" title="导出 PDF（通过浏览器打印）" style="background:none;border:1px solid var(--border-subtle);color:var(--text-muted);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;">📄 PDF</button>
                 <button onclick="exportConversation('excel')" title="导出表格数据为 CSV" style="background:none;border:1px solid var(--border-subtle);color:var(--text-muted);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;">📊 Excel</button>
@@ -655,6 +756,22 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
                     <a class="quick-action quick-action-link" href="/admin/model/config">🔑 配置模型 API</a>
                     {% end %}
                 </div>
+            </div>
+        </div>
+
+        <!-- 手势摄像头区域 -->
+        <div class="gesture-container" id="gesture-container">
+            <div class="gesture-overlay">
+                <div class="gesture-status">
+                    <span class="indicator"></span>
+                    <span>手势识别中</span>
+                </div>
+                <span style="font-size:10px;opacity:0.7;">✌️ 剪刀手 · ✊ 握拳 · ✋ 手掌</span>
+            </div>
+            <video id="gesture-video" playsinline></video>
+            <canvas id="gesture-canvas"></canvas>
+            <div class="gesture-hint" id="gesture-hint">
+                识别到: <span class="gesture-icon" id="gesture-hint-icon"></span>
             </div>
         </div>
 
@@ -683,6 +800,9 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+<script src="/static/js/gesture.js"></script>
 <script>
 // ============================================================
 // 全局状态
@@ -1473,7 +1593,7 @@ function renderInfoCard(container, card) {
     // 卡片类型图标映射
     const typeIcons = {
         weather: '🌤', news: '📰', music: '🎵',
-        movie: '🎬', science: '🔬', default: '📋'
+        movie: '🎬', science: '🔬', image: '🖼️', video: '🎬', default: '📋'
     };
     const icon = typeIcons[card.type] || typeIcons.default;
 
@@ -1520,6 +1640,37 @@ function renderInfoCard(container, card) {
         }
         cardHtml += '</div>';
         cardHtml += '</div>';
+    } else if (card.type === 'image' && card.data && card.data.urls) {
+        // 图像生成卡片：渲染 AI 生成的图片
+        var urls = card.data.urls;
+        for (var i = 0; i < urls.length; i++) {
+            var imgUrl = urls[i];
+            var safeImgUrl = (/^https?:\/\//i.test(imgUrl)) ? imgUrl : '';
+            if (safeImgUrl) {
+                cardHtml += '<div style="margin:8px 0;">';
+                cardHtml += '<img src="' + escapeHtml(safeImgUrl)
+                    + '" alt="' + escapeHtml(card.data.prompt || 'AI生成图片') + '"'
+                    + ' style="max-width:100%;border-radius:8px;cursor:pointer;display:block;"'
+                    + ' loading="lazy"'
+                    + ' onclick="window.open(this.src)"'
+                    + ' onerror="this.alt=\\'图片加载失败\\';this.style.opacity=\\'0.5\\';this.style.cursor=\\'default\\';this.onclick=null;">';
+                cardHtml += '</div>';
+            }
+        }
+    } else if (card.type === 'video' && card.data && card.data.url) {
+        // 视频生成卡片：渲染 <video> 播放器
+        var vidUrl = card.data.url;
+        var safeVidUrl = (/^https?:\/\//i.test(vidUrl) || vidUrl.indexOf('/static/') === 0) ? vidUrl : '';
+        if (safeVidUrl) {
+            cardHtml += '<div style="margin:8px 0;">';
+            cardHtml += '<video src="' + escapeHtml(safeVidUrl)
+                + '" controls style="max-width:100%;max-height:400px;border-radius:8px;"'
+                + ' preload="metadata"'
+                + ' onerror="this.style.display=\\'none\\';this.nextElementSibling.style.display=\\'block\\';">'
+                + '您的浏览器不支持视频播放</video>';
+            cardHtml += '<div style="display:none;color:var(--text-muted);font-size:12px;padding:8px;">⚠️ 视频加载失败（可能已过期）</div>';
+            cardHtml += '</div>';
+        }
     } else if (card.data && card.data.items && Array.isArray(card.data.items)) {
         // 列表型卡片
         cardHtml += '<ul style="margin:0;padding-left:18px;">';
@@ -1540,6 +1691,127 @@ function renderInfoCard(container, card) {
     targetEl.appendChild(cardDiv);
     scrollToBottom();
 }
+
+// ============================================================
+// 手势识别 — 摄像头调用（MediaPipe Hands）
+// ============================================================
+var gestureDetector = null;
+var gestureCamActive = false;
+var gestureHintTimer = null;
+
+function toggleCamera() {
+    var btn = document.getElementById('btn-camera');
+    var container = document.getElementById('gesture-container');
+
+    if (gestureCamActive) {
+        if (gestureDetector) {
+            gestureDetector.destroy();
+            gestureDetector = null;
+        }
+        container.classList.remove('active');
+        btn.classList.remove('active');
+        btn.textContent = '✋ 手势';
+        gestureCamActive = false;
+        document.getElementById('gesture-hint').classList.remove('active');
+        return;
+    }
+
+    if (typeof Hands === 'undefined' || typeof Camera === 'undefined') {
+        if (typeof layui !== 'undefined') layui.use(['layer'], function(l){
+            l.layer.msg('手势识别模块加载中，请稍后重试', {time: 2000});
+        });
+        return;
+    }
+
+    btn.classList.add('active');
+    btn.textContent = '⏳ 启动中...';
+
+    var video = document.getElementById('gesture-video');
+    var canvas = document.getElementById('gesture-canvas');
+    canvas.width = 640;
+    canvas.height = 480;
+
+    gestureDetector = new GestureDetector({
+        videoElement: video,
+        canvasElement: canvas,
+        onGesture: function(gesture) {
+            handleGesture(gesture);
+        },
+        cooldown: 2500,
+        minConfidence: 3
+    });
+
+    gestureDetector.init()
+        .then(function() {
+            container.classList.add('active');
+            btn.textContent = '📷 手势开';
+            gestureCamActive = true;
+            gestureDetector.start();
+        })
+        .catch(function(err) {
+            console.error('[手势] 初始化失败:', err);
+            btn.classList.remove('active');
+            btn.textContent = '✋ 手势';
+            gestureDetector = null;
+            if (typeof layui !== 'undefined') layui.use(['layer'], function(l){
+                l.layer.msg('摄像头启动失败: ' + err.message, {time: 3000});
+            });
+        });
+}
+
+function handleGesture(gesture) {
+    var msg = '';
+    var icon = '';
+    var label = '';
+
+    if (gesture === 'VICTORY') {
+        msg = '@天气 查看当前天气';
+        icon = '✌️';
+        label = '剪刀手 → 查天气';
+    } else if (gesture === 'FIST') {
+        msg = '@随机音乐 推荐一首歌';
+        icon = '✊';
+        label = '握拳 → 随机音乐';
+    } else if (gesture === 'PALM') {
+        msg = '@新闻聚合 获取最新新闻';
+        icon = '✋';
+        label = '手掌 → 新闻聚合';
+    } else {
+        return;
+    }
+
+    var hint = document.getElementById('gesture-hint');
+    var hintIcon = document.getElementById('gesture-hint-icon');
+    hintIcon.textContent = icon + ' ' + label;
+    hint.classList.add('active');
+
+    if (gestureHintTimer) clearTimeout(gestureHintTimer);
+    gestureHintTimer = setTimeout(function() {
+        hint.classList.remove('active');
+    }, 3000);
+
+    sendGestureMessage(msg);
+}
+
+function sendGestureMessage(text) {
+    var input = document.getElementById('chat-input');
+    input.value = text;
+    if (isStreaming) {
+        if (typeof layui !== 'undefined') layui.use(['layer'], function(l){
+            l.layer.msg('请等待当前回复完成', {time: 1500});
+        });
+        return;
+    }
+    sendMessage();
+}
+
+// 页面离开时释放摄像头资源
+window.addEventListener('beforeunload', function() {
+    if (gestureDetector) {
+        gestureDetector.destroy();
+        gestureDetector = null;
+    }
+});
 
 // 点击空白关闭 @ 菜单
 document.addEventListener('click', function(e) {

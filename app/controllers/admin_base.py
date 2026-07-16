@@ -9,6 +9,7 @@ from html import escape
 
 import tornado.web
 from app.controllers.base import BaseHandler
+from app.config.settings import settings
 from app.models.function import FunctionRepository
 from app.models.user import UserRepository
 from app.utils.security import write_audit_log
@@ -19,6 +20,11 @@ ADMIN_ROUTE_PERMISSION_ALIASES = {
     "/admin/api/model/list": "/admin/model",
     "/admin/api/interface/list": "/admin/interface",
     "/admin/api/employee/list": "/admin/employee",
+    "/admin/api/dashboard": "/admin/dashboard",
+    "/admin/api/sentiment": "/admin/sentiment",
+    "/admin/api/sentiment/scan": "/admin/sentiment",
+    "/admin/api/sentiment/detail": "/admin/sentiment",
+    "/admin/api/sentiment/resolve": "/admin/sentiment",
     "/admin/mcp/reload": "/admin/mcp/tool",
 }
 
@@ -35,9 +41,10 @@ class AdminBaseHandler(BaseHandler):
     """
 
     def get_template_namespace(self):
-        """Inject admin permission helpers into templates."""
+        """Inject admin permission helpers and settings into templates."""
         namespace = super().get_template_namespace()
         namespace["admin_can"] = self.has_admin_route_permission
+        namespace["settings"] = settings
         return namespace
 
     def prepare(self):

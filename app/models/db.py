@@ -440,6 +440,24 @@ def init_db():
         except Exception as e:
             logger.error(f"Database migration failed (digital_employees.mcp_tool_ids): {e}", exc_info=True)
 
+        # ── v0.11 系统配置表 (key-value) ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS system_config (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                key         TEXT UNIQUE NOT NULL,
+                value       TEXT DEFAULT '',
+                description TEXT DEFAULT '',
+                category    TEXT DEFAULT 'general',
+                updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_system_config_key ON system_config(key)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_system_config_category ON system_config(category)")
+
+        # ── v1.2.0 舆情大屏（敏感词 + 预警） ──
+        from app.models.sensitive_word import SensitiveWordRepository
+        SensitiveWordRepository.init_table()
+
         conn.commit()
         logger.info(f"Database initialized: {DB_PATH}")
 
@@ -521,6 +539,12 @@ def seed_default_data():
                 (15, "MCP 工具管理", "layui-icon-component", "/admin/mcp/tool", None, 11, 1),
                 # 接口管理 (v0.9 新增)
                 (16, "接口管理", "layui-icon-link", "/admin/interface", None, 12, 1),
+                # 常规设置 (v0.11 新增，归属系统设置父节点)
+                (20, "常规设置", "layui-icon-set-fill", "/admin/config", 3, 2, 1),
+                # 数智大屏 (v1.2.0 新增)
+                (21, "数智大屏", "layui-icon-screen-full", "/admin/dashboard", None, 3, 1),
+                # 舆情大屏 (v1.2.0 新增)
+                (22, "舆情大屏", "layui-icon-log", "/admin/sentiment", None, 14, 1),
             ]
             conn.executemany(
                 "INSERT INTO functions (id, name, icon, route_path, parent_id, sort_order, is_enabled) "
@@ -531,12 +555,15 @@ def seed_default_data():
 
         # 兼容旧数据库：补齐后续版本新增的功能节点并授权给系统管理员
         managed_func_ids = []
-        for name, icon, route_path, sort_order in (
-            ("MCP 工具管理", "layui-icon-component", "/admin/mcp/tool", 10),
-            ("接口管理", "layui-icon-link", "/admin/interface", 11),
-            ("采集日志", "layui-icon-list", "/admin/watch/log", 7),
-            ("会话管理", "layui-icon-dialogue", "/admin/conversation", 8),
-            ("模型 API 配置", "layui-icon-set", "/admin/model/config", 8),
+        for name, icon, route_path, parent_id, sort_order in (
+            ("MCP 工具管理", "layui-icon-component", "/admin/mcp/tool", None, 10),
+            ("接口管理", "layui-icon-link", "/admin/interface", None, 11),
+            ("采集日志", "layui-icon-list", "/admin/watch/log", None, 7),
+            ("会话管理", "layui-icon-dialogue", "/admin/conversation", None, 8),
+            ("模型 API 配置", "layui-icon-set", "/admin/model/config", None, 8),
+            ("常规设置", "layui-icon-set-fill", "/admin/config", 3, 2),
+            ("数智大屏", "layui-icon-screen-full", "/admin/dashboard", None, 3),
+            ("舆情大屏", "layui-icon-log", "/admin/sentiment", None, 14),
         ):
             func = conn.execute(
                 "SELECT id FROM functions WHERE route_path = ?", (route_path,)
@@ -545,7 +572,7 @@ def seed_default_data():
                 cur = conn.execute(
                     "INSERT INTO functions (name, icon, route_path, parent_id, sort_order, is_enabled) "
                     "VALUES (?, ?, ?, ?, ?, ?)",
-                    (name, icon, route_path, None, sort_order, 1),
+                    (name, icon, route_path, parent_id, sort_order, 1),
                 )
                 func_id = cur.lastrowid
                 print(f"[种子] {name}功能模块已补齐")
@@ -591,6 +618,25 @@ def seed_default_data():
                     (normal_role_id, func_id),
                 )
 
+        # ── 种子：系统配置默认值（v0.11 新增）──
+        existing_config = conn.execute("SELECT COUNT(*) as cnt FROM system_config").fetchone()
+        if existing_config["cnt"] == 0:
+            default_configs = [
+                ("system_name", "瞭望与问数系统", "系统名称，显示在页面标题和头部导航栏", "general"),
+                ("system_subtitle", "DataFinderAgentOS", "系统副标题/英文名称，显示在头部版本号旁", "general"),
+                ("system_logo", "", "系统 Logo 图片路径（相对于 static 目录），为空则显示文字 Logo", "general"),
+                ("icp_number", "", "ICP 备案号，显示在页面底部", "general"),
+                ("default_port", "10010", "默认服务端口（重启后生效，环境变量 PORT 优先级更高）", "general"),
+                ("ai_default_model", "", "AI 默认模型 ID（空=使用 is_default=1 的模型）", "ai"),
+                ("ai_default_temperature", "0.7", "AI 默认温度参数（0-2）", "ai"),
+                ("ai_default_max_tokens", "4096", "AI 默认最大输出 Token 数", "ai"),
+            ]
+            conn.executemany(
+                "INSERT INTO system_config (key, value, description, category) VALUES (?, ?, ?, ?)",
+                default_configs,
+            )
+            print("[种子] 默认系统配置已创建（8 项）")
+
         conn.commit()
 
     _seed_default_sources()
@@ -599,6 +645,10 @@ def seed_default_data():
     skills_created = _seed_default_skills()
     _seed_default_interfaces()
     employees_created = _seed_default_employees()
+
+    # ── v1.2.0 舆情大屏：默认敏感词 ──
+    from app.models.sensitive_word import SensitiveWordRepository
+    SensitiveWordRepository.seed_default()
     _synchronize_default_capabilities(skills_created, employees_created)
 
 
@@ -686,7 +736,32 @@ def _seed_default_models():
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (6, "Whisper-1", "openai", "https://api.openai.com/v1", "whisper-1", "audio", 1, 0),
             )
-            print("[种子] 默认AI模型已创建（6个模型，覆盖6种分类）")
+            # AIGC 媒体生成模型（Issue #21/#22 — 多模态生图/生视频）
+            conn.execute(
+                "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (7, "Wan2.6-T2I", "custom", "https://aigc-api.aitoolcore.com/api/v1",
+                 "wan2.6-t2i", "image", 1, 1),
+            )
+            conn.execute(
+                "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (8, "Qwen-Image-2.0", "custom", "https://aigc-api.aitoolcore.com/api/v1",
+                 "qwen-image-2.0", "image", 1, 0),
+            )
+            conn.execute(
+                "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (9, "Wan2.6-T2V", "custom", "https://aigc-api.aitoolcore.com/api/v1",
+                 "wan2.6-t2v", "video", 1, 1),
+            )
+            conn.execute(
+                "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (10, "Wan2.6-I2V", "custom", "https://aigc-api.aitoolcore.com/api/v1",
+                 "wan2.6-i2v", "video", 1, 0),
+            )
+            print("[种子] 默认AI模型已创建（10个模型，覆盖6种分类）")
 
 
 def _seed_default_interfaces():

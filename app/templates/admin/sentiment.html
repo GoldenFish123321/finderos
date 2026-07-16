@@ -1,0 +1,456 @@
+{% extends "base_layout.html" %}
+
+{% block title %}{{ title }}{% end %}
+
+{% block admin_content %}
+<style>
+body.dark-theme { background: #080a1a !important; }
+.sentiment-wrap {
+    padding: 16px 20px;
+    background:
+        radial-gradient(ellipse at 20% 50%, rgba(220,38,38,0.05) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 30%, rgba(250,204,21,0.04) 0%, transparent 50%);
+    min-height: calc(100vh - 60px);
+}
+
+/* 顶部栏 */
+.sent-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px;
+}
+.sent-header h1 {
+    font-size: 20px; font-weight: 700; margin: 0;
+    background: linear-gradient(90deg, #ef4444, #f97316);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.sent-header .header-actions { display: flex; gap: 10px; align-items: center; }
+.sent-header .header-actions span { font-size: 12px; color: rgba(255,255,255,0.4); }
+
+/* 按钮 */
+.btn-glass {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 6px 14px; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.8);
+    font-size: 12px; cursor: pointer;
+    text-decoration: none; transition: all 0.2s;
+}
+.btn-glass:hover {
+    background: rgba(255,255,255,0.08);
+    border-color: rgba(255,255,255,0.2);
+}
+.btn-glass.danger {
+    border-color: rgba(239,68,68,0.3);
+    color: #ef4444;
+}
+.btn-glass.danger:hover {
+    background: rgba(239,68,68,0.1);
+    border-color: #ef4444;
+}
+
+/* 网格 */
+.sent-grid-4 {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+    margin-bottom: 14px;
+}
+.sent-grid-2 {
+    display: grid; grid-template-columns: 2fr 1fr; gap: 12px;
+    margin-bottom: 14px;
+}
+.sent-grid-3 {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;
+    margin-bottom: 14px;
+}
+
+/* 统计卡片 */
+.sent-stat {
+    padding: 14px 16px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+}
+.sent-stat .label {
+    font-size: 11px; color: rgba(255,255,255,0.4);
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+.sent-stat .number {
+    font-size: 28px; font-weight: 800;
+    background: linear-gradient(135deg, #ef4444, #f97316);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.3;
+}
+.sent-stat .sub { font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 2px; }
+
+/* 面板 */
+.sent-panel {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px; padding: 12px 14px;
+}
+.sent-panel-title {
+    font-size: 13px; font-weight: 600;
+    color: rgba(255,255,255,0.7); margin-bottom: 10px;
+    display: flex; justify-content: space-between; align-items: center;
+}
+
+/* 预警滚动列表 */
+.alert-scroll {
+    max-height: 340px; overflow-y: auto;
+}
+.alert-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; margin-bottom: 4px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.02);
+    border-left: 3px solid transparent;
+    animation: alertFlash 0.5s ease;
+    font-size: 12px;
+}
+@keyframes alertFlash { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; } }
+.alert-item.severity-high { border-left-color: #ef4444; background: rgba(239,68,68,0.05); }
+.alert-item.severity-medium { border-left-color: #f97316; background: rgba(249,115,22,0.04); }
+.alert-item.severity-low { border-left-color: #eab308; background: rgba(234,179,8,0.03); }
+.alert-item .badge {
+    font-size: 10px; padding: 1px 6px; border-radius: 8px;
+    flex-shrink: 0;
+}
+.alert-item .badge.high { background: rgba(239,68,68,0.2); color: #ef4444; }
+.alert-item .badge.medium { background: rgba(249,115,22,0.2); color: #f97316; }
+.alert-item .badge.low { background: rgba(234,179,8,0.2); color: #eab308; }
+.alert-item .preview {
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: rgba(255,255,255,0.6);
+}
+.alert-item .time { font-size: 10px; color: rgba(255,255,255,0.25); flex-shrink: 0; }
+
+/* 图表容器 */
+.chart-box { height: 200px; }
+.chart-box-sm { height: 160px; }
+
+/* 敏感词标签 */
+.word-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.word-tag {
+    padding: 3px 10px; border-radius: 12px;
+    font-size: 11px;
+    background: rgba(239,68,68,0.08);
+    border: 1px solid rgba(239,68,68,0.15);
+    color: rgba(255,255,255,0.6);
+}
+.word-tag:hover {
+    background: rgba(239,68,68,0.15);
+    color: #ef4444;
+}
+
+/* 预警表格 */
+.alert-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.alert-table th {
+    text-align: left; padding: 8px 8px;
+    color: rgba(255,255,255,0.4);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    font-weight: 500;
+}
+.alert-table td {
+    padding: 8px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    color: rgba(255,255,255,0.65);
+    vertical-align: top;
+}
+.alert-table tr:hover td { background: rgba(255,255,255,0.02); }
+.alert-table .sev-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px;
+}
+</style>
+
+<div class="sentiment-wrap">
+    <!-- 顶部 -->
+    <div class="sent-header">
+        <h1>🛡️ 舆情大屏</h1>
+        <div class="header-actions">
+            <span id="update-time">更新中...</span>
+            <button class="btn-glass danger" onclick="triggerScan()">🔍 立即扫描</button>
+            <button class="btn-glass" onclick="refreshSentiment()">⟳ 刷新</button>
+            <a href="/admin" class="btn-glass">✕ 返回</a>
+        </div>
+    </div>
+
+    <!-- 统计 -->
+    <div class="sent-grid-4">
+        <div class="sent-stat">
+            <div class="label">⚠️ 预警总数</div>
+            <div class="number" id="stat-total">{{ stats['total'] }}</div>
+            <div class="sub">累计触发记录</div>
+        </div>
+        <div class="sent-stat">
+            <div class="label">🕐 待处理</div>
+            <div class="number" style="background:linear-gradient(135deg,#f97316,#eab308);-webkit-background-clip:text;background-clip:text;" id="stat-pending">{{ stats['pending'] }}</div>
+            <div class="sub">需人工审核</div>
+        </div>
+        <div class="sent-stat">
+            <div class="label">🔴 高危预警</div>
+            <div class="number" style="background:linear-gradient(135deg,#ef4444,#dc2626);-webkit-background-clip:text;background-clip:text;" id="stat-high">{{ stats['high_severity'] }}</div>
+            <div class="sub">严重级别 ≥ 3</div>
+        </div>
+        <div class="sent-stat">
+            <div class="label">📋 监控词</div>
+            <div class="number" style="background:linear-gradient(135deg,#a78bfa,#5ea3ff);-webkit-background-clip:text;background-clip:text;">{{ len(words) }}</div>
+            <div class="sub">启用的敏感词</div>
+        </div>
+    </div>
+
+    <!-- 滚动预警 + 趋势 -->
+    <div class="sent-grid-2">
+        <!-- 实时预警滚动 -->
+        <div class="sent-panel">
+            <div class="sent-panel-title">
+                📡 实时预警
+                <span class="word-tag" style="font-size:10px;" id="alert-count">{{ len(recent_alerts) }} 条</span>
+            </div>
+            <div class="alert-scroll" id="alert-scroll">
+                {% for a in recent_alerts %}
+                <div class="alert-item severity-{{ 'high' if a['severity'] >= 3 else 'medium' if a['severity'] == 2 else 'low' }}">
+                    <span class="badge {{ 'high' if a['severity'] >= 3 else 'medium' if a['severity'] == 2 else 'low' }}">
+                        {{ '高危' if a['severity'] >= 3 else '中危' if a['severity'] == 2 else '低危' }}
+                    </span>
+                    <span class="preview" title="{{ a.get('content_preview', '') }}">{{ a.get('content_preview', '')[:80] }}</span>
+                    <span class="time">{{ str(a.get('created_at', ''))[:16] if a.get('created_at') else '' }}</span>
+                </div>
+                {% end %}
+                {% if not recent_alerts %}
+                <div style="text-align:center;padding:40px 0;color:rgba(255,255,255,0.15);font-size:13px;">
+                    暂无预警，点击「立即扫描」检查
+                </div>
+                {% end %}
+            </div>
+        </div>
+        <!-- 趋势 -->
+        <div class="sent-panel">
+            <div class="sent-panel-title">📈 近7天预警趋势</div>
+            <div id="chart-trend" class="chart-box"></div>
+        </div>
+    </div>
+
+    <!-- 来源分布 + 严重级别 + 敏感词 -->
+    <div class="sent-grid-3">
+        <div class="sent-panel">
+            <div class="sent-panel-title">🎯 预警来源</div>
+            <div id="chart-source" class="chart-box-sm"></div>
+        </div>
+        <div class="sent-panel">
+            <div class="sent-panel-title">🔴 严重级别分布</div>
+            <div id="chart-severity" class="chart-box-sm"></div>
+        </div>
+        <div class="sent-panel">
+            <div class="sent-panel-title">📋 敏感词列表</div>
+            <div class="word-tags">
+                {% for w in words %}
+                <span class="word-tag">{{ w }}</span>
+                {% end %}
+                {% if not words %}
+                <span style="color:rgba(255,255,255,0.15);font-size:12px;">暂无配置</span>
+                {% end %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script>
+(function() {
+    var charts = {};
+    var chartObservers = {};
+
+    function disposeChart(id) {
+        if (charts[id]) { charts[id].dispose(); delete charts[id]; }
+        if (chartObservers[id]) { chartObservers[id].disconnect(); delete chartObservers[id]; }
+    }
+    function observeResize(dom, chart) {
+        var obs = new ResizeObserver(function(){ chart.resize(); });
+        obs.observe(dom);
+        chartObservers[dom.id] = obs;
+    }
+
+    function initCharts() {
+        Object.keys(charts).forEach(disposeChart);
+
+        document.getElementById('update-time').textContent = '🕐 ' + new Date().toLocaleString('zh-CN');
+
+        var statsData = {% raw json_encode(stats) %};
+        var trendData = statsData.trend || [];
+        var sourcesData = statsData.sources || [];
+
+        // 预警趋势
+        var trendDom = document.getElementById('chart-trend');
+        if (trendDom) {
+            var chart = echarts.init(trendDom, 'dark');
+            charts['trend'] = chart;
+            chart.setOption({
+                tooltip: { trigger: 'axis', textStyle: { fontSize: 11 } },
+                grid: { left: '2%', right: '2%', bottom: '2%', top: '5%', containLabel: true },
+                xAxis: {
+                    type: 'category',
+                    data: trendData.map(function(t){ return t.date; }),
+                    axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
+                    axisLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 10 },
+                },
+                yAxis: {
+                    type: 'value', minInterval: 1,
+                    splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
+                    axisLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 10 },
+                },
+                series: [
+                    {
+                        name: '全部', type: 'bar', barWidth: 12,
+                        data: trendData.map(function(t){ return t.total; }),
+                        itemStyle: { borderRadius: [3,3,0,0], color: '#f97316' },
+                    },
+                    {
+                        name: '高危', type: 'bar', barWidth: 12,
+                        data: trendData.map(function(t){ return t.high; }),
+                        itemStyle: { borderRadius: [3,3,0,0], color: '#ef4444' },
+                    }
+                ],
+                legend: {
+                    data: ['全部', '高危'],
+                    textStyle: { color: 'rgba(255,255,255,0.5)', fontSize: 10 },
+                    itemWidth: 10, itemHeight: 10,
+                },
+            });
+            observeResize(trendDom, chart);
+        }
+
+        // 来源分布
+        var sourceDom = document.getElementById('chart-source');
+        if (sourceDom) {
+            var chart2 = echarts.init(sourceDom, 'dark');
+            charts['source'] = chart2;
+            var data2 = sourcesData.length ? sourcesData : [{name: '暂无', value: 1}];
+            chart2.setOption({
+                tooltip: { trigger: 'item', formatter: '{b}: {c}', textStyle: { fontSize: 11 } },
+                series: [{
+                    type: 'pie', radius: ['45%', '70%'],
+                    label: { show: false },
+                    data: data2.map(function(d, i) {
+                        var colors = {warehouse: '#5ea3ff', conversation: '#a78bfa'};
+                        return { ...d, itemStyle: { color: colors[d.name] || '#f97316' } };
+                    }),
+                }]
+            });
+            observeResize(sourceDom, chart2);
+        }
+
+        // 严重级别分布
+        var sevDom = document.getElementById('chart-severity');
+        if (sevDom) {
+            var chart3 = echarts.init(sevDom, 'dark');
+            charts['severity'] = chart3;
+            var highCount = statsData.high_severity || 0;
+            var medCount = trendData.reduce(function(s, t){ return s + (t.total - t.high); }, 0) - highCount;
+            var lowCount = statsData.total - highCount - medCount;
+            chart3.setOption({
+                tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)', textStyle: { fontSize: 11 } },
+                series: [{
+                    type: 'pie', radius: ['50%', '75%'],
+                    label: { show: true, color: 'rgba(255,255,255,0.5)', fontSize: 10,
+                             formatter: function(p) { return p.percent.toFixed(0) + '%'; } },
+                    data: [
+                        { name: '高危', value: Math.max(highCount, 0), itemStyle: { color: '#ef4444' } },
+                        { name: '中危', value: Math.max(medCount, 0), itemStyle: { color: '#f97316' } },
+                        { name: '低危', value: Math.max(lowCount, 0), itemStyle: { color: '#eab308' } },
+                    ],
+                }]
+            });
+            observeResize(sevDom, chart3);
+        }
+    }
+
+    // 刷新
+    window.refreshSentiment = function() {
+        document.getElementById('update-time').textContent = '⟳ 刷新中...';
+        Object.keys(charts).forEach(disposeChart);
+        fetch('/admin/api/sentiment?_xsrf={{ xsrf_token }}')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.code === 0) {
+                    var data = d.data;
+                    document.getElementById('update-time').textContent = '🕐 ' + new Date().toLocaleString('zh-CN');
+                    document.getElementById('stat-total').textContent = data.stats.total;
+                    document.getElementById('stat-pending').textContent = data.stats.pending;
+                    document.getElementById('stat-high').textContent = data.stats.high_severity;
+
+                    // 更新预警列表
+                    var scroll = document.getElementById('alert-scroll');
+                    scroll.innerHTML = data.recent_alerts.slice(0, 20).map(function(a) {
+                        var sev = a.severity >= 3 ? 'high' : a.severity === 2 ? 'medium' : 'low';
+                        var label = a.severity >= 3 ? '高危' : a.severity === 2 ? '中危' : '低危';
+                        var preview = (a.content_preview || '').substring(0, 80);
+                        var time = a.created_at ? a.created_at.substring(0, 16) : '';
+                        return '<div class="alert-item severity-' + sev + '">' +
+                            '<span class="badge ' + sev + '">' + label + '</span>' +
+                            '<span class="preview" title="' + escapeHtml(preview) + '">' + escapeHtml(preview) + '</span>' +
+                            '<span class="time">' + time + '</span></div>';
+                    }).join('');
+                    if (!data.recent_alerts.length) {
+                        scroll.innerHTML = '<div style="text-align:center;padding:40px 0;color:rgba(255,255,255,0.15);font-size:13px;">暂无预警</div>';
+                    }
+
+                    // 重建图表
+                    var fakeStats = data.stats;
+                    var fakeEvent = { trend: fakeStats.trend || [], sources: fakeStats.sources || [],
+                        total: fakeStats.total, high_severity: fakeStats.high_severity };
+                    {% raw json_encode(stats) %}; // 重置变量
+                    initCharts();
+                }
+            });
+    };
+
+    // 扫描
+    window.triggerScan = function() {
+        var btn = event && event.target ? event.target : document.querySelector('.btn-glass.danger');
+        btn.textContent = '⏳ 扫描中...';
+        btn.disabled = true;
+        var formData = new URLSearchParams();
+        formData.append('_xsrf', '{{ xsrf_token }}');
+        fetch('/admin/api/sentiment/scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            btn.textContent = '🔍 立即扫描';
+            btn.disabled = false;
+            if (d.code === 0) {
+                if (typeof layui !== 'undefined') layui.use(['layer'], function(l){
+                    l.layer.msg('扫描完成: ' + (d.data ? d.data.total : 0) + ' 条新预警', {time: 2000});
+                });
+                refreshSentiment();
+            }
+        })
+        .catch(function() {
+            btn.textContent = '🔍 立即扫描';
+            btn.disabled = false;
+        });
+    };
+
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    // 初始化
+    var retries = 0;
+    var checkInterval = setInterval(function() {
+        if (typeof echarts !== 'undefined') {
+            clearInterval(checkInterval);
+            initCharts();
+        } else if (++retries > 30) {
+            clearInterval(checkInterval);
+        }
+    }, 200);
+})();
+</script>
+{% end %}
