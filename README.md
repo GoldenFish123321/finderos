@@ -6,6 +6,7 @@
 > **v0.10 完成**：MCP 重构剩余阶段全部完成 — 18 个工具种子数据迁移、三色徽章系统（蓝/绿/橙黄）、crawl4ai 废弃、Skill 绑定 MCP 工具、旧 TAG → Skill ID 迁移、测试验证通过。
 > **v0.9 新增**：Edge TTS 语音合成播报（🔊 AI 回复一键朗读）、管理侧接口管理模块（接口模板 CRUD/测试、安全 HTTP 调用、API 型数字员工联动）。
 > **v0.4 新增**：MCP 协议工具调用、LLM Function Calling 智能意图识别、/tools 指令。
+> **v0.5 新增**：多模态模型引擎 — AI 文生图（wan2.6-t2i）、图生图（qwen-image-2.0）、文生视频（wan2.6-t2v）、图生视频（wan2.6-i2v），SSE 卡片实时渲染。
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Tornado](https://img.shields.io/badge/Tornado-6.4+-00ADD8?style=flat)](https://www.tornadoweb.org/)
@@ -67,10 +68,11 @@
 🔗 接口管理 — API 模板复用与测试       — API 型数字员工配置一键联动填充
 📊 报表呈现 — ECharts 交互图表         — 柱状图/折线图/饼图/散点图 + 数据表格
 🔊 语音播报 — Edge TTS 语音合成        — AI 回复一键朗读，6 种中文语音可选
-�🔐 用户认证与 RBAC 权限管理          — 安全的密码存储、登录限速、审计日志
+🖼️ 媒体生成 — AI 图像与视频生成         — 文生图/图生图/文生视频/图生视频
+🔐 用户认证与 RBAC 权限管理          — 安全的密码存储、登录限速、审计日志
 🔭 瞭望采集 — 可配置的 Web 采集引擎    — 百度/搜狗新闻等多源采集 + SSRF 防护
 🗄️ 数据仓库 — 采集结果独立存储与检索   — 独立 data_warehouse 表，支持去重
-🤖 模型引擎 — 多 Provider AI 统一管理  — OpenAI/DeepSeek/智谱/文心 + MCP 工具调用
+🤖 模型引擎 — 多 Provider AI 统一管理  — 6 分类 + MCP 工具调用 + 文生图/视频
 📊 管理后台 — Layui 精美 UI，开箱即用  — 仪表盘统计、树形菜单、批量操作
 🛡️ 安全防护 — OWASP Top 10 全覆盖     — CSP/XSRF/SSRF/SQL注入/XSS/限速/审计
 ```
