@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% end %}
+
+{% block content %}
+<style>
+    body {
+        background: linear-gradient(135deg, #0a0c15 0%, #141830 30%, #1a1040 60%, #0d1020 100%);
+        min-height: 100vh;
+        margin: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 24px;
+        box-sizing: border-box;
+    }
+    .account-card {
+        width: min(560px, 100%);
+        background: rgba(22,24,40,0.92);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+        padding: 32px;
+        color: var(--text-primary);
+    }
+    .account-card h2 { margin: 0 0 8px; font-size: 24px; }
+    .account-card .subtitle { color: var(--text-muted); font-size: 13px; margin-bottom: 20px; }
+    .alert { padding: 10px 12px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; }
+    .alert.success { background: rgba(95,184,120,0.12); border: 1px solid rgba(95,184,120,0.25); color: var(--accent-green); }
+    .alert.error { background: rgba(255,87,34,0.1); border: 1px solid rgba(255,87,34,0.3); color: var(--accent-red); }
+    .section { margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.08); }
+    .section h3 { margin: 0 0 12px; font-size: 16px; }
+    .input-group { margin-bottom: 14px; }
+    .input-group label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+    .input-group input { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-subtle); background: rgba(255,255,255,0.06); color: var(--text-primary); }
+    .action-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    .btn { padding: 10px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; }
+    .btn-primary { background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple)); color: white; }
+    .btn-danger { background: rgba(255,87,34,0.16); color: #ff8a65; border: 1px solid rgba(255,87,34,0.22); }
+    .link-row { margin-top: 16px; font-size: 13px; color: var(--text-muted); }
+    .link-row a { color: var(--accent-blue); text-decoration: none; }
+</style>
+
+<div class="account-card">
+    <h2>账户设置</h2>
+    <p class="subtitle">当前登录用户：{{ username }}</p>
+
+    {% if message %}
+    <div class="alert success">✅ {{ message }}</div>
+    {% end %}
+    {% if error %}
+    <div class="alert error">⚠ {{ error }}</div>
+    {% end %}
+
+    <div class="section">
+        <h3>修改密码</h3>
+        <form method="post">
+            {% module xsrf_form_html() %}
+            <input type="hidden" name="action" value="change_password">
+            <div class="input-group">
+                <label>当前密码</label>
+                <input type="password" name="old_password" required>
+            </div>
+            <div class="input-group">
+                <label>新密码</label>
+                <input type="password" name="new_password" required>
+            </div>
+            <div class="input-group">
+                <label>确认新密码</label>
+                <input type="password" name="confirm_password" required>
+            </div>
+            <div class="action-row">
+                <button class="btn btn-primary" type="submit">修改密码</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="section">
+        <h3>人脸识别登录</h3>
+        <p class="subtitle">注册人脸后可使用摄像头快速登录，无需输入密码。</p>
+
+        <!-- 摄像头预览区 -->
+        <div style="text-align:center;margin-bottom:12px;">
+            <video id="face-video" autoplay playsinline
+                   style="width:100%;max-width:320px;border-radius:8px;border:1px solid var(--border-subtle);background:#000;"></video>
+            <canvas id="face-canvas" style="display:none;"></canvas>            <!-- 截图预览 -->
+            <div id="face-preview-area" style="display:none;margin-top:8px;">
+                <img id="face-preview-img" style="max-width:200px;max-height:200px;border-radius:8px;border:2px solid var(--accent-blue);">
+                <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">已拍照，正在注册...</p>
+            </div>            <div style="margin-top:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+                <button type="button" class="btn btn-primary" id="face-open-cam" onclick="openCamera()">📷 打开摄像头</button>
+                <button type="button" class="btn btn-primary" id="face-capture-btn"
+                        style="display:none;" onclick="captureFace()">📸 拍照注册</button>
+            </div>
+            <div id="face-capture-status" style="margin-top:8px;font-size:13px;color:var(--text-muted);"></div>
+        </div>
+
+        <form method="post" style="margin-top: 8px;">
+            {% module xsrf_form_html() %}
+            <input type="hidden" name="action" value="face_toggle">
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;">
+                <input type="checkbox" name="face_enabled" value="1"
+                       onchange="this.form.submit()"
+                       {{ 'checked' if face_enabled else '' }}
+                       {{ 'disabled' if not face_registered else '' }}>
+                启用人脸识别登录
+            </label>
+            {% if not face_registered %}
+            <p style="font-size:12px;color:var(--text-muted);margin-top:6px;">请先通过摄像头拍照注册人脸</p>
+            {% end %}
+        </form>
+    </div>
+
+<script>
+var faceStream = null;
+
+function openCamera() {
+    var video = document.getElementById('face-video');
+    var status = document.getElementById('face-capture-status');
+    if (faceStream) {
+        faceStream.getTracks().forEach(function(t) { t.stop(); });
+        faceStream = null;
+    }
+    // 隐藏之前的预览
+    document.getElementById('face-preview-area').style.display = 'none';
+    video.style.display = '';
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 } })
+        .then(function(stream) {
+            faceStream = stream;
+            video.srcObject = stream;
+            video.play();
+            document.getElementById('face-open-cam').textContent = '🔄 切换摄像头';
+            document.getElementById('face-capture-btn').style.display = '';
+            status.textContent = '✅ 摄像头已开启，请正对镜头后点击「拍照注册」';
+        })
+        .catch(function(err) {
+            status.textContent = '❌ 无法访问摄像头：' + err.message;
+        });
+}
+
+function captureFace() {
+    var video = document.getElementById('face-video');
+    var canvas = document.getElementById('face-canvas');
+    var status = document.getElementById('face-capture-status');
+    var btn = document.getElementById('face-capture-btn');
+    var previewArea = document.getElementById('face-preview-area');
+    var previewImg = document.getElementById('face-preview-img');
+
+    if (!faceStream) {
+        status.textContent = '❌ 请先打开摄像头';
+        return;
+    }
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+
+    // 显示预览
+    previewImg.src = canvas.toDataURL('image/jpeg');
+    previewArea.style.display = '';
+
+    btn.disabled = true;
+    btn.textContent = '⏳ 注册中...';
+    status.textContent = '⏳ 正在注册人脸，请稍候...';
+
+    canvas.toBlob(function(blob) {
+        var formData = new FormData();
+        formData.append('action', 'face_register');
+        formData.append('face_image', blob, 'face.jpg');
+
+        fetch('/account', {
+            method: 'POST',
+            headers: { 'X-Xsrftoken': getCookie('_xsrf') },
+            body: formData
+        })
+        .then(function(r) {
+            // 跟随重定向到 /account?msg=... 并加载该页面
+            window.location.href = r.url;
+        })
+        .catch(function(err) {
+            status.textContent = '❌ 注册失败，请重试';
+            btn.disabled = false;
+            btn.textContent = '📸 拍照注册';
+        });
+    }, 'image/jpeg');
+}
+
+function getCookie(name) {
+    var r = document.cookie.match('\\b' + name + '=([^;]*)\\b');
+    return r ? r[1] : '';
+}
+
+// 离开页面时关闭摄像头
+window.addEventListener('beforeunload', function() {
+    if (faceStream) {
+        faceStream.getTracks().forEach(function(t) { t.stop(); });
+    }
+});
+</script>
+
+    <div class="section">
+        <h3>删除账号</h3>
+        <p class="subtitle">删除账号后，当前账户将永久移除，且无法恢复。</p>
+        <form method="post">
+            {% module xsrf_form_html() %}
+            <input type="hidden" name="action" value="delete_account">
+            <div class="input-group">
+                <label>请输入当前密码确认删除</label>
+                <input type="password" name="delete_password" required>
+            </div>
+            <div class="action-row">
+                <button class="btn btn-danger" type="submit" onclick="return confirm('确定要删除当前账号吗？此操作不可恢复。');">删除账号</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="link-row">
+        <a href="/chat">返回对话页</a> · <a href="/logout">退出登录</a>
+    </div>
+</div>
+{% end %}
