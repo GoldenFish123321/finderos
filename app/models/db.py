@@ -2116,6 +2116,79 @@ def _seed_script_tools():
         conn.commit()
         print(f"[种子] script 型 MCP 工具已更新（weather_query + get_random_music + collect_web_data + deep_collect_url + batch_deep_collect + collect_with_crawl4ai + generate_image + generate_video + invoke_digital_employee → script 型）")
 
+        # ── 第3批：13个纯DB操作工具迁移为 script 型 ──
+        # 动态查询所有需要的接口ID
+        _batch3_lh_list = [
+            'conversation/messages', 'conversation/list', 'collect/sources',
+            'employee/list', 'model/default', 'model/list',
+            'system/stats', 'skill/load',
+            'warehouse/recent', 'warehouse/by_id', 'warehouse/stats',
+            'warehouse/search', 'warehouse/fulltext',
+        ]
+        _batch3_ifaces = {}
+        for _lh in _batch3_lh_list:
+            _row = conn.execute(
+                "SELECT id FROM api_interfaces WHERE local_handler=? AND interface_type='local'",
+                (_lh,)
+            ).fetchone()
+            if _row:
+                _batch3_ifaces[_lh] = _row['id']
+
+        # 统一透传 transform_script
+        _batch3_transform = (
+            "def transform(data_sources):\n"
+            "    try:\n"
+            "        if not data_sources or not data_sources[0].get('success'):\n"
+            '            return json.dumps({"error": "数据源调用失败"}, ensure_ascii=False)\n'
+            "        return json.dumps(data_sources[0].get('data', {}), ensure_ascii=False)\n"
+            "    except Exception as e:\n"
+            '        return json.dumps({"error": str(e)}, ensure_ascii=False)'
+        )
+
+        _batch3_tools = [
+            # (tool_name, local_handler, param_mapping)
+            ('get_conversation_messages', 'conversation/messages',
+             {"conversation_id": "conversation_id", "limit": "limit", "username": "username"}),
+            ('list_conversations', 'conversation/list',
+             {"username": "username", "limit": "limit"}),
+            ('list_watch_sources', 'collect/sources', {}),
+            ('list_digital_employees', 'employee/list', {}),
+            ('get_default_model', 'model/default', {}),
+            ('list_ai_models', 'model/list', {}),
+            ('get_system_stats', 'system/stats', {}),
+            ('load_skill', 'skill/load', {"skill_name": "skill_name"}),
+            ('get_recent_warehouse_data', 'warehouse/recent', {"limit": "limit"}),
+            ('get_warehouse_by_id', 'warehouse/by_id', {"dw_id": "dw_id"}),
+            ('get_warehouse_stats', 'warehouse/stats', {}),
+            ('search_warehouse', 'warehouse/search', {"keyword": "keyword", "limit": "limit"}),
+            ('search_warehouse_fulltext', 'warehouse/fulltext', {"query": "query", "limit": "limit"}),
+        ]
+
+        for _name, _lh, _mapping in _batch3_tools:
+            _iface_id = _batch3_ifaces.get(_lh)
+            if not _iface_id:
+                print(f"[种子] 警告: 接口 {_lh} 不存在，跳过 {_name}")
+                continue
+            _ds = json.dumps([{
+                "interface_id": _iface_id,
+                "param_mapping": _mapping,
+            }], ensure_ascii=False)
+            conn.execute(
+                "UPDATE mcp_tools SET "
+                "tool_type='script', "
+                "handler_module='', "
+                "data_sources=?, "
+                "transform_script=?, "
+                "script_enabled=1, "
+                "api_url='', api_method='', api_headers='{}', api_params_template='', "
+                "is_enabled=1 "
+                "WHERE name=?",
+                (_ds, _batch3_transform, _name),
+            )
+
+        conn.commit()
+        print(f"[种子] 第3批 script 型 MCP 工具已更新（13个纯DB工具 → script 型）")
+
 
 def _synchronize_default_capabilities(skills_created: bool, employees_created: bool):
     """Resolve default Skill and employee tool grants by stable names."""
