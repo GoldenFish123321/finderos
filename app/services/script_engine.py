@@ -23,6 +23,7 @@ _SAFE_BUILTINS = {
     "min": min, "max": max, "sum": sum, "sorted": sorted,
     "abs": abs, "round": round,
     "isinstance": isinstance,
+    "Exception": Exception,
     "print": lambda *a, **kw: None,  # print 静默
     "json": __import__("json"),  # 允许 json
     "re": __import__("re"),      # 允许 re

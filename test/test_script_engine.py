@@ -84,6 +84,18 @@ class TestScriptEngine(unittest.TestCase):
         result = execute_transform_script(script, [])
         self.assertTrue(result.startswith("["))
 
+    def test_script_can_catch_standard_exception(self):
+        """种子转换脚本应能使用 except Exception 做受控回退。"""
+        from app.services.script_engine import execute_transform_script
+        script = (
+            "def transform(data_sources):\n"
+            "    try:\n"
+            "        return data_sources[0]['missing']\n"
+            "    except Exception:\n"
+            "        return 'fallback'\n"
+        )
+        self.assertEqual(execute_transform_script(script, [{}]), "fallback")
+
     def test_syntax_error_rejected(self):
         """语法错误的脚本应被拒绝。"""
         from app.services.script_engine import validate_script

@@ -443,8 +443,9 @@ def test_weather_mcp_tool_exists():
     tool = MCPToolRepository.get_by_name("weather_query")
     assert tool is not None, "weather_query MCP 工具应存在"
     assert tool["is_enabled"] == 1
-    assert tool["tool_type"] == "api"
-    assert "wttr.in" in tool.get("api_url", "")
+    assert tool["tool_type"] == "script"
+    assert tool.get("script_enabled") == 1
+    assert tool.get("data_sources")
 
 
 def test_weather_employee_bound_to_mcp():
@@ -504,7 +505,7 @@ def test_weather_mcp_tool_http_call():
     assert mcp_tool is not None
 
     async def _call():
-        return await mcp_tool.call({"message": "Beijing"})
+        return await mcp_tool.call({"city": "Beijing"})
 
     try:
         result = asyncio.run(_call())
@@ -514,5 +515,6 @@ def test_weather_mcp_tool_http_call():
             pytest.skip(f"网络不可用，跳过 MCP HTTP 调用测试: {e}")
         raise
 
-    assert isinstance(result, dict)
-    assert "current_condition" in result or "weather" in result
+    assert isinstance(result, str)
+    assert "[转换错误]" not in result
+    assert "NameError" not in result
