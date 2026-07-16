@@ -121,6 +121,7 @@ def _register_external_proxies():
 
         async def _make_proxy_handler(_iface=iface, **params) -> dict:
             import json as _json
+
             url = _render_url_template(_iface["api_url"], params)
 
             headers = _json.loads(_iface.get("api_headers", "{}") or "{}")
