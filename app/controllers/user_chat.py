@@ -649,30 +649,38 @@ class UserChatStreamHandler(BaseHandler):
         temperature = model.get("temperature", 0.7)
         max_tokens = model.get("max_tokens", 4096)
 
+        # ── 解析对话 ID ──
+        conv_id = None
+        if conversation_id:
+            try:
+                conv_id = int(conversation_id)
+            except (ValueError, TypeError):
+                pass
+
         # ── 模型分类快捷路由：图像/视频模型跳过 LLM 直接生成 ──
         model_category = (model.get("category") or "text").strip().lower()
         if model_category in ("image", "video"):
             if not api_key:
                 self.write({"code": 1, "msg": f"{model_category} 模型未配置 API Key"})
                 return
+            # 设置 SSE 响应头（必须在 _handle_media_direct 之前）
+            self.set_header("Content-Type", "text/event-stream")
+            self.set_header("Cache-Control", "no-cache")
+            self.set_header("Connection", "keep-alive")
+            self.set_header("X-Accel-Buffering", "no")
             await self._handle_media_direct(model, model_category, message, conv_id)
             return
 
         # ── 多轮对话历史 ──
         history_messages = []
-        conv_id = None
-        if conversation_id:
-            try:
-                conv_id = int(conversation_id)
-                conv = ConversationRepository.get_by_id(conv_id)
-                if conv and conv.get("username", "") == self.current_user:
-                    history_messages = ConversationRepository.get_recent_messages(
-                        conv_id, limit=10
-                    )
-                else:
-                    conv_id = None
-            except (ValueError, TypeError):
-                pass
+        if conv_id:
+            conv = ConversationRepository.get_by_id(conv_id)
+            if not conv or conv.get("username", "") != self.current_user:
+                conv_id = None
+            else:
+                history_messages = ConversationRepository.get_recent_messages(
+                    conv_id, limit=10
+                )
 
         # ── 设置 MCP 上下文 ──
         set_mcp_context(username=self.current_user)
