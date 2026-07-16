@@ -465,9 +465,21 @@ def _build_employee_card(emp: dict, api_data: dict, user_message: str = "") -> d
     if response_template:
         return _build_card_from_template(response_template, api_data, emp_name, user_message)
 
-    # 天气类员工：识别天气数据
-    if ("天气" in emp_name or "weather" in emp_name.lower() or
-            "temp" in str(api_data).lower() or "weather" in str(api_data).lower()):
+    # 天气类员工：仅依据员工身份或明确的数据结构识别，避免 template 等字段误判。
+    emp_name_clean = emp_name.strip()
+    is_weather_name = emp_name_clean in ("天气助手", "Weather Assistant")
+    is_weather_api = (
+        emp_type == "api"
+        and ("天气" in emp_name_clean or "weather" in emp_name_clean.lower())
+    )
+    is_weather_struct = isinstance(api_data, dict) and (
+        "current_condition" in api_data
+        or "current" in api_data
+        or "temperature" in api_data
+        or "temp" in api_data
+        or isinstance(api_data.get("weather"), (dict, list))
+    )
+    if is_weather_name or is_weather_api or is_weather_struct:
         return _build_weather_card(api_data, emp_name, user_message)
 
     # 音乐类员工：识别音乐数据（支持 Meting API 列表格式和 dict 格式）

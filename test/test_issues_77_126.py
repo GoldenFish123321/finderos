@@ -8,7 +8,7 @@ import pytest
 
 from app.config.settings import Settings
 from app.controllers.admin_config import validate_config_updates
-from app.controllers.user_chat import _build_weather_card
+from app.controllers.user_chat import _build_employee_card, _build_weather_card
 from app.models import db as db_module
 from app.models.system_config import SystemConfigRepository
 from app.services.media_generator import ImageGenHandler, _VIDEO_CACHE_DIR
@@ -104,6 +104,15 @@ def test_sentiment_scanner_can_restart_after_stop():
     scanner.stop()
 
 
+def test_collection_scheduler_can_restart_after_stop():
+    from app.services.scheduler import CollectionScheduler
+    scheduler = CollectionScheduler(None)
+    scheduler.start()
+    scheduler.stop()
+    scheduler.start()
+    scheduler.stop()
+
+
 def test_media_generation_uses_safe_http_and_generic_errors():
     response = SimpleNamespace(status=401, reason="Unauthorized", body=b'{"error":{"message":"provider secret detail"}}', headers={})
     with patch("app.services.media_generator.validate_url_safe", return_value=(True, "", "93.184.216.34")), \
@@ -122,6 +131,14 @@ def test_weather_card_preserves_chinese_city_and_conditions():
     assert card["type"] == "weather"
     assert card["data"]["city"] == "成都"
     assert card["data"]["weather"] == "晴"
+
+
+def test_non_weather_json_is_not_misclassified():
+    card = _build_employee_card(
+        {"name": "普通接口", "employee_type": "api", "response_render_template": ""},
+        {"template": "hello"},
+    )
+    assert card is None
 
 
 def test_password_policy_and_migration_identifier_validation():

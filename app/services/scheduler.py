@@ -96,12 +96,16 @@ class CollectionScheduler:
         self._last_run: dict[int, float] = {}  # source_id → 上次执行时间戳
         self._running = False
         # 专用线程池，避免阻塞 IOLoop
-        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="scheduler")
+        self._executor = None
 
     def start(self):
         """启动调度器。"""
         if self._running:
             return
+        if self._executor is None:
+            self._executor = concurrent.futures.ThreadPoolExecutor(
+                max_workers=2, thread_name_prefix="scheduler"
+            )
         self._running = True
         self._callback = PeriodicCallback(self._tick, self._check_interval_ms)
         self._callback.start()
@@ -113,7 +117,9 @@ class CollectionScheduler:
         if self._callback:
             self._callback.stop()
             self._callback = None
-        self._executor.shutdown(wait=True, timeout=30)
+        if self._executor:
+            self._executor.shutdown(wait=False)
+            self._executor = None
         logger.info("定时采集调度器已停止")
 
     def _tick(self):
