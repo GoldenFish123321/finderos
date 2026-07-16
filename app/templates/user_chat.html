@@ -1102,6 +1102,27 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
     })
     .then(response => {
         if (!response.ok) throw new Error('Network error');
+
+        // 处理 JSON 错误响应（非 SSE）
+        const contentType = response.headers.get('Content-Type') || '';
+        if (contentType.includes('application/json') || contentType.includes('text/html')) {
+            return response.text().then(text => {
+                try {
+                    const err = JSON.parse(text);
+                    aiContent.innerHTML = renderMarkdownSafe('❌ **错误**: ' + (err.msg || err.message || '未知错误'));
+                } catch(e) {
+                    aiContent.innerHTML = renderMarkdownSafe('❌ **错误**: 服务器返回了非预期的响应');
+                }
+                isStreaming = false;
+                document.getElementById('btn-send').disabled = false;
+                document.getElementById('chat-input').disabled = false;
+                document.getElementById('chat-input').focus();
+                var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                aiMeta.innerHTML = '⏱ ' + elapsed + 's · 🔤 0 tokens';
+                return;
+            });
+        }
+
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';

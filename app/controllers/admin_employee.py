@@ -365,18 +365,42 @@ class EmployeeInvokeHandler(AdminBaseHandler):
             return
         message = self.get_body_argument("message", "").strip()
 
-        if not message:
-            self.write({"code": 1, "msg": "消息不能为空"})
+        # 先加载员工，根据类型判断是否允许空消息
+        emp = DigitalEmployeeRepository.get_by_id(emp_id)
+        if not emp or emp["is_enabled"] == 0:
+            self.write({"code": 1, "msg": "员工不可用"})
             return
+
+        if not message:
+            # API 型员工：检查绑定的 MCP 工具是否需要用户输入
+            if emp.get("employee_type") == "api" and emp.get("mcp_tool_id"):
+                tool_row = MCPToolRepository.get_by_id(emp["mcp_tool_id"])
+                if tool_row:
+                    try:
+                        input_schema = json.loads(tool_row.get("input_schema", "{}"))
+                        required = input_schema.get("required", [])
+                    except (json.JSONDecodeError, TypeError):
+                        required = []
+                    if not required:
+                        pass  # 工具无需必填参数（如 get_random_music），允许空消息
+                    else:
+                        props = input_schema.get("properties", {})
+                        friendly = []
+                        for field in required:
+                            info = props.get(field, {})
+                            friendly.append(info.get("description", field))
+                        self.write({"code": 1, "msg": f"请输入{'/'.join(friendly)}"})
+                        return
+                else:
+                    self.write({"code": 1, "msg": "消息不能为空"})
+                    return
+            else:
+                self.write({"code": 1, "msg": "消息不能为空"})
+                return
 
         # 消息长度限制（防止滥用）
         if len(message) > 10000:
             self.write({"code": 1, "msg": "消息过长（最多10000字符）"})
-            return
-
-        emp = DigitalEmployeeRepository.get_by_id(emp_id)
-        if not emp or emp["is_enabled"] == 0:
-            self.write({"code": 1, "msg": "员工不可用"})
             return
 
         if emp["employee_type"] == "api":

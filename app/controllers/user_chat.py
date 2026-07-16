@@ -1690,9 +1690,46 @@ class UserEmployeeInvokeHandler(BaseHandler):
         message = self.get_body_argument("message", "").strip()
         conversation_id = self.get_body_argument("conversation_id", None)
 
-        if not message:
-            self.write({"code": 1, "msg": "消息不能为空"})
+        loop = asyncio.get_running_loop()
+
+        # 先加载员工，根据类型判断是否允许空消息
+        emp = await loop.run_in_executor(
+            _user_chat_executor, lambda: DigitalEmployeeRepository.get_by_id(emp_id)
+        )
+        if not emp or emp.get("is_enabled") == 0:
+            self.write({"code": 1, "msg": "员工不可用"})
             return
+
+        if not message:
+            # API 型员工：检查绑定的 MCP 工具是否需要用户输入
+            if emp.get("employee_type") == "api" and emp.get("mcp_tool_id"):
+                from app.models.mcp_tool import MCPToolRepository
+                tool_row = MCPToolRepository.get_by_id(emp["mcp_tool_id"])
+                if tool_row:
+                    try:
+                        input_schema = json.loads(tool_row.get("input_schema", "{}"))
+                        required = input_schema.get("required", [])
+                    except (json.JSONDecodeError, TypeError):
+                        required = []
+                    if not required:
+                        # 工具无需必填参数（如 get_random_music），允许空消息
+                        pass
+                    else:
+                        # 使用 input_schema properties 中的 description 作为友好提示
+                        props = input_schema.get("properties", {})
+                        friendly = []
+                        for field in required:
+                            info = props.get(field, {})
+                            friendly.append(info.get("description", field))
+                        self.write({"code": 1, "msg": f"请输入{'/'.join(friendly)}"})
+                        return
+                else:
+                    self.write({"code": 1, "msg": "消息不能为空"})
+                    return
+            else:
+                self.write({"code": 1, "msg": "消息不能为空"})
+                return
+
         if len(message) > 10000:
             self.write({"code": 1, "msg": "消息过长（最多10000字符）"})
             return
@@ -1706,7 +1743,6 @@ class UserEmployeeInvokeHandler(BaseHandler):
             return
         message = sanitize_user_input(message)
 
-        loop = asyncio.get_running_loop()
         from app.models.sensitive_word import SensitiveWordRepository
         if await loop.run_in_executor(
             _user_chat_executor,
@@ -1715,12 +1751,6 @@ class UserEmployeeInvokeHandler(BaseHandler):
             self.set_header("Content-Type", "text/event-stream")
             await _sse_stream_text(self, "系统检测到您的提问涉及敏感内容，已记录并通知管理员审核。")
             await _sse_done(self)
-            return
-        emp = await loop.run_in_executor(
-            _user_chat_executor, lambda: DigitalEmployeeRepository.get_by_id(emp_id)
-        )
-        if not emp or emp.get("is_enabled") == 0:
-            self.write({"code": 1, "msg": "员工不可用"})
             return
 
         # ── 解析对话 ID ──

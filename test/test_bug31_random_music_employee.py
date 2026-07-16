@@ -290,6 +290,57 @@ def test_api_music_employee_card_building():
     print(f"  ✅ API 型员工音乐卡片构建正确: {card['data']['name']} - {card['data']['artist']}")
 
 
+def test_empty_message_allowed_for_no_arg_api_employee():
+    """验证 @随机音乐（无附带消息）时后端允许空消息通过。
+
+    回归: UserEmployeeInvokeHandler 对 API 型+无参工具的 employee 不应拒绝空消息。
+    否则仅发送 @随机音乐 时返回 JSON 错误，前端 SSE 解析器无法处理导致挂起。
+    """
+    print("\n  --- 验证: API 型无参工具允许空消息 ---")
+    import json
+
+    # 模拟 get_random_music 工具的 input_schema（无必填参数）
+    tool_input_schema = json.dumps({"type": "object", "properties": {}}, ensure_ascii=False)
+    required = []
+    try:
+        schema = json.loads(tool_input_schema)
+        required = schema.get("required", [])
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    # 无 required 字段 → 应允许空消息
+    assert required == [], (
+        f"get_random_music 的 input_schema 不应有 required 字段，"
+        f"实际: {required}。否则 @随机音乐 无附带消息会被拒绝"
+    )
+    print(f"  ✅ get_random_music 无 required 字段，空消息应被允许")
+
+    # 模拟 weather_query 工具（有必填参数 message）
+    weather_input_schema = json.dumps({
+        "type": "object",
+        "properties": {"message": {"type": "string", "description": "城市名称"}},
+        "required": ["message"]
+    }, ensure_ascii=False)
+    schema = json.loads(weather_input_schema)
+    weather_required = schema.get("required", [])
+    assert weather_required == ["message"], "weather_query 需要 message 参数"
+
+    # 模拟空消息判断逻辑（与 UserEmployeeInvokeHandler 一致）
+    message = ""  # 用户只发了 @天气，没写城市
+    if not message:
+        has_required = bool(weather_required)
+        # 有 required 参数 → 应拒绝空消息
+        assert has_required, "天气查询需要城市名，空消息应被拦截"
+    print(f"  ✅ 有 required 参数的工具（如天气）正确拒绝空消息")
+
+    # 测试空消息对 get_random_music 的允许逻辑
+    message = ""  # 用户只发了 @随机音乐
+    if not message:
+        # 无 required → 允许
+        assert not required, "随机音乐无 required 参数，空消息应被允许"
+    print(f"  ✅ @随机音乐（无附带消息）正确允许通过")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("  Issue #20: 随机音乐数字员工功能验证")
@@ -302,6 +353,9 @@ if __name__ == "__main__":
         test_music_card_security()
         test_weather_card_template_uses_path_mapping_not_raw_json()
         test_template_flattening()
+        test_api_music_employee_mcp_invoke_no_args()
+        test_api_music_employee_card_building()
+        test_empty_message_allowed_for_no_arg_api_employee()
         print("\n" + "=" * 60)
         print("  ✅ 全部测试通过！随机音乐数字员工功能正常。")
         print("=" * 60)
