@@ -2319,6 +2319,14 @@ class UserEmployeeInvokeHandler(BaseHandler):
 
         # 响应模板渲染
         response_template = emp.get("response_render_template", "")
+        # 兼容 script 型工具返回 JSON 字符串的情况
+        if isinstance(result, str):
+            try:
+                parsed = json.loads(result)
+                if isinstance(parsed, dict):
+                    result = parsed
+            except (json.JSONDecodeError, TypeError):
+                pass
         api_data = result if isinstance(result, dict) else {"raw": str(result)}
 
         # 构建卡片
