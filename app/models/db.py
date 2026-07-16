@@ -1986,8 +1986,238 @@ def _seed_script_tools():
             "DELETE FROM mcp_tools WHERE name IN ('weather_script', 'music_script')"
         )
 
+        # ── 确保 generate_image 依赖的接口存在 (local_handler='media/generate_image') ──
+        img_iface = conn.execute(
+            "SELECT id FROM api_interfaces WHERE local_handler='media/generate_image' AND interface_type='local'"
+        ).fetchone()
+        if not img_iface:
+            cur = conn.execute(
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 0)",
+                ("AI图像生成", "使用AI模型生成图片。", "media/generate_image"),
+            )
+            img_iface_id = cur.lastrowid
+        else:
+            img_iface_id = img_iface["id"]
+
+        # ── 确保 generate_video 依赖的接口存在 (local_handler='media/generate_video') ──
+        vid_iface = conn.execute(
+            "SELECT id FROM api_interfaces WHERE local_handler='media/generate_video' AND interface_type='local'"
+        ).fetchone()
+        if not vid_iface:
+            cur = conn.execute(
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 0)",
+                ("AI视频生成", "使用AI模型生成视频。", "media/generate_video"),
+            )
+            vid_iface_id = cur.lastrowid
+        else:
+            vid_iface_id = vid_iface["id"]
+
+        # ── 确保 invoke_digital_employee 依赖的接口存在 (local_handler='employee/invoke') ──
+        emp_iface = conn.execute(
+            "SELECT id FROM api_interfaces WHERE local_handler='employee/invoke' AND interface_type='local'"
+        ).fetchone()
+        if not emp_iface:
+            cur = conn.execute(
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 0)",
+                ("调用员工", "调用指定的数字员工执行任务。", "employee/invoke"),
+            )
+            emp_iface_id = cur.lastrowid
+        else:
+            emp_iface_id = emp_iface["id"]
+
+        img_data_sources = json.dumps([{"interface_id": img_iface_id, "param_mapping": {"prompt": "prompt", "model_id": "model_id", "size": "size", "n": "n"}}], ensure_ascii=False)
+        img_transform = (
+            "def transform(data_sources):\n"
+            "    if not data_sources or not data_sources[0].get('success'):\n"
+            '        return json.dumps({"success": False, "error": "图像生成数据源调用失败", "detail": str(data_sources)}, ensure_ascii=False)\n'
+            "    result = data_sources[0].get('data', {})\n"
+            "    return json.dumps(result, ensure_ascii=False)"
+        )
+        vid_data_sources = json.dumps([{"interface_id": vid_iface_id, "param_mapping": {"prompt": "prompt", "model_id": "model_id", "image_url": "image_url"}}], ensure_ascii=False)
+        vid_transform = (
+            "def transform(data_sources):\n"
+            "    if not data_sources or not data_sources[0].get('success'):\n"
+            '        return json.dumps({"success": False, "error": "视频生成数据源调用失败", "detail": str(data_sources)}, ensure_ascii=False)\n'
+            "    result = data_sources[0].get('data', {})\n"
+            "    return json.dumps(result, ensure_ascii=False)"
+        )
+        emp_data_sources = json.dumps([{"interface_id": emp_iface_id, "param_mapping": {"employee_name": "employee_name", "message": "message"}}], ensure_ascii=False)
+        emp_transform = (
+            "def transform(data_sources):\n"
+            "    if not data_sources or not data_sources[0].get('success'):\n"
+            '        return json.dumps({"success": False, "error": "数字员工调用数据源失败", "detail": str(data_sources)}, ensure_ascii=False)\n'
+            "    result = data_sources[0].get('data', {})\n"
+            "    return json.dumps(result, ensure_ascii=False)"
+        )
+
+        # generate_image → script 型
+        conn.execute(
+            "UPDATE mcp_tools SET "
+            "tool_type='script', "
+            "handler_module='', "
+            "data_sources=?, "
+            "transform_script=?, "
+            "script_enabled=1, "
+            "api_url='', api_method='', api_headers='{}', api_params_template='', "
+            "category='media', "
+            "is_enabled=1 "
+            "WHERE name='generate_image'",
+            (img_data_sources, img_transform),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO mcp_tools "
+            "(name, display_name, description, category, tool_type, "
+            "api_url, api_method, api_headers, input_schema, "
+            "data_sources, transform_script, script_enabled, "
+            "is_enabled, is_system, sort_order) "
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, ?, 1, 0, ?)",
+            (
+                "generate_image", "AI图像生成",
+                "使用 AI 模型生成图片。当用户要求「画一张」「生成图片」「文生图」「create image」等时使用此工具。",
+                "media",
+                '{"type":"object","properties":{"prompt":{"type":"string","description":"图片描述/提示词"},"model_id":{"type":"integer","description":"模型ID，填0或不填则使用系统默认图像模型","default":0},"size":{"type":"string","description":"图片尺寸，如1024x1024、512x512，默认1024x1024","default":"1024x1024"},"n":{"type":"integer","description":"生成数量，默认1","default":1}},"required":["prompt"]}',
+                img_data_sources, img_transform,
+                1, 12,
+            ),
+        )
+
+        # generate_video → script 型
+        conn.execute(
+            "UPDATE mcp_tools SET "
+            "tool_type='script', "
+            "handler_module='', "
+            "data_sources=?, "
+            "transform_script=?, "
+            "script_enabled=1, "
+            "api_url='', api_method='', api_headers='{}', api_params_template='', "
+            "category='media', "
+            "is_enabled=1 "
+            "WHERE name='generate_video'",
+            (vid_data_sources, vid_transform),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO mcp_tools "
+            "(name, display_name, description, category, tool_type, "
+            "api_url, api_method, api_headers, input_schema, "
+            "data_sources, transform_script, script_enabled, "
+            "is_enabled, is_system, sort_order) "
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, ?, 1, 0, ?)",
+            (
+                "generate_video", "AI视频生成",
+                "使用 AI 模型生成视频。当用户要求「生成视频」「制作一段视频」「文生视频」「create video」等时使用此工具。",
+                "media",
+                '{"type":"object","properties":{"prompt":{"type":"string","description":"视频描述/提示词"},"model_id":{"type":"integer","description":"模型ID，填0或不填则使用系统默认视频模型","default":0},"image_url":{"type":"string","description":"可选，图生视频时的输入图片URL","default":""}},"required":["prompt"]}',
+                vid_data_sources, vid_transform,
+                1, 13,
+            ),
+        )
+
+        # invoke_digital_employee → script 型
+        conn.execute(
+            "UPDATE mcp_tools SET "
+            "tool_type='script', "
+            "handler_module='', "
+            "data_sources=?, "
+            "transform_script=?, "
+            "script_enabled=1, "
+            "api_url='', api_method='', api_headers='{}', api_params_template='', "
+            "category='employee', "
+            "is_enabled=1 "
+            "WHERE name='invoke_digital_employee'",
+            (emp_data_sources, emp_transform),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO mcp_tools "
+            "(name, display_name, description, category, tool_type, "
+            "api_url, api_method, api_headers, input_schema, "
+            "data_sources, transform_script, script_enabled, "
+            "is_enabled, is_system, sort_order) "
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, ?, 1, 0, ?)",
+            (
+                "invoke_digital_employee", "调用数字员工",
+                "调用指定数字员工执行任务。支持按名称精确匹配或ID查找员工。",
+                "employee",
+                '{"type":"object","properties":{"employee_name":{"type":"string","description":"员工名称或ID"},"message":{"type":"string","description":"要发送给员工的消息/任务描述"}},"required":["employee_name","message"]}',
+                emp_data_sources, emp_transform,
+                1, 9,
+            ),
+        )
+
         conn.commit()
-        print(f"[种子] script 型 MCP 工具已更新（weather_query + get_random_music + collect_web_data + deep_collect_url + batch_deep_collect + collect_with_crawl4ai → script 型）")
+        print(f"[种子] script 型 MCP 工具已更新（weather_query + get_random_music + collect_web_data + deep_collect_url + batch_deep_collect + collect_with_crawl4ai + generate_image + generate_video + invoke_digital_employee → script 型）")
+
+        # ── 第3批：13个纯DB操作工具迁移为 script 型 ──
+        # 动态查询所有需要的接口ID
+        _batch3_lh_list = [
+            'conversation/messages', 'conversation/list', 'collect/sources',
+            'employee/list', 'model/default', 'model/list',
+            'system/stats', 'skill/load',
+            'warehouse/recent', 'warehouse/by_id', 'warehouse/stats',
+            'warehouse/search', 'warehouse/fulltext',
+        ]
+        _batch3_ifaces = {}
+        for _lh in _batch3_lh_list:
+            _row = conn.execute(
+                "SELECT id FROM api_interfaces WHERE local_handler=? AND interface_type='local'",
+                (_lh,)
+            ).fetchone()
+            if _row:
+                _batch3_ifaces[_lh] = _row['id']
+
+        # 统一透传 transform_script
+        _batch3_transform = (
+            "def transform(data_sources):\n"
+            "    try:\n"
+            "        if not data_sources or not data_sources[0].get('success'):\n"
+            '            return json.dumps({"error": "数据源调用失败"}, ensure_ascii=False)\n'
+            "        return json.dumps(data_sources[0].get('data', {}), ensure_ascii=False)\n"
+            "    except Exception as e:\n"
+            '        return json.dumps({"error": str(e)}, ensure_ascii=False)'
+        )
+
+        _batch3_tools = [
+            # (tool_name, local_handler, param_mapping)
+            ('get_conversation_messages', 'conversation/messages',
+             {"conversation_id": "conversation_id", "limit": "limit", "username": "username"}),
+            ('list_conversations', 'conversation/list',
+             {"username": "username", "limit": "limit"}),
+            ('list_watch_sources', 'collect/sources', {}),
+            ('list_digital_employees', 'employee/list', {}),
+            ('get_default_model', 'model/default', {}),
+            ('list_ai_models', 'model/list', {}),
+            ('get_system_stats', 'system/stats', {}),
+            ('load_skill', 'skill/load', {"skill_name": "skill_name"}),
+            ('get_recent_warehouse_data', 'warehouse/recent', {"limit": "limit"}),
+            ('get_warehouse_by_id', 'warehouse/by_id', {"dw_id": "dw_id"}),
+            ('get_warehouse_stats', 'warehouse/stats', {}),
+            ('search_warehouse', 'warehouse/search', {"keyword": "keyword", "limit": "limit"}),
+            ('search_warehouse_fulltext', 'warehouse/fulltext', {"query": "query", "limit": "limit"}),
+        ]
+
+        for _name, _lh, _mapping in _batch3_tools:
+            _iface_id = _batch3_ifaces.get(_lh)
+            if not _iface_id:
+                print(f"[种子] 警告: 接口 {_lh} 不存在，跳过 {_name}")
+                continue
+            _ds = json.dumps([{
+                "interface_id": _iface_id,
+                "param_mapping": _mapping,
+            }], ensure_ascii=False)
+            conn.execute(
+                "UPDATE mcp_tools SET "
+                "tool_type='script', "
+                "handler_module='', "
+                "data_sources=?, "
+                "transform_script=?, "
+                "script_enabled=1, "
+                "api_url='', api_method='', api_headers='{}', api_params_template='', "
+                "is_enabled=1 "
+                "WHERE name=?",
+                (_ds, _batch3_transform, _name),
+            )
+
+        conn.commit()
+        print(f"[种子] 第3批 script 型 MCP 工具已更新（13个纯DB工具 → script 型）")
 
 
 def _synchronize_default_capabilities(skills_created: bool, employees_created: bool):

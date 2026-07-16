@@ -37,6 +37,9 @@ def _init_local_handlers():
     from app.mcp.builtin_tools.collect_tools import (
         _collect_web_data, _deep_collect_url, _list_watch_sources,
     )
+    from app.mcp.builtin_tools.media_tools import (
+        _generate_image, _generate_video,
+    )
     from app.mcp.builtin_tools.employee_tools import (
         _list_digital_employees, _invoke_digital_employee,
     )
@@ -69,6 +72,8 @@ def _init_local_handlers():
     register_local_handler("conversation/messages", _get_conversation_messages)
     register_local_handler("crawl4ai/collect", _collect_with_crawl4ai)
     register_local_handler("crawl4ai/batch", _batch_deep_collect)
+    register_local_handler("media/generate_image", _generate_image)
+    register_local_handler("media/generate_video", _generate_video)
     register_local_handler("system/stats", _get_system_stats)
     register_local_handler("skill/load", _load_skill)
 
