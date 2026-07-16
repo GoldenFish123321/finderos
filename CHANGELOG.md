@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.5.3-beta (2026-07-16) — @数字员工 load_skill 工具调用修复
+
+- 🐛 **Bug 修复**：@数字员工 LLM 调用缺少 `tools` 参数，导致 `load_skill` 等 MCP 工具无法通过 Function Calling 调用
+  - **根因**：`_invoke_llm_employee` 的 LLM API 调用只传了 `stream: True`，未传 `tools` 参数，LLM 无法发起 Function Call，技能系统形同虚设
+  - **修复**：改为两阶段架构 — Phase 1 非流式调用（传 `tools` + `tool_choice: auto`，最多 3 轮）让 LLM 按需调用 `load_skill` 等工具；Phase 2 流式调用输出最终回复
+  - 工具列表通过 `get_openai_tools_for_employee()` 按员工权限过滤（最小权限原则）
+  - 同步保留 v1.5.2 的消息持久化功能（`reply_parts` 收集 + `assistant_reply` 赋值 + DB 保存）
+- 🧪 **测试**：新增 `test_employee_invoke_passes_tools_to_llm` 验证 tools 参数传递
+
 ## v1.5.2-beta (2026-07-16) — @数字员工 对话消息持久化修复
 
 - 🐛 **Bug 修复**：修复 @数字员工 对话加载后聊天记录为空的问题
