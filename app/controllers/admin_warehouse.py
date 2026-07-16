@@ -228,10 +228,7 @@ class WarehouseDeepCollectHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     async def post(self):
-        """触发深度采集任务（异步执行）。"""
-        import asyncio
-        import concurrent.futures
-
+        """触发深度采集任务（通过统一出口 call_local_api）。"""
         dw_id = int(self.get_body_argument("id", 0))
         record = DataWarehouseRepository.get_by_id(dw_id)
         if not record:
@@ -243,14 +240,46 @@ class WarehouseDeepCollectHandler(AdminBaseHandler):
             self.write({"code": 1, "msg": "该记录没有可采集的链接"})
             return
 
-        # 异步执行深度采集（复用全局线程池，避免阻塞主线程）
         try:
-            loop = asyncio.get_event_loop()
-            from app.services.deep_collector import deep_fetch_and_save
+            from app.services.local_api_client import call_local_api
+            from app.services.deep_collector import _extract_title, _extract_text_content
 
-            success, message = await loop.run_in_executor(
-                _deep_collect_executor, deep_fetch_and_save, dw_id, link
+            # 通过统一出口获取 HTML
+            result = await call_local_api("collector/deep-fetch", {
+                "url": link, "timeout": 30,
+            })
+
+            if not result.get("success"):
+                self.write({"code": 1, "msg": f"深度采集失败: {result.get('error', '未知错误')}"})
+                return
+
+            html = result["data"]["html"]
+            title = _extract_title(html)
+            content = _extract_text_content(html, link)
+
+            if not content and not title:
+                self.write({"code": 1, "msg": "未能提取到有效正文内容"})
+                return
+
+            # 合并采集结果
+            full_content = ""
+            if title:
+                full_content += f"【标题】{title}\n\n"
+            if content:
+                full_content += content
+
+            content_size = len(full_content.encode("utf-8"))
+            ok = DataWarehouseRepository.mark_deep_collected(
+                dw_id, content=full_content, content_size=content_size
             )
+
+            if ok:
+                size_kb = content_size / 1024
+                message = f"深度采集完成（提取 {size_kb:.1f} KB 正文内容）"
+            else:
+                message = "保存深度采集内容失败"
+
+            success = ok
 
             if success:
                 from app.utils.security import write_audit_log

@@ -12,8 +12,8 @@ class TestLocalApiRegistry(unittest.TestCase):
         from app.models.db import init_db
         init_db()
 
-    def test_sync_creates_18_interfaces(self):
-        """sync 应创建18个本地系统接口。"""
+    def test_sync_creates_21_interfaces(self):
+        """sync 应创建21个本地系统接口。"""
         from app.services.local_api_registry import sync_local_api_interfaces
         sync_local_api_interfaces()
         from app.models.db import get_db
@@ -21,7 +21,7 @@ class TestLocalApiRegistry(unittest.TestCase):
             count = conn.execute(
                 "SELECT COUNT(*) AS cnt FROM api_interfaces WHERE interface_type = 'local' AND is_system = 1"
             ).fetchone()["cnt"]
-        self.assertEqual(count, 18, f"期望18, 实际{count}")
+        self.assertEqual(count, 21, f"期望21, 实际{count}")
 
     def test_sync_is_idempotent(self):
         """再次 sync 不应重复插入。"""
@@ -32,7 +32,7 @@ class TestLocalApiRegistry(unittest.TestCase):
             count = conn.execute(
                 "SELECT COUNT(*) AS cnt FROM api_interfaces WHERE interface_type = 'local' AND is_system = 1"
             ).fetchone()["cnt"]
-        self.assertEqual(count, 18, f"幂等性失败, 期望18, 实际{count}")
+        self.assertEqual(count, 21, f"幂等性失败, 期望21, 实际{count}")
 
     def test_all_local_handlers_set(self):
         """所有本地接口应有 local_handler。"""

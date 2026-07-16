@@ -18,11 +18,11 @@ class TestLocalApiClient(unittest.TestCase):
         from app.services.local_api_client import _init_local_handlers
         _init_local_handlers()
 
-    def test_init_registers_18_handlers(self):
-        """_init_local_handlers 应注册18个handler。"""
+    def test_init_registers_21_handlers(self):
+        """_init_local_handlers 应注册21个handler。"""
         from app.services.local_api_client import _LOCAL_HANDLER_MAP
         count = len(_LOCAL_HANDLER_MAP)
-        self.assertEqual(count, 18, f"期望18个handler, 实际{count}个")
+        self.assertEqual(count, 21, f"期望21个handler, 实际{count}个")
 
     def test_all_expected_handler_keys(self):
         """所有预期handler key都应注册。"""
@@ -36,6 +36,7 @@ class TestLocalApiClient(unittest.TestCase):
             "conversation/list", "conversation/messages",
             "crawl4ai/collect", "crawl4ai/batch",
             "system/stats", "skill/load",
+            "collector/fetch", "collector/deep-fetch", "music/netease",
         ]
         for key in expected:
             self.assertIn(key, _LOCAL_HANDLER_MAP, f"缺少handler: {key}")
@@ -44,9 +45,11 @@ class TestLocalApiClient(unittest.TestCase):
         """调用不存在的handler应返回错误。"""
         from app.services.local_api_client import call_local_api
         import asyncio
-        result = asyncio.get_event_loop().run_until_complete(
+        loop = asyncio.new_event_loop()
+        result = loop.run_until_complete(
             call_local_api("nonexistent_handler", {})
         )
+        loop.close()
         self.assertFalse(result["success"])
         self.assertIn("未注册", result["error"])
 
@@ -59,9 +62,11 @@ class TestLocalApiClient(unittest.TestCase):
             return {"greeting": f"hello {name}"}
 
         register_local_handler("test/custom", _test_handler)
-        result = asyncio.get_event_loop().run_until_complete(
+        loop = asyncio.new_event_loop()
+        result = loop.run_until_complete(
             call_local_api("test/custom", {"name": "hermes"})
         )
+        loop.close()
         self.assertTrue(result["success"])
         self.assertEqual(result["data"]["greeting"], "hello hermes")
 

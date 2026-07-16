@@ -8,6 +8,7 @@
 - Chat database and file operations execute outside the Tornado IOLoop.
 - MCP tool modules decode as strict UTF-8 without BOM before AST parsing.
 - Gzip/deflate fallback paths retain original data and emit diagnostic logs.
+- Legacy `conversation_messages` tables are migrated with `is_sensitive` / `review_status` before related indexes are created.
 - Mobile layout, fetch failure feedback, and chart observer cleanup are covered.
 - Password length, dependencies, migration identifiers, and setting ranges are validated.
 

@@ -421,3 +421,130 @@ def fetch_and_parse(
         news = []
 
     return status, size, safe_text, news
+
+
+# ═══════════════════════════════════════════════════════════════
+# 统一对外出口 handler（方案B）
+# ═══════════════════════════════════════════════════════════════
+
+async def _collector_fetch_handler(source_id: int, keyword: str = "", page: int = 1):
+    """collector/fetch handler — 统一出口获取瞭源 HTML。
+
+    内部读 watch_sources → 构造 URL → safe_http_request → 解压/解码 → 返回 HTML。
+    所有外部 HTTP 调用都应在 handler 内完成，不直接暴露 safe_http_request。
+    """
+    import json as _json
+    from app.models.watch_source import WatchSourceRepository
+    from app.utils.safe_http import safe_http_request, SafeHttpError
+
+    source = WatchSourceRepository.get_by_id(source_id)
+    if not source:
+        return {"success": False, "error": f"瞭源 {source_id} 不存在"}
+    if not source.get("is_enabled"):
+        return {"success": False, "error": f"瞭源 {source_id} 已禁用"}
+
+    url_template = source["url_template"]
+    request_headers_str = source.get("request_headers", "{}")
+
+    # 构造 URL
+    url = url_template.replace("{keyword}", urllib.parse.quote(keyword or "", encoding="utf-8"))
+    url = url.replace("{page}", str(page))
+
+    # 解析 headers
+    try:
+        headers = _json.loads(request_headers_str) if request_headers_str else {}
+    except _json.JSONDecodeError:
+        headers = {}
+
+    # 合并基础 headers
+    merged = dict(_BASE_HEADERS)
+    merged.update(headers)
+    headers = merged
+
+    # 百度 cookie 预热（复用现有逻辑）
+    if "baidu.com" in url:
+        _ensure_baidu_cookies()
+
+    # 附加百度 Cookie
+    cookie_jar = _global_cookie_jar
+    if cookie_jar is not None and "baidu.com" in url:
+        cookie_value = "; ".join(f"{c.name}={c.value}" for c in cookie_jar)
+        if cookie_value:
+            headers["Cookie"] = cookie_value
+
+    try:
+        from app.utils.security import validate_url_safe
+        is_safe, reason, _ = validate_url_safe(url)
+        if not is_safe:
+            return {"success": False, "error": f"SSRF 拦截: {reason}"}
+
+        resp = safe_http_request(
+            url=url, headers=headers, timeout=30,
+            max_bytes=2 * 1024 * 1024,
+        )
+        if 300 <= resp.status < 400:
+            return {"success": False, "error": "采集目标不允许重定向"}
+
+        # 解压 + 解码
+        body = _decompress(resp.body, resp.headers.get("Content-Encoding", ""))
+        encoding = source.get("encoding", "")
+        if encoding:
+            try:
+                html = body.decode(encoding, errors="replace")
+            except (LookupError, UnicodeDecodeError):
+                html = body.decode("utf-8", errors="replace")
+        else:
+            html = body.decode("utf-8", errors="replace")
+
+        # 清洗 HTML（移除 script/style 等）
+        html = _clean_html(html)
+
+        return {"success": True, "data": {"html": html, "status": resp.status, "url": url}}
+    except SafeHttpError as e:
+        return {"success": False, "error": f"安全HTTP错误: {e}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def fetch_and_parse_via_handler(source_id: int, keyword: str = "",
+                                 page: int = 1, parser: str = "baidu_news",
+                                 timeout: int = 20) -> Tuple[int, int, str, List[Dict]]:
+    """通过统一出口获取 HTML 并解析（同步包装）。
+
+    供同步上下文（ThreadPoolExecutor）使用，内部通过 asyncio.run()
+    调用 call_local_api('collector/fetch', ...) → 获取 HTML → 解析。
+    返回格式与 fetch_and_parse 一致: (status, size, text, news_list)。
+    """
+    import asyncio
+    # 惰性 import 避免循环引用
+    from app.services.local_api_client import call_local_api
+
+    result = asyncio.run(call_local_api("collector/fetch", {
+        "source_id": source_id, "keyword": keyword, "page": page,
+    }))
+
+    if not result.get("success"):
+        return 0, 0, result.get("error", "采集失败"), []
+
+    html = result["data"]["html"]
+    status = result["data"]["status"]
+    size = len(html.encode("utf-8"))
+
+    parse_fn = PARSERS.get(parser, generic_parse)
+    try:
+        news = parse_fn(html)  # handler 已清洗 HTML
+    except Exception as e:
+        logger.warning(f"解析器 {parser} 失败: {e}")
+        news = []
+
+    return status, size, html, news
+
+
+# ── 自注册到 local_api_client（避免循环 import）──
+def _register_collector_handlers():
+    from app.services.local_api_client import register_local_handler
+    register_local_handler("collector/fetch", _collector_fetch_handler)
+
+
+# 模块加载时自动注册
+_register_collector_handlers()
