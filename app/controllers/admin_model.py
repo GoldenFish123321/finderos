@@ -62,7 +62,7 @@ def _resolve_quick_config_api_key(
         ):
             return "", (
                 "检测到提供商、API Base 或 Model Name 已变更。"
-                "若要继续使用当前已保存密钥，请先勾选确认复用；"
+                "若要继续使用当前已保存密钥，请在页面出现的确认区勾选复用当前密钥；"
                 "否则请重新输入新的 API Key"
             )
         return submitted_api_key, ""

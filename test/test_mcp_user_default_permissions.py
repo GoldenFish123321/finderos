@@ -192,10 +192,36 @@ def test_model_quick_config_template_key_echo_and_test_ui():
     assert 'value="{{ model[\'api_key\'] if model else \'\' }}"' in source
     assert "toggle-api-key" in source
     assert "已保存密钥" in source
+    assert "api-key-reuse-confirm" in source
     assert "confirm_reuse_key" in source
-    assert "我确认将当前密钥用于新的提供商" in source
+    assert 'id="confirm-reuse-key"' in source
+    assert 'lay-filter="quick-provider"' in source
+    assert "clearKeySelected()" in source
+    assert "select(quick-provider)" in source
+    assert "连接信息已变更" in source
+    assert "connectionChanged()" in source
+    assert "requireReuseConfirm" in source
+    assert "我确认将当前已保存密钥用于新的提供商" in source
     assert "测试连接" in source
     assert "/admin/model/config/test" in source
+
+
+def test_model_quick_config_handlers_use_confirm_reuse_flag():
+    from pathlib import Path
+
+    source = Path("app/controllers/admin_model.py").read_text(encoding="utf-8")
+    save_handler = source[
+        source.index("class ModelQuickConfigHandler"):
+        source.index("class ModelQuickConfigTestHandler")
+    ]
+    test_handler = source[
+        source.index("class ModelQuickConfigTestHandler"):
+        source.index("class ModelDeleteHandler")
+    ]
+
+    for handler_source in (save_handler, test_handler):
+        assert 'confirm_reuse_key = self.get_body_argument("confirm_reuse_key", "0") == "1"' in handler_source
+        assert "clear_key, confirm_reuse_key" in handler_source
 
 
 def test_model_quick_config_test_redacts_key_and_reports_success():

@@ -1114,7 +1114,7 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 | POST | `/admin/model/default` | 设为默认模型 |
 | GET | `/admin/api/model/list` | 模型 JSON API（返回已启用模型列表） |
 
-> 模型 API 快速配置页会回显已保存 API Key（默认密码框隐藏，可手动显示）；当 Provider、API Base 或 Model Name 改变时，必须重新输入新 Key，或勾选确认复用当前密钥，避免旧 Key 被误发到新的接口地址。
+> 模型 API 快速配置页会回显已保存 API Key（默认密码框隐藏，可手动显示）。当 Provider、API Base 或 Model Name 改变且仍在使用已保存密钥时，页面会显示醒目的“复用当前密钥”确认区；用户可重新输入新 Key，或勾选确认后继续复用当前密钥。
 
 #### 管理侧会话管理（Issue #17）
 | 方法 | 路径 | 说明 |

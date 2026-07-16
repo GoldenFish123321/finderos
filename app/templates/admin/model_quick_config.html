@@ -61,6 +61,36 @@
     background:rgba(245,158,11,0.10);
     border:1px solid rgba(245,158,11,0.24);
 }
+.api-key-reuse-confirm {
+    display:none;
+    margin-top:10px;
+    padding:10px 12px;
+    border-radius:8px;
+    border:1px solid rgba(245,158,11,0.36);
+    background:rgba(245,158,11,0.10);
+    color:var(--text-secondary);
+    font-size:12px;
+    line-height:1.6;
+}
+.api-key-reuse-confirm.is-visible {
+    display:block;
+}
+.api-key-reuse-confirm.is-attention {
+    border-color:rgba(239,68,68,0.55);
+    background:rgba(239,68,68,0.10);
+}
+.api-key-reuse-confirm label {
+    display:flex;
+    align-items:flex-start;
+    gap:8px;
+    margin-top:8px;
+    cursor:pointer;
+    color:var(--text-primary);
+    font-weight:600;
+}
+.api-key-reuse-confirm input[type="checkbox"] {
+    margin-top:3px;
+}
 </style>
 
 <div class="layui-card">
@@ -76,7 +106,8 @@
             该页面面向普通用户开放，只允许配置当前默认/首个模型的基础 API 连接信息；
             不提供模型删除、启停、设为默认等全局管理操作。如需完整模型管理，请联系管理员授权“模型引擎”。
             API Key 默认以密码形式隐藏但会回显，点击“显示”可明文确认；保存前可点击“测试连接”验证配置是否可用。
-            如果修改提供商、API Base 或 Model Name，系统会要求重新输入新密钥，或显式确认复用当前密钥。
+            如果修改提供商、API Base 或 Model Name，页面会显示“复用当前密钥”的确认区；
+            你可以重新输入新密钥，或勾选确认继续使用已保存密钥。
         </div>
 
         <form class="layui-form" id="quick-model-form" action="/admin/model/config" method="post" style="max-width:700px;">
@@ -94,7 +125,7 @@
             <div class="layui-form-item">
                 <label class="layui-form-label">提供商</label>
                 <div class="layui-input-block">
-                    <select name="provider">
+                    <select name="provider" lay-filter="quick-provider">
                         {% for p in providers %}
                         <option value="{{ p['value'] }}" {% if model and model['provider'] == p['value'] %}selected{% end %}>
                             {{ p['name'] }}
@@ -133,9 +164,15 @@
                     <div style="margin-top:6px;">
                         <input type="checkbox" name="clear_key" value="1" title="清除密钥（将 API Key 设为空）">
                     </div>
-                    <div style="margin-top:6px;">
-                        <input type="checkbox" name="confirm_reuse_key" value="1"
-                               title="我确认将当前密钥用于新的提供商 / API Base / Model Name">
+                    <div class="api-key-reuse-confirm" id="api-key-reuse-confirm">
+                        <strong>连接信息已变更</strong><br>
+                        你修改了提供商、API Base 或 Model Name。如果要继续使用当前已保存密钥，请勾选下面的确认项；
+                        否则请在上方输入新的 API Key。
+                        <label for="confirm-reuse-key">
+                            <input type="checkbox" name="confirm_reuse_key" id="confirm-reuse-key"
+                                   value="1" lay-ignore>
+                            <span>我确认将当前已保存密钥用于新的提供商 / API Base / Model Name</span>
+                        </label>
                     </div>
                     {% end %}
                 </div>
@@ -192,6 +229,17 @@ layui.use('form', function(){
     var testBtn = document.getElementById('test-api-config');
     var form = document.getElementById('quick-model-form');
     var resultBox = document.getElementById('quick-model-test-result');
+    var reuseBox = document.getElementById('api-key-reuse-confirm');
+    var reuseCheck = document.getElementById('confirm-reuse-key');
+    var providerInput = form ? form.querySelector('[name="provider"]') : null;
+    var apiBaseInput = form ? form.querySelector('[name="api_base"]') : null;
+    var modelNameInput = form ? form.querySelector('[name="model_name"]') : null;
+    var clearKeyInput = form ? form.querySelector('[name="clear_key"]') : null;
+    var hasSavedKey = {% raw json_encode(True if model and model.get('api_key') else False) %};
+    var initialProvider = {% raw json_encode(model['provider'] if model else '') %};
+    var initialApiBase = {% raw json_encode(model['api_base'] if model else '') %};
+    var initialModelName = {% raw json_encode(model['model_name'] if model else '') %};
+    var initialApiKey = keyInput ? keyInput.value : '';
 
     if (toggleBtn && keyInput) {
         toggleBtn.addEventListener('click', function(){
@@ -206,8 +254,79 @@ layui.use('form', function(){
         resultBox.textContent = text;
     }
 
+    function connectionChanged() {
+        if (!hasSavedKey || !providerInput || !apiBaseInput || !modelNameInput) {
+            return false;
+        }
+        return providerInput.value !== initialProvider ||
+            apiBaseInput.value.trim() !== initialApiBase ||
+            modelNameInput.value.trim() !== initialModelName;
+    }
+
+    function currentKeyIsSavedKey() {
+        return keyInput && keyInput.value.trim() !== '' && keyInput.value.trim() === initialApiKey.trim();
+    }
+
+    function clearKeySelected() {
+        return clearKeyInput && clearKeyInput.checked;
+    }
+
+    function syncReuseConfirm() {
+        if (!reuseBox || !reuseCheck) {
+            return false;
+        }
+        var visible = connectionChanged() && currentKeyIsSavedKey() && !clearKeySelected();
+        reuseBox.classList.toggle('is-visible', visible);
+        if (!visible) {
+            reuseBox.classList.remove('is-attention');
+            reuseCheck.checked = false;
+        }
+        return visible;
+    }
+
+    function requireReuseConfirm(actionText) {
+        var visible = syncReuseConfirm();
+        if (!visible || (reuseCheck && reuseCheck.checked)) {
+            return false;
+        }
+        reuseBox.classList.add('is-attention');
+        var msg = '连接信息已变更。如果要' + actionText + '并继续使用当前已保存密钥，请先勾选“确认复用”；否则请输入新的 API Key。';
+        showResult(false, msg);
+        reuseBox.scrollIntoView({behavior: 'smooth', block: 'center'});
+        return true;
+    }
+
+    [providerInput, apiBaseInput, modelNameInput, keyInput, clearKeyInput].forEach(function(el){
+        if (el) {
+            el.addEventListener('change', syncReuseConfirm);
+            el.addEventListener('input', syncReuseConfirm);
+        }
+    });
+    layui.use('form', function(){
+        layui.form.on('select(quick-provider)', syncReuseConfirm);
+    });
+    if (reuseCheck) {
+        reuseCheck.addEventListener('change', function(){
+            if (reuseCheck.checked && reuseBox) {
+                reuseBox.classList.remove('is-attention');
+            }
+        });
+    }
+    syncReuseConfirm();
+
+    if (form) {
+        form.addEventListener('submit', function(e){
+            if (requireReuseConfirm('保存')) {
+                e.preventDefault();
+            }
+        });
+    }
+
     if (testBtn && form) {
         testBtn.addEventListener('click', function(){
+            if (requireReuseConfirm('测试连接')) {
+                return;
+            }
             var formData = new FormData(form);
             testBtn.disabled = true;
             testBtn.innerHTML = '<i class="layui-icon layui-icon-loading layui-anim layui-anim-rotate layui-anim-loop"></i> 测试中...';

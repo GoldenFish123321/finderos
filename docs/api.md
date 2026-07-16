@@ -175,7 +175,7 @@ data: {"code":1,"msg":"请输入关键词"}
 | POST | `/admin/model/toggle` | 启用/禁用 |
 | POST | `/admin/model/default` | 设为默认模型 |
 
-> 安全约束：快速配置页修改 Provider、API Base 或 Model Name 时，必须重新输入新 API Key，或显式勾选确认复用当前密钥，避免旧密钥被误发送到新的接口地址。
+> 安全约束：快速配置页修改 Provider、API Base 或 Model Name 且仍在使用已保存 API Key 时，页面会显示“复用当前密钥”确认区；用户必须重新输入新 Key，或显式勾选确认复用当前密钥，避免旧密钥被误发送到新的接口地址。
 
 ### 4.2 模型对话 (SSE) — ⚠️ 已废弃
 

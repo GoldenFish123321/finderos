@@ -77,7 +77,7 @@
 | TC-MODEL-06 | 审计日志 | 发送对话消息 | audit_logs表新增USER_CHAT记录 |
 | TC-MODEL-07 | 快速配置 Key 回显 | 打开 `/admin/model/config` | API Key 在密码框中回显，默认隐藏，可点击显示/隐藏 |
 | TC-MODEL-08 | 快速配置测试连接 | 填写 API Base/API Key/Model Name 后点击测试连接 | 返回 HTTP 状态、耗时与成功/失败提示，不展示或记录密钥 |
-| TC-MODEL-09 | 变更接口地址防误发 Key | 修改 API Base 后不重新输入 Key 且不勾选确认复用 | 拒绝保存/测试，提示重新输入或确认复用密钥 |
+| TC-MODEL-09 | 变更接口地址防误发 Key | 修改 API Base 后继续使用已保存 Key | 页面显示“复用当前密钥”确认区；未勾选时拒绝保存/测试，勾选后允许复用 |
 
 ## 6. 接口管理（Issue #26）
 
