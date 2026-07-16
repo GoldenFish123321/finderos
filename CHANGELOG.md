@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.8.2-beta (2026-07-16) — 采集诊断与源码编码修复
+
+- 修复 app/mcp/tools.py 的 UTF-8 BOM，确保严格 UTF-8 读取后可直接通过 ast.parse()。
+- 为 collector/deep_collector 的 gzip、zlib deflate 与 raw deflate 降级路径增加诊断日志，保留原始数据回退行为。
+- 删除 collector 中因 errors="replace" 而不可达的解码异常分支。
+- 扩充两个采集模块的参数化回归测试，并适配 API 型员工 MCP 重构后的 legacy 测试契约。
+
 ## v1.8.1-beta (2026-07-16) — @随机音乐 空消息挂起 Bug 修复
 
 - 🐛 **Bug 修复**：仅发送 `@随机音乐`（无附带消息）时页面挂起，显示 "⏱ 0.0s · 🔤 ~1 tokens" 后无响应
