@@ -117,7 +117,7 @@ class MCPSeedConsistencyTests(unittest.TestCase):
     def test_fallback_auto_discovers_all_builtin_handlers(self):
         definitions = discover_builtin_tool_definitions()
         names = {item["name"] for item in definitions}
-        self.assertEqual(len(names), 20)
+        self.assertEqual(len(names), 21)
         self.assertIn("search_warehouse_fulltext", names)
         self.assertIn("get_system_stats", names)
         self.assertIn("invoke_digital_employee", names)

@@ -378,6 +378,43 @@ def run_migrations():
             "sql": "CREATE INDEX IF NOT EXISTS idx_conv_msgs_review ON conversation_messages(review_status)",
             "check": lambda c: _index_exists(c, "idx_conv_msgs_review"),
         },
+        # v2.0 统一接口驱动架构 — api_interfaces 新增字段
+        {
+            "name": "add_api_interfaces_interface_type",
+            "sql": "ALTER TABLE api_interfaces ADD COLUMN interface_type TEXT DEFAULT 'external'",
+            "check": lambda c: _column_exists(c, "api_interfaces", "interface_type"),
+        },
+        {
+            "name": "add_api_interfaces_is_system",
+            "sql": "ALTER TABLE api_interfaces ADD COLUMN is_system INTEGER DEFAULT 0",
+            "check": lambda c: _column_exists(c, "api_interfaces", "is_system"),
+        },
+        {
+            "name": "add_api_interfaces_local_handler",
+            "sql": "ALTER TABLE api_interfaces ADD COLUMN local_handler TEXT DEFAULT ''",
+            "check": lambda c: _column_exists(c, "api_interfaces", "local_handler"),
+        },
+        {
+            "name": "add_api_interfaces_response_content_type",
+            "sql": "ALTER TABLE api_interfaces ADD COLUMN response_content_type TEXT DEFAULT 'json'",
+            "check": lambda c: _column_exists(c, "api_interfaces", "response_content_type"),
+        },
+        # v2.0 统一接口驱动架构 — mcp_tools 新增字段
+        {
+            "name": "add_mcp_tools_data_sources",
+            "sql": "ALTER TABLE mcp_tools ADD COLUMN data_sources TEXT DEFAULT '[]'",
+            "check": lambda c: _column_exists(c, "mcp_tools", "data_sources"),
+        },
+        {
+            "name": "add_mcp_tools_transform_script",
+            "sql": "ALTER TABLE mcp_tools ADD COLUMN transform_script TEXT DEFAULT ''",
+            "check": lambda c: _column_exists(c, "mcp_tools", "transform_script"),
+        },
+        {
+            "name": "add_mcp_tools_script_enabled",
+            "sql": "ALTER TABLE mcp_tools ADD COLUMN script_enabled INTEGER DEFAULT 0",
+            "check": lambda c: _column_exists(c, "mcp_tools", "script_enabled"),
+        },
     ]
 
     applied = 0
@@ -447,265 +484,6 @@ def _seed_mcp_tools(conn):
     count = upsert_builtin_tools(conn)
     logger.info(f"已同步 {count} 个 MCP 工具规范记录")
     return
-    import json as _json
-
-    tools = [
-        # ── 数据仓库类 (4) ──
-        {
-            "name": "search_warehouse", "display_name": "数据仓库搜索",
-            "category": "warehouse", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.warehouse_tools._search_warehouse",
-            "description": "在瞭望与问数系统的数据仓库中搜索关键词相关的内容。当用户询问「有没有关于XX的数据」「搜索XX」「查找XX」「帮我找XX」等问题时使用此工具。不要用于获取最新数据或统计信息（请使用其他专用工具）。",
-            "input_schema": _json.dumps({
-                "type": "object",
-                "properties": {
-                    "keyword": {"type": "string", "description": "搜索关键词，从用户问题中提取的核心搜索词"},
-                    "limit": {"type": "integer", "description": "返回结果数量上限，默认10", "default": 10},
-                },
-                "required": ["keyword"],
-            }, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 1,
-        },
-        {
-            "name": "get_recent_warehouse_data", "display_name": "最新数据查询",
-            "category": "warehouse", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.warehouse_tools._get_recent_warehouse_data",
-            "description": "获取数据仓库中最新入库的数据记录。当用户询问「最新数据」「最近有什么」「看看数据仓库」「浏览数据」时使用此工具。也适用于用户没有明确关键词但想了解数据仓库内容时。",
-            "input_schema": _json.dumps({
-                "type": "object",
-                "properties": {
-                    "limit": {"type": "integer", "description": "返回记录数，默认10", "default": 10},
-                },
-            }, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 2,
-        },
-        {
-            "name": "get_warehouse_stats", "display_name": "数据统计",
-            "category": "warehouse", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.warehouse_tools._get_warehouse_stats",
-            "description": "获取数据仓库的统计概况，包括总记录数、已深度采集数、来源分布等。当用户询问「有多少数据」「数据统计」「数据概况」「数据分布」时使用此工具。",
-            "input_schema": _json.dumps({"type": "object", "properties": {}}, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 3,
-        },
-        {
-            "name": "search_warehouse_fulltext", "display_name": "全文检索(FTS5)",
-            "category": "warehouse", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.warehouse_tools._search_warehouse_fulltext",
-            "description": "使用 FTS5 全文搜索引擎在数据仓库中进行高级全文检索。比普通关键词搜索更精确，支持布尔表达式和短语匹配。当用户需要精确查找某段文字或使用高级搜索语法时使用此工具。",
-            "input_schema": _json.dumps({
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "FTS5 搜索查询，支持布尔表达式如「AI AND 搜索」"},
-                    "limit": {"type": "integer", "description": "返回结果数量上限，默认20", "default": 20},
-                },
-                "required": ["query"],
-            }, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 4,
-        },
-
-        # ── 数据采集类 (3) ──
-        {
-            "name": "collect_web_data", "display_name": "全网采集",
-            "category": "collect", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.collect_tools._collect_web_data",
-            "description": "执行全网瞭望数据采集任务，从配置的瞭望源（如百度新闻、搜狗新闻等）搜索指定关键词。当用户要求「采集关于XX的新闻」「帮我在网上搜索XX」「瞭望一下XX」时使用此工具。注意：这是一个批量采集工具，不是搜索数据仓库已有内容。",
-            "input_schema": _json.dumps({
-                "type": "object",
-                "properties": {
-                    "keyword": {"type": "string", "description": "采集关键词"},
-                    "source_ids": {
-                        "type": "array", "items": {"type": "integer"},
-                        "description": "瞭望源 ID 列表，留空则使用所有启用的瞭望源",
-                    },
-                },
-                "required": ["keyword"],
-            }, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 10,
-        },
-        {
-            "name": "deep_collect_url", "display_name": "深度采集URL",
-            "category": "collect", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.collect_tools._deep_collect_url",
-            "description": "对指定网页 URL 进行深度内容采集，提取文章正文、标题等结构化内容。当用户提供具体URL并要求「深度采集」「抓取这个网页」「提取文章内容」「帮我看看这个链接」时使用。仅用于采集单个 URL 的详细内容，不是搜索引擎。",
-            "input_schema": _json.dumps({
-                "type": "object",
-                "properties": {
-                    "url": {"type": "string", "description": "要深度采集的目标网页 URL（必须是完整 HTTP/HTTPS 链接）"},
-                },
-                "required": ["url"],
-            }, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 11,
-        },
-        {
-            "name": "list_watch_sources", "display_name": "瞭望源列表",
-            "category": "collect", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.collect_tools._list_watch_sources",
-            "description": "列出系统中所有已启用的瞭望源（数据采集源）。当用户询问「有哪些采集源」「瞭望源列表」「从哪些网站采集数据」时使用此工具。",
-            "input_schema": _json.dumps({"type": "object", "properties": {}}, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 12,
-        },
-
-        # ── 数字员工类 (2) ──
-        {
-            "name": "list_digital_employees", "display_name": "数字员工列表",
-            "category": "employee", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.employee_tools._list_digital_employees",
-            "description": "列出系统中所有可用的数字员工。当用户询问「有哪些数字员工」「可以用哪些助手」「@谁」或不确定该调用哪个员工时使用。",
-            "input_schema": _json.dumps({"type": "object", "properties": {}}, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 20,
-        },
-        {
-            "name": "invoke_digital_employee", "display_name": "调用数字员工",
-            "category": "employee", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.employee_tools._invoke_digital_employee",
-            "description": "调用指定的数字员工执行任务。支持按名称或 ID 查找员工，将用户消息转发给该员工并返回执行结果。当用户想委托特定员工完成某项工作时使用此工具。",
-            "input_schema": _json.dumps({
-                "type": "object",
-                "properties": {
-                    "employee_name": {"type": "string", "description": "数字员工名称或 ID"},
-                    "message": {"type": "string", "description": "要发送给该员工的消息内容"},
-                },
-                "required": ["employee_name", "message"],
-            }, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 21,
-        },
-
-        # ── AI 模型类 (2) ──
-        {
-            "name": "list_ai_models", "display_name": "AI模型列表",
-            "category": "model", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.model_tools._list_ai_models",
-            "description": "列出系统中所有已启用的 AI 模型，包括模型名称、提供商、分类和默认状态。当用户询问「有哪些AI模型」「当前可用模型」「切换模型」时使用此工具。",
-            "input_schema": _json.dumps({"type": "object", "properties": {}}, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 30,
-        },
-        {
-            "name": "get_default_model", "display_name": "获取默认模型",
-            "category": "model", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.model_tools._get_default_model",
-            "description": "获取当前系统默认的 AI 模型信息。当用户询问「当前用的是什么模型」「默认模型是什么」时使用此工具。",
-            "input_schema": _json.dumps({"type": "object", "properties": {}}, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 31,
-        },
-
-        # ── 对话管理类 (2) ──
-        {
-            "name": "list_conversations", "display_name": "对话历史",
-            "category": "chat", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.chat_tools._list_conversations",
-            "description": "列出用户的历史对话记录。当用户询问「之前的对话」「对话历史」「我之前的提问」时使用此工具。",
-            "input_schema": _json.dumps({
-                "type": "object",
-                "properties": {
-                    "username": {"type": "string", "description": "用户名（由系统自动填充）"},
-                    "limit": {"type": "integer", "description": "返回数量上限，默认20", "default": 20},
-                },
-            }, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 40,
-        },
-        {
-            "name": "get_conversation_messages", "display_name": "对话消息",
-            "category": "chat", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.chat_tools._get_conversation_messages",
-            "description": "获取指定对话的完整消息历史。当用户指定对话ID要求「查看那个对话」「回顾之前的聊天」时使用。",
-            "input_schema": _json.dumps({
-                "type": "object",
-                "properties": {
-                    "conversation_id": {"type": "integer", "description": "对话ID"},
-                    "limit": {"type": "integer", "description": "返回消息数量上限", "default": 20},
-                    "username": {"type": "string", "description": "当前用户名（由系统自动填充，用于所有权验证）"},
-                },
-                "required": ["conversation_id"],
-            }, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 41,
-        },
-
-        # ── 娱乐类 (1) ──
-        {
-            "name": "get_random_music", "display_name": "随机音乐",
-            "category": "entertainment", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.entertainment_tools._get_random_music",
-            "description": "随机推荐一首歌曲。从网易云音乐热歌榜中随机选取一首，返回歌曲名、歌手、封面图和试听链接。当用户说「来首歌」「随机音乐」「推荐一首歌」「放首歌」「来点音乐」时使用此工具。注意：此工具直接返回歌曲数据，调用后应基于数据向用户展示歌曲信息。",
-            "input_schema": _json.dumps({"type": "object", "properties": {}}, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 50,
-        },
-
-        # ── Crawl4ai 爬虫增强类 (2) ──
-        {
-            "name": "collect_with_crawl4ai", "display_name": "Crawl4ai智能采集",
-            "category": "crawl4ai", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.crawl4ai_tools._collect_with_crawl4ai",
-            "description": "使用 Crawl4ai 智能爬虫引擎对指定 URL 进行深度网页内容采集。替代旧的 crawl4ai_enabled 复选框功能，支持自动检测页面结构并提取正文。优先使用 crawl4ai 引擎，不可用时回退到标准采集。当用户提供 URL 并要求「用 crawl4ai 采集」「智能爬取这个网页」时使用。",
-            "input_schema": _json.dumps({
-                "type": "object",
-                "properties": {
-                    "url": {"type": "string", "description": "要采集的目标网页 URL"},
-                    "extract_mode": {"type": "string", "description": "提取模式: auto/markdown/text", "default": "auto"},
-                },
-                "required": ["url"],
-            }, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 60,
-        },
-        {
-            "name": "batch_deep_collect", "display_name": "批量深度采集",
-            "category": "crawl4ai", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.crawl4ai_tools._batch_deep_collect",
-            "description": "批量对多个 URL 进行深度内容采集。一次性提交多个链接，系统逐一采集并汇总结果。当用户需要「批量抓取这些网页」「同时采集这几个链接」时使用此工具。",
-            "input_schema": _json.dumps({
-                "type": "object",
-                "properties": {
-                    "urls": {
-                        "type": "array", "items": {"type": "string"},
-                        "description": "要采集的 URL 列表",
-                    },
-                    "extract_mode": {"type": "string", "description": "提取模式: auto/markdown/text", "default": "auto"},
-                },
-                "required": ["urls"],
-            }, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 61,
-        },
-
-        # ── 系统管理类 (2) ──
-        {
-            "name": "load_skill", "display_name": "加载技能",
-            "category": "system", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.system_tools._load_skill",
-            "description": "加载指定技能的完整执行指令。当系统提示中的「可用技能」列表里存在你需要的技能时，调用此工具获取该技能的详细 prompt 模板或 function 映射。不要猜测技能内容，始终通过此工具按需加载。",
-            "input_schema": _json.dumps({
-                "type": "object",
-                "properties": {
-                    "skill_name": {"type": "string", "description": "要加载的技能名称（必须与可用技能列表中的名称完全一致）"},
-                },
-                "required": ["skill_name"],
-            }, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 70,
-        },
-        {
-            "name": "get_system_stats", "display_name": "系统统计",
-            "category": "system", "tool_type": "builtin",
-            "handler_module": "app.mcp.builtin_tools.system_tools._get_system_stats",
-            "description": "获取系统整体统计概览，包括用户数、数据仓库记录数、数字员工数、AI模型数、瞭望源数和对话数。当用户询问「系统概况」「系统有多少数据」「整体统计」时使用此工具。",
-            "input_schema": _json.dumps({"type": "object", "properties": {}}, ensure_ascii=False),
-            "is_enabled": 1, "is_system": 1, "sort_order": 71,
-        },
-    ]
-
-    for t in tools:
-        try:
-            conn.execute(
-                "INSERT OR IGNORE INTO mcp_tools "
-                "(name, display_name, description, category, tool_type, handler_module, "
-                "input_schema, output_schema, is_enabled, is_system, sort_order, config) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, ?, '{}')",
-                (t["name"], t["display_name"], t["description"], t["category"],
-                 t["tool_type"], t["handler_module"], t["input_schema"],
-                 t["is_enabled"], t["is_system"], t["sort_order"]),
-            )
-        except Exception as e:
-            logger.warning(f"种子工具插入失败: {t['name']} — {e}")
-    logger.info(f"已插入 {len(tools)} 个 MCP 工具种子数据")
-
-
 
 def _check_crawl4ai_migrated(conn) -> bool:
     """v0.11: 检查是否所有旧 crawl4ai_enabled=1 员工已迁移到 mcp_tool_ids。

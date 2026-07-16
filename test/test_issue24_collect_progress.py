@@ -121,9 +121,12 @@ def test_collect_source_persists_result_and_filters_host_header(monkeypatch):
 
     seen = {}
 
-    def fake_fetch_and_parse(url, headers=None, parser="baidu_news"):
-        seen["url"] = url
-        seen["headers"] = headers or {}
+    def fake_fetch_and_parse_via_handler(
+        source_id, keyword="", page=0, parser="baidu_news", timeout=20
+    ):
+        seen["source_id"] = source_id
+        seen["keyword"] = keyword
+        seen["page"] = page
         seen["parser"] = parser
         return 200, 128, "<html></html>", [
             {
@@ -134,13 +137,16 @@ def test_collect_source_persists_result_and_filters_host_header(monkeypatch):
             }
         ]
 
-    monkeypatch.setattr(admin_watch, "fetch_and_parse", fake_fetch_and_parse)
+    monkeypatch.setattr(
+        admin_watch, "fetch_and_parse_via_handler", fake_fetch_and_parse_via_handler
+    )
     item = admin_watch._collect_source("人工智能", 1)
 
     assert item["ok"] is True
     assert item["news"][0]["title"] == "Issue24 采集新闻"
-    assert "Host" not in seen["headers"]
-    assert "%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD" in seen["url"]
+    assert seen["source_id"] == 1
+    assert seen["keyword"] == "人工智能"
+    assert seen["page"] == 0
     assert seen["parser"] == "baidu_news"
 
     rows, total = WatchResultRepository.get_all(keyword="人工智能")

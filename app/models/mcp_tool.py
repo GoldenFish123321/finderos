@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # 工具分类定义
 MCP_TOOL_CATEGORIES = [
     {"value": "warehouse", "name": "🔍 数据仓库", "color": "#5EA3FF"},
+    {"value": "data_warehouse", "name": "📊 数据仓库(脚本)", "color": "#3B82F6"},
     {"value": "collect", "name": "🔭 瞭望采集", "color": "#5FB878"},
     {"value": "employee", "name": "🤖 数字员工", "color": "#A855F7"},
     {"value": "model", "name": "🧠 AI 模型", "color": "#06B6D4"},
@@ -30,6 +31,7 @@ TOOL_TYPES = [
     {"value": "builtin", "name": "内置函数"},
     {"value": "api", "name": "HTTP API"},
     {"value": "crawl4ai", "name": "Crawl4ai"},
+    {"value": "script", "name": "脚本工具"},
 ]
 
 
@@ -175,27 +177,38 @@ class MCPToolRepository:
                api_params_template: str = "",
                input_schema: str = "{}", output_schema: str = "{}",
                is_enabled: int = 1, is_system: int = 0,
-               sort_order: int = 0, config: str = "{}") -> int:
+               sort_order: int = 0, config: str = "{}",
+               data_sources: str = "[]", transform_script: str = "",
+               script_enabled: int = 0) -> int:
         """创建 MCP 工具。返回新 ID 或 -1。"""
         try:
-            # 校验 JSON 字段
-            for field in [input_schema, output_schema, api_headers, config]:
+            # 校验 JSON 字段，无效 JSON 拒绝创建
+            for field_name, field_val in [
+                ("input_schema", input_schema),
+                ("output_schema", output_schema),
+                ("api_headers", api_headers),
+                ("config", config),
+                ("data_sources", data_sources),
+            ]:
                 try:
-                    json.loads(field)
+                    json.loads(field_val)
                 except (json.JSONDecodeError, TypeError):
-                    pass  # 容错
+                    logger.warning(f"创建 MCP 工具失败: {field_name} 不是有效 JSON")
+                    return -1
             with get_db() as conn:
                 cur = conn.execute(
                     "INSERT INTO mcp_tools (name, display_name, description, "
                     "category, tool_type, handler_module, api_url, api_method, "
                     "api_headers, api_params_template, input_schema, output_schema, "
-                    "is_enabled, is_system, sort_order, config) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "is_enabled, is_system, sort_order, config, "
+                    "data_sources, transform_script, script_enabled) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (name.strip(), display_name.strip(), description.strip(),
                      category, tool_type, handler_module.strip(), api_url.strip(),
                      api_method, api_headers, api_params_template,
                      input_schema, output_schema,
-                     is_enabled, is_system, sort_order, config),
+                     is_enabled, is_system, sort_order, config,
+                     data_sources, transform_script, script_enabled),
                 )
                 conn.commit()
                 return cur.lastrowid
@@ -209,7 +222,8 @@ class MCPToolRepository:
         allowed = ["name", "display_name", "description", "category", "tool_type",
                     "handler_module", "api_url", "api_method", "api_headers",
                     "api_params_template", "input_schema", "output_schema",
-                    "is_enabled", "is_system", "sort_order", "config"]
+                    "is_enabled", "is_system", "sort_order", "config",
+                    "data_sources", "transform_script", "script_enabled"]
         updates = {k: v for k, v in kwargs.items() if k in allowed}
         if not updates:
             return False

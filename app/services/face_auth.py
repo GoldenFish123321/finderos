@@ -9,6 +9,8 @@ face_auth.py — 人脸识别登录服务
 import json
 import logging
 import os
+import shutil
+import tempfile
 
 import cv2
 import numpy as np
@@ -32,7 +34,39 @@ _CASCADE_PATH = os.path.join(_BASE_DIR, "haarcascades", "haarcascade_frontalface
 
 
 # ── 全局单例（避免重复加载模型） ──
-_face_cascade = cv2.CascadeClassifier(_CASCADE_PATH)
+def _load_face_cascade():
+    """加载 Haar cascade。
+
+    OpenCV 在 Windows 上对包含中文的路径支持不稳定。项目目录位于中文路径时，
+    直接传入 _CASCADE_PATH 可能加载失败；此时复制到系统临时目录中的 ASCII
+    文件名再加载。
+    """
+    use_direct_path = True
+    try:
+        _CASCADE_PATH.encode("ascii")
+    except UnicodeEncodeError:
+        use_direct_path = False
+
+    if use_direct_path:
+        cascade = cv2.CascadeClassifier(_CASCADE_PATH)
+        if not cascade.empty():
+            return cascade
+    else:
+        cascade = cv2.CascadeClassifier()
+
+    fallback_path = os.path.join(tempfile.gettempdir(), "finderos_haarcascade_frontalface_default.xml")
+    try:
+        shutil.copyfile(_CASCADE_PATH, fallback_path)
+        cascade = cv2.CascadeClassifier(fallback_path)
+        if not cascade.empty():
+            logger.info("Face cascade loaded via temp fallback path: %s", fallback_path)
+            return cascade
+    except Exception as e:
+        logger.error("Failed to load face cascade from %s: %s", _CASCADE_PATH, e)
+    return cascade
+
+
+_face_cascade = _load_face_cascade()
 _cv2_face = getattr(cv2, "face", None)
 _recognizer = None
 if _cv2_face is not None and hasattr(_cv2_face, "LBPHFaceRecognizer_create"):

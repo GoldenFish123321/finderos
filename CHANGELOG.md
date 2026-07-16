@@ -1,12 +1,33 @@
 # Changelog
 
-## v1.8.3-beta (2026-07-16) — 账户页可选人脸组件修复
+## v1.9.0-beta (2026-07-16) — 统一接口驱动架构 v2.0
 
-- 修复 #149：缺少 OpenCV contrib 的 LBPH 模块时，访问 /account 不再返回 500。
-- 账户密码修改和账号管理保持可用，人脸注册/登录显示明确的组件不可用提示。
-- 捕获 LBPH 原生工厂初始化异常，避免损坏安装在模块导入期拖垮账户页。
-- 删除人脸数据时同步清理陈旧模型；组件恢复后可从剩余图片自动重建。
-- 新增缺少 contrib、工厂异常、模型清理和恢复重建回归测试。
+> 基于 docs/unified-api-architecture 设计文档实现。PR #143.
+
+### 新增模块
+- **local_api_client.py**: 本地接口进程内调用客户端（18个handler注册 + 外部HTTP代理 + 启动同步）
+- **local_api_registry.py**: 18个系统内置接口元数据同步（幂等）
+- **script_engine.py**: AST白名单Python沙箱（禁import/exec/eval/while/open，支持json/re）
+- **3个测试文件**: 22个单元测试
+
+### 架构变更
+- api_interfaces 表新增4列（interface_type/is_system/local_handler/response_content_type）
+- mcp_tools 表新增3列（data_sources/transform_script/script_enabled）
+- registry.py 新增 script 型工具分支（_build_script_tool + _inject_context_params）
+- main.py 启动流程调整为 注册本地handler→同步接口元数据→代理外部接口→加载MCP工具
+- 4种 tool_type 共存: builtin / api / crawl4ai / script
+
+### Bug 修复（零信任审查发现）
+- CRITICAL: admin_interface 编辑接口时静默覆盖 v2.0 新字段
+- HIGH: local_api_client URL参数缺少URL编码、script_engine type绕过ClassDef检查、补充危险dunder属性
+- MEDIUM: admin_mcp data_sources JSON校验、script_enabled类型转换、registry get_by_id异常处理
+- warehouse_tools: 补全缺失的 _get_warehouse_by_id() 函数
+
+### 文档更新
+- README.md: 新增 v2.0 版本特性行、项目结构扩展
+- docs/design.md: 新增「统一接口驱动架构」设计章节
+- docs/api.md: MCP工具分类扩展
+- docs/unified-api-architecture: 所有 Phase 标注 ✅ 已完成
 
 ## v1.8.2-beta (2026-07-16) — 采集诊断与源码编码修复
 
@@ -61,6 +82,7 @@
 - 完善聊天与数字员工的异步数据库访问、敏感内容实时预警、天气嵌套数据解析及安全媒体下载。
 - 完成移动端聊天响应式适配、企业级界面调整，并生成两版 DOCX 审计报告。
 - 增加专项回归测试、聊天页 JavaScript 语法验证，并同步 README、设计、需求及测试文档。
+- 修复旧本地库已存在 `conversation_messages` 表时未补 `is_sensitive` / `review_status` 列，导致启动建索引失败的问题。
 
 ## v1.5.3-beta (2026-07-16) — @数字员工 load_skill 工具调用修复
 

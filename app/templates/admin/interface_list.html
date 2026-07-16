@@ -50,6 +50,11 @@
                     <td>{{ iface['id'] }}</td>
                     <td>
                         <b>{{ iface['name'] }}</b>
+                        {% if iface.get('interface_type') == 'local' %}
+                        <span class="layui-badge layui-bg-green" style="margin-left: 4px;">本地</span>
+                        {% else %}
+                        <span class="layui-badge layui-bg-blue" style="margin-left: 4px;">外部API</span>
+                        {% end %}
                         {% if iface.get('description') %}
                         <div style="color:var(--text-muted);font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                              title="{{ iface.get('description','') }}">{{ iface.get('description','') }}</div>

@@ -147,9 +147,96 @@ def _resolve_handler(handler_module: str) -> Optional[Callable]:
     return None
 
 
+def _build_script_tool(row: Dict[str, Any]) -> Optional[MCPTool]:
+    """构建 script 型工具: 本地接口数据源 + 纯数据转换脚本。"""
+    import json
+    from app.services.script_engine import execute_transform_script
+    from app.services.local_api_client import call_local_api
+
+    try:
+        input_schema = json.loads(row.get("input_schema", "{}"))
+        data_sources = json.loads(row.get("data_sources", "[]"))
+    except (json.JSONDecodeError, TypeError):
+        input_schema = {}
+        data_sources = []
+
+    transform_script = row.get("transform_script", "")
+    script_enabled = int(row.get("script_enabled", 0)) if row.get("script_enabled") is not None else 0
+
+    if not data_sources:
+        logger.warning(f"script 型工具 {row['name']} 未配置 data_sources")
+        return None
+
+    async def script_handler(**kwargs) -> str:
+        # 1. 逐个调用数据源接口（全部走 local_api_client）
+        results = []
+        for ds in data_sources:
+            interface_id = ds.get("interface_id")
+            param_mapping = ds.get("param_mapping", {})
+
+            # 映射参数: tool参数名 → 接口参数名
+            mapped_params = {}
+            for tool_param, iface_param in param_mapping.items():
+                if tool_param in kwargs:
+                    mapped_params[iface_param] = kwargs[tool_param]
+            # 注入上下文变量 ($ctx.*)
+            mapped_params = _inject_context_params(mapped_params)
+
+            from app.models.api_interface import ApiInterfaceRepository
+            try:
+                iface = ApiInterfaceRepository.get_by_id(interface_id)
+            except Exception as e:
+                results.append({"success": False, "error": f"查询接口 {interface_id} 失败: {e}"})
+                continue
+            if not iface:
+                results.append({"success": False, "error": f"接口 {interface_id} 不存在"})
+                continue
+
+            handler_key = iface.get("local_handler", "")
+            if not handler_key:
+                results.append({"success": False, "error": f"接口 {interface_id} 无 local_handler"})
+                continue
+
+            result = await call_local_api(handler_key, mapped_params)
+            results.append(result)
+
+        # 2. 如果启用脚本，执行纯数据转换（返回 str）
+        if script_enabled and transform_script.strip():
+            return execute_transform_script(transform_script, results)
+
+        # 3. 无脚本时，透传第一个数据源的 data 字段的字符串表示
+        first = results[0] if results else {}
+        data = first.get("data", first)
+        return str(data) if not isinstance(data, str) else data
+
+    return MCPTool(
+        name=row["name"],
+        description=row.get("description", ""),
+        input_schema=input_schema,
+        handler=script_handler,
+    )
+
+
+def _inject_context_params(params: dict) -> dict:
+    """注入上下文变量。将 $ctx.username 等占位符替换为当前会话上下文值。"""
+    from app.mcp.client import _mcp_context_var
+    ctx = _mcp_context_var.get() or {}
+    resolved = {}
+    for key, value in params.items():
+        if isinstance(value, str) and value.startswith("$ctx."):
+            ctx_key = value[5:]  # 去掉 '$ctx.' 前缀
+            resolved[key] = ctx.get(ctx_key, "")
+        else:
+            resolved[key] = value
+    return resolved
+
+
 def _build_tool_from_db_row(row: Dict[str, Any]) -> Optional[MCPTool]:
     """从数据库行构建 MCPTool 实例。"""
     tool_type = row.get("tool_type", "builtin")
+
+    if tool_type == "script":
+        return _build_script_tool(row)
 
     if tool_type == "builtin":
         handler = _resolve_handler(row.get("handler_module", ""))
@@ -196,20 +283,28 @@ def _build_tool_from_db_row(row: Dict[str, Any]) -> Optional[MCPTool]:
                     f"{{{key}}}", urllib.parse.quote(str(value), safe="")
                 )
 
-            # 对于 GET 请求，剩余参数作为 query string
+            # 规范化 HTTP 方法（兼容小写输入）
+            normalized_method = api_method.upper()
+
+            # 剩余参数：GET/DELETE 等追加到 URL；POST/PUT/PATCH 编码为 body
             query_params = {k: v for k, v in kwargs.items() if f"{{{k}}}" not in api_url}
-            if query_params and api_method.upper() == "GET":
-                qs = urllib.parse.urlencode(query_params)
-                final_url += ("&" if "?" in final_url else "?") + qs
+            body_params_methods = {"POST", "PUT", "PATCH"}
+            if query_params:
+                if normalized_method in body_params_methods:
+                    data = json.dumps(query_params).encode("utf-8")
+                    api_headers["Content-Type"] = "application/json"
+                else:
+                    # GET / DELETE / HEAD / OPTIONS：追加到 URL
+                    qs = urllib.parse.urlencode(query_params)
+                    final_url += ("&" if "?" in final_url else "?") + qs
+                    data = None
+            else:
+                data = None
 
             def _sync_call():
                 try:
-                    data = None
-                    if api_method.upper() == "POST" and query_params:
-                        data = json.dumps(query_params).encode("utf-8")
-                        api_headers["Content-Type"] = "application/json"
                     response = safe_http_request(
-                        final_url, method=api_method, headers=api_headers,
+                        final_url, method=normalized_method, headers=api_headers,
                         body=data, timeout=30, max_bytes=1024 * 1024,
                     )
                     if 300 <= response.status < 400:

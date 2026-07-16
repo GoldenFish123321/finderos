@@ -1,4 +1,4 @@
-# 瞭望与问数系统 (DataFinderAgentOS) v1.5.1-beta (merged)
+# 瞭望与问数系统 (DataFinderAgentOS) v1.6.0-beta
 # =========================================
 # 核心依赖
 tornado>=6.4
@@ -9,11 +9,13 @@ cryptography>=43.0
 # HTTP 压缩：Brotli 解压支持（百度等主流网站使用）
 brotli>=1.1
 
-# 可选：AI 爬虫组件（深度采集增强）
+# AI 爬虫组件（深度采集增强；不可用时自动回退标准采集）
 crawl4ai>=0.4
 
 # 人脸识别：OpenCV 人脸检测与 LBPH 识别
+# 注意：必须使用 contrib 版，普通 opencv-python 不包含 cv2.face.LBPHFaceRecognizer_create
 opencv-contrib-python>=4.9
+numpy>=1.26
 
 # TTS：Edge TTS 语音合成（Microsoft Edge 免费 TTS 服务）
 edge-tts>=6.1
@@ -26,9 +28,10 @@ pytest-asyncio>=1.0
 # aiohttp>=3.9
 
 # 说明：
-# - 项目主要使用 Python 标准库（sqlite3, urllib, hashlib, ssl 等）
-# - tornado 是唯一的必须外部依赖
+# - 项目主体仍优先使用 Python 标准库（sqlite3, urllib, hashlib, ssl 等）
+# - tornado 是 Web 框架依赖；cryptography 用于 API Key 加密
 # - cryptography 用于 Fernet 对称加密 API Key 存储
+# - opencv-contrib-python + numpy 用于人脸登录/账户页人脸状态检测
 # - edge-tts 用于 AI 回复语音合成播报（Microsoft Edge 免费 TTS）
-# - AI 模型对话通过 urllib.request 发起 HTTP 请求（纯标准库）
-# - 瞭望采集同样使用 urllib（零第三方爬虫依赖）
+# - crawl4ai 用于深度采集增强，失败时会回退到内置解析流程
+# - AI 模型对话和普通瞭望采集通过 urllib.request 发起 HTTP 请求

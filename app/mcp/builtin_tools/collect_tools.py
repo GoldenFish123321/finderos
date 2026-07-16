@@ -14,10 +14,10 @@ from typing import Any, Dict, List, Optional
 
 
 async def _collect_web_data(keyword: str, source_ids: Optional[List[int]] = None) -> Dict[str, Any]:
-    """执行全网瞭望数据采集（异步执行，在线程池中运行）。"""
+    """执行全网瞭望数据采集（通过统一出口）。"""
     from app.models.watch_source import WatchSourceRepository
     from app.models.watch_result import WatchResultRepository
-    from app.services.collector import fetch_and_parse
+    from app.services.collector import fetch_and_parse_via_handler
 
     if source_ids:
         sources = []
@@ -35,23 +35,11 @@ async def _collect_web_data(keyword: str, source_ids: Optional[List[int]] = None
         all_news = []
         for source in sources:
             url_template = source["url_template"]
-            encoded_kw = urllib.parse.quote(keyword, encoding="utf-8")
-            request_url = url_template.replace("{keyword}", encoded_kw).replace("{page}", "0")
+            parser = "sogou_news" if "sogou" in url_template.lower() else "baidu_news"
+            request_url = url_template.replace("{keyword}", urllib.parse.quote(keyword, encoding="utf-8")).replace("{page}", "0")
 
-            raw_headers = WatchSourceRepository.get_headers(source["id"])
-            from app.utils.security import has_crlf
-            headers = {}
-            for k, v in raw_headers.items():
-                if k.lower() in ("accept-encoding", "host", "sec-fetch-dest", "sec-fetch-mode",
-                                 "sec-fetch-site", "sec-fetch-user", "connection", "cache-control"):
-                    continue
-                if has_crlf(k) or has_crlf(v):
-                    continue
-                headers[k] = v
-
-            parser = "sogou_news" if "sogou" in request_url.lower() else "baidu_news"
-            status, size, text, parsed_news = fetch_and_parse(
-                request_url, headers=headers, parser=parser, timeout=15
+            status, size, text, parsed_news = fetch_and_parse_via_handler(
+                source_id=source["id"], keyword=keyword, page=0, parser=parser,
             )
 
             for news in parsed_news:

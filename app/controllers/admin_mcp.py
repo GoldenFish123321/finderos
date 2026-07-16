@@ -96,6 +96,9 @@ class MCPToolFormHandler(AdminBaseHandler):
             title="编辑 MCP 工具" if tool else "新增 MCP 工具",
             username=self.current_user,
             tool=tool,
+            data_sources=tool.get("data_sources", "[]") if tool else "[]",
+            transform_script=tool.get("transform_script", "") if tool else "",
+            script_enabled=tool.get("script_enabled", "0") if tool else "0",
             categories=MCP_TOOL_CATEGORIES,
             tool_types=TOOL_TYPES,
         )
@@ -115,8 +118,17 @@ class MCPToolFormHandler(AdminBaseHandler):
         api_params_template = self.get_body_argument("api_params_template", "").strip()
         input_schema = self.get_body_argument("input_schema", "{}").strip()
         output_schema = self.get_body_argument("output_schema", "{}").strip()
-        is_enabled = int(self.get_body_argument("is_enabled", "1"))
-        sort_order = int(self.get_body_argument("sort_order", "0"))
+        try:
+            is_enabled = int(self.get_body_argument("is_enabled", "1"))
+        except (ValueError, TypeError):
+            is_enabled = 1
+        try:
+            sort_order = int(self.get_body_argument("sort_order", "0"))
+        except (ValueError, TypeError):
+            sort_order = 0
+        data_sources = self.get_body_argument("data_sources", "[]")
+        transform_script = self.get_body_argument("transform_script", "")
+        script_enabled = 1 if self.get_body_argument("script_enabled", "0") == "1" else 0
 
         if not name or not display_name:
             self.write('<script>alert("工具名称和显示名称不能为空");window.history.back();</script>')
@@ -131,14 +143,28 @@ class MCPToolFormHandler(AdminBaseHandler):
                 self.write(f'<script>alert("{field_name} JSON 格式无效");window.history.back();</script>')
                 return
 
+        # 校验 data_sources JSON 格式
+        try:
+            json.loads(data_sources)
+        except (json.JSONDecodeError, TypeError):
+            self.write('<script>alert("数据源格式错误：必须是有效的 JSON 数组");window.history.back();</script>')
+            return
+
         if tool_id:
+            try:
+                tool_id_int = int(tool_id)
+            except (ValueError, TypeError):
+                self.write('<script>alert("无效的工具ID");window.history.back();</script>')
+                return
             success = MCPToolRepository.update(
-                int(tool_id), name=name, display_name=display_name,
+                tool_id_int, name=name, display_name=display_name,
                 description=description, category=category, tool_type=tool_type,
                 handler_module=handler_module, api_url=api_url, api_method=api_method,
                 api_headers=api_headers, api_params_template=api_params_template,
                 input_schema=input_schema, output_schema=output_schema,
                 is_enabled=is_enabled, sort_order=sort_order,
+                data_sources=data_sources, transform_script=transform_script,
+                script_enabled=script_enabled,
             )
             if success:
                 write_audit_log("MCP_TOOL_UPDATE", self.current_user,
@@ -154,6 +180,8 @@ class MCPToolFormHandler(AdminBaseHandler):
                 api_params_template=api_params_template,
                 input_schema=input_schema, output_schema=output_schema,
                 is_enabled=is_enabled, sort_order=sort_order,
+                data_sources=data_sources, transform_script=transform_script,
+                script_enabled=script_enabled,
             )
             if new_id > 0:
                 write_audit_log("MCP_TOOL_CREATE", self.current_user,

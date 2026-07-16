@@ -220,6 +220,36 @@ def test_collector_decompression_fallbacks_are_logged(
         assert any(expected in message for message in messages)
 
 
+@pytest.mark.asyncio
+async def test_collector_rejects_unresolved_url_template_before_network(monkeypatch):
+    from app.models.watch_source import WatchSourceRepository
+    from app.services.collector import _collector_fetch_handler
+
+    monkeypatch.setattr(
+        WatchSourceRepository,
+        "get_by_id",
+        lambda source_id: {
+            "id": source_id,
+            "is_enabled": 1,
+            "url_template": "https://example.com/{unknown}",
+            "request_headers": "{}",
+        },
+    )
+    network_called = False
+
+    def fail_if_called(*args, **kwargs):
+        nonlocal network_called
+        network_called = True
+        raise AssertionError("network must not be called")
+
+    monkeypatch.setattr("app.utils.safe_http.safe_http_request", fail_if_called)
+    result = await _collector_fetch_handler(1, keyword="test", page=0)
+
+    assert result["success"] is False
+    assert "未解析" in result["error"]
+    assert network_called is False
+
+
 def test_docx_audit_deliverables_are_valid():
     for name in ("audit_report_v1.docx", "audit_report_v2.docx"):
         path = os.path.join(ROOT, "docs", name)

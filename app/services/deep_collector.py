@@ -27,7 +27,8 @@ from app.utils.security import validate_url_safe
 try:
     import crawl4ai  # noqa: F401
     _HAS_CRAWL4AI = True
-except ImportError:
+except Exception as e:
+    logging.getLogger(__name__).warning("crawl4ai unavailable, fallback to standard collector: %s", e)
     _HAS_CRAWL4AI = False
 
 logger = logging.getLogger(__name__)
@@ -359,3 +360,62 @@ def deep_fetch_and_save(warehouse_id: int, link: str) -> Tuple[bool, str]:
         return True, f"深度采集完成（提取 {size_kb:.1f} KB 正文内容）"
     else:
         return False, "保存深度采集内容失败"
+
+
+# ═══════════════════════════════════════════════════════════════
+# 统一对外出口 handler（方案B）
+# ═══════════════════════════════════════════════════════════════
+
+async def _deep_fetch_handler(url: str, timeout: int = 30):
+    """collector/deep-fetch handler — 统一出口获取任意 URL HTML。
+
+    内部调用 safe_http_request → 解压 → 编码检测 → 返回 HTML。
+    """
+    from app.utils.safe_http import safe_http_request, SafeHttpError
+
+    try:
+        # SSRF 校验
+        is_safe, reason, _ = validate_url_safe(url)
+        if not is_safe:
+            return {"success": False, "error": f"SSRF 拦截: {reason}"}
+
+        resp = safe_http_request(
+            url=url, headers=_BASE_HEADERS, timeout=timeout,
+            max_bytes=5 * 1024 * 1024,
+        )
+        if 300 <= resp.status < 400:
+            return {"success": False, "error": "采集目标不允许重定向"}
+
+        # 解压
+        body = _decompress(resp.body, resp.headers.get("Content-Encoding", ""))
+
+        # 编码检测
+        html = ""
+        detected_charset = None
+        for charset_try in ["utf-8", "gbk", "gb2312", "gb18030", "latin-1"]:
+            try:
+                body.decode(charset_try, errors="strict")
+                detected_charset = charset_try
+                break
+            except (UnicodeDecodeError, LookupError):
+                continue
+        if detected_charset:
+            html = body.decode(detected_charset, errors="replace")
+        else:
+            html = body.decode("utf-8", errors="replace")
+
+        return {"success": True, "data": {"html": html, "status": resp.status, "url": url}}
+    except SafeHttpError as e:
+        return {"success": False, "error": f"安全HTTP错误: {e}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ── 自注册到 local_api_client（避免循环 import）──
+def _register_deep_collector_handlers():
+    from app.services.local_api_client import register_local_handler
+    register_local_handler("collector/deep-fetch", _deep_fetch_handler)
+
+
+# 模块加载时自动注册
+_register_deep_collector_handlers()

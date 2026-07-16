@@ -102,9 +102,9 @@ def test_issues_64_66_fts_queries_escape_quotes():
 
 
 def test_issues_69_71_url_templates_are_rejected_early():
-    scheduler = _read("app/services/scheduler.py")
+    collector = _read("app/services/collector.py")
     controller = _read("app/controllers/admin_watch_source.py")
-    assert 'if "{" in request_url or "}" in request_url' in scheduler
+    assert 'if "{" in url or "}" in url' in collector
     assert '{"http", "https"}' in controller
 
 
