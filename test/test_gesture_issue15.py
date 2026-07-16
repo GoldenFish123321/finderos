@@ -119,6 +119,8 @@ class TestGestureTemplate:
         assert 'id="gesture-canvas"' in content, "缺少 gesture-canvas"
         assert 'id="btn-camera"' in content, "缺少 btn-camera"
         assert 'id="gesture-hint"' in content, "缺少 gesture-hint"
+        assert 'id="btn-gesture-help"' in content, "缺少手势说明入口"
+        assert 'id="gesture-guide"' in content, "缺少手势说明区域"
 
     def test_camera_button_in_header(self):
         """摄像头按钮在聊天头部区域"""
@@ -140,6 +142,16 @@ class TestGestureTemplate:
             "握拳消息应包含具体查询内容"
         assert "获取最新新闻" in content or "@新闻聚合 获取" in content, \
             "手掌消息应包含具体查询内容"
+
+    def test_gesture_help_documents_mapping(self):
+        """用户侧手势说明应明确展示手势到数字员工的映射。"""
+        with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        assert "showGestureHelp" in content, "缺少手势说明弹窗函数"
+        assert "手势识别说明" in content, "缺少手势说明标题"
+        for expected in ("剪刀手", "@天气", "握拳", "@随机音乐", "手掌", "@新闻聚合"):
+            assert expected in content, f"手势说明缺少: {expected}"
 
     def test_streaming_guard(self):
         """手势发送消息时有 isStreaming 保护"""
@@ -171,6 +183,8 @@ class TestGestureTemplate:
             "gesture-container",
             "gesture-overlay",
             "gesture-hint",
+            "gesture-guide",
+            "gesture-guide-item",
             "btn-camera",
             "transform: scaleX(-1)",  # 镜像翻转
         ]

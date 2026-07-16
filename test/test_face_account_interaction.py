@@ -1,0 +1,130 @@
+from pathlib import Path
+import re
+import shutil
+import subprocess
+
+import pytest
+
+
+ACCOUNT_TEMPLATE = Path("app/templates/user_account.html")
+LOGIN_TEMPLATE = Path("app/templates/login.html")
+AUTH_CONTROLLER = Path("app/controllers/auth.py")
+
+
+def _account_template() -> str:
+    return ACCOUNT_TEMPLATE.read_text(encoding="utf-8")
+
+
+def _login_template() -> str:
+    return LOGIN_TEMPLATE.read_text(encoding="utf-8")
+
+
+def _auth_controller() -> str:
+    return AUTH_CONTROLLER.read_text(encoding="utf-8")
+
+
+def test_face_registration_requires_user_confirmation_after_capture():
+    """账户页人脸注册应先拍照预览，再由用户确认使用后提交。"""
+    html = _account_template()
+
+    assert "📸 拍照预览" in html
+    assert "✅ 确认使用" in html
+    assert "🔄 重新拍照" in html
+    assert "facePendingBlob" in html
+    assert "function confirmFaceRegistration()" in html
+    assert "function retakeFace()" in html
+
+    capture_start = html.index("function captureFace()")
+    confirm_start = html.index("function confirmFaceRegistration()")
+    capture_body = html[capture_start:confirm_start]
+    confirm_body = html[confirm_start:]
+
+    assert "fetch('/account'" not in capture_body, "拍照预览阶段不应直接提交注册"
+    assert "facePendingBlob = blob" in capture_body
+    assert "face-confirm-actions" in capture_body
+    assert "fetch('/account'" in confirm_body, "确认使用后才应提交注册请求"
+    assert "formData.append('face_image', facePendingBlob" in confirm_body
+
+
+def test_face_registration_stops_camera_after_preview_and_before_unload():
+    """拍照预览后和离开页面时均应释放摄像头。"""
+    html = _account_template()
+    assert "function stopFaceCamera()" in html
+    assert "stopFaceCamera();" in html
+    assert "beforeunload" in html
+
+
+
+def test_face_toggle_is_independent_from_face_registration():
+    """启用开关和人脸录入是独立状态：未录入也能先启用，登录时再提示缺少人脸。"""
+    html = _account_template()
+    match = re.search(r'<input[^>]+id="face-toggle"[^>]*>', html, flags=re.S)
+    assert match, "缺少人脸登录开关"
+    assert "disabled' if not face_registered" not in match.group(0)
+    assert "data-face-registered" in match.group(0)
+    assert "FACE_REGISTERED" in html
+    assert "localStorage" not in html, "人脸登录启用状态不能只保存在浏览器本地"
+    assert "启用开关以后端持久化状态为准" in html
+    assert "已启用；尚未录入人脸信息" in html
+
+
+def test_face_toggle_requires_server_confirmation_and_persistence():
+    """勾选确认应提交后端持久化；登录校验也必须以后端状态为准。"""
+    account_html = _account_template()
+    login_html = _login_template()
+    auth_py = _auth_controller()
+
+    assert "formData.append('action', 'face_toggle')" in account_html
+    assert "formData.append('enabled', checked ? '1' : '0')" in account_html
+    assert "fetch('/account'" in account_html
+    assert "FACE_ENABLED" in account_html
+    assert "启用开关以后端持久化状态为准" in account_html
+
+    assert "face_login_enabled" not in login_html
+    assert "localStorage" not in login_html
+    assert "UserRepository.is_face_login_enabled(username)" in auth_py
+    assert 'get_body_argument("face_login_enabled"' not in auth_py
+    assert auth_py.index("UserRepository.is_face_login_enabled(username)") < auth_py.index("face_has_image(username)")
+    assert 'action == "face_toggle"' in auth_py
+    assert "set_face_login_enabled" in auth_py
+    assert "请先注册人脸数据" not in auth_py
+    assert "set_face_login_enabled(self.current_user, False)" not in auth_py
+    assert 'error=self.get_query_argument("error", "")' in auth_py
+
+
+
+def test_face_login_handler_has_no_rate_limit_for_manual_retries():
+    """人脸登录允许人工反复测试，不应触发“操作过于频繁”限制。"""
+    auth_py = _auth_controller()
+    start = auth_py.index("class FaceLoginHandler")
+    end = auth_py.index("class UserAccountHandler")
+    face_login_source = auth_py[start:end]
+
+    assert "login_limiter.check" not in face_login_source
+    assert "login_limiter.record_failure" not in face_login_source
+    assert "操作过于频繁" not in face_login_source
+
+def test_user_account_inline_javascript_has_valid_syntax(tmp_path):
+    """账户页人脸交互脚本必须保持可解析。"""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is required for JavaScript syntax validation")
+
+    rendered = _account_template()
+    rendered = rendered.replace("{{ 'true' if face_registered else 'false' }}", "false")
+    rendered = rendered.replace("{{ 'true' if face_enabled else 'false' }}", "false")
+    scripts = re.findall(r"<script(?:[^>]*)>(.*?)</script>", rendered, flags=re.S)
+    assert any("function confirmFaceRegistration()" in script for script in scripts)
+
+    for index, script in enumerate(scripts):
+        if not script.strip():
+            continue
+        script_path = tmp_path / f"user_account_inline_{index}.js"
+        script_path.write_text(script, encoding="utf-8")
+        result = subprocess.run(
+            [node, "--check", str(script_path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr

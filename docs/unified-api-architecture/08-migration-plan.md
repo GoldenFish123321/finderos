@@ -33,7 +33,7 @@
 
 | 步骤 | 内容 |
 |------|------|
-| 3.1 | 实现 `script_engine.py`：收紧的 AST 白名单校验（禁 import）+ 受限执行（返回 str）+ 超时保护 |
+| 3.1 | 实现 `script_engine.py`：收紧的 AST 白名单校验（禁 import）+ 受限执行（返回 str，可以是纯文本或 JSON 字符串）+ 超时保护 |
 | 3.2 | 实现脚本在线测试 API（`POST /admin/mcp/tool/test-script`） |
 | 3.3 | 预置脚本模板（天气格式化、数据概览、音乐推荐等） |
 

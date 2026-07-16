@@ -53,7 +53,7 @@ def _build_script_tool(row: Dict[str, Any]) -> Optional[MCPTool]:
     - data_sources 中的 interface_id 只能指向 interface_type='local' 的记录
       （external 接口已在启动时自动包装为虚拟 local handler，见 02-local-api-layer.md §4.5）
     - 所有数据源统一通过 call_local_api() 调用，不区分内外
-    - 脚本返回字符串，直接作为 MCP text content
+    - 脚本返回字符串（可以是纯文本或 JSON 字符串），直接作为 MCP text content
     """
     import json
     from app.services.script_engine import execute_transform_script
@@ -104,7 +104,7 @@ def _build_script_tool(row: Dict[str, Any]) -> Optional[MCPTool]:
             result = await call_local_api(handler_key, mapped_params)
             results.append(result)
 
-        # 2. 如果启用脚本，执行纯数据转换（返回 str）
+        # 2. 如果启用脚本，执行纯数据转换（返回 str，可以是纯文本或 JSON 字符串）
         if script_enabled and transform_script.strip():
             return execute_transform_script(transform_script, results)
 
@@ -117,7 +117,7 @@ def _build_script_tool(row: Dict[str, Any]) -> Optional[MCPTool]:
         name=row["name"],
         description=row.get("description", ""),
         input_schema=input_schema,
-        handler=script_handler,  # 返回 str，MCPServer.call_tool 自动包装为 text content
+        handler=script_handler,  # 返回 str（纯文本或 JSON 字符串），MCPServer.call_tool 自动包装为 text content
     )
 
 

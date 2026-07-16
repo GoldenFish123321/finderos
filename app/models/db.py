@@ -346,8 +346,11 @@ def init_db():
             if "face_descriptor" not in cols:
                 conn.execute("ALTER TABLE users ADD COLUMN face_descriptor TEXT DEFAULT NULL")
                 logger.info("Database migration: added face_descriptor column to users")
+            if "face_login_enabled" not in cols:
+                conn.execute("ALTER TABLE users ADD COLUMN face_login_enabled INTEGER DEFAULT 0")
+                logger.info("Database migration: added face_login_enabled column to users")
         except Exception as e:
-            logger.error(f"Database migration failed (users.face_descriptor): {e}", exc_info=True)
+            logger.error(f"Database migration failed (users.face fields): {e}", exc_info=True)
 
         # 对话管理表 (v0.5 新增 — 多轮对话支持)
 
@@ -1545,13 +1548,16 @@ def _seed_script_tools():
                     "        loc = w.get('nearest_area', [{}])[0]\n"
                     "        city = loc.get('areaName', [{}])[0].get('value', '未知')\n"
                     "        country = loc.get('country', [{}])[0].get('value', '')\n"
-                    "        temp = cur.get('temp_C', '?')\n"
-                    "        desc = cur.get('weatherDesc', [{}])[0].get('value', '未知')\n"
-                    "        humidity = cur.get('humidity', '?')\n"
-                    "        wind = cur.get('winddir16Point', '?') + ' ' + cur.get('windspeedKmph', '?') + 'km/h'\n"
-                    "        return f'{city}, {country} 当前天气: {desc}, 温度 {temp}°C, 湿度 {humidity}%, 风向风速 {wind}'\n"
+                    "        return json.dumps({\n"
+                    '            "city": city,\n'
+                    '            "country": country,\n'
+                    '            "weather": cur.get(\'weatherDesc\', [{}])[0].get(\'value\', \'\'),\n'
+                    '            "temperature": cur.get(\'temp_C\', \'\'),\n'
+                    '            "humidity": cur.get(\'humidity\', \'\'),\n'
+                    '            "wind": f"{cur.get(\'winddir16Point\', \'\')} {cur.get(\'windspeedKmph\', \'\')}km/h"\n'
+                    "        }, ensure_ascii=False)\n"
                     "    except Exception as e:\n"
-                    "        return f'天气数据解析失败: {e}, 原始数据: {json.dumps(data_sources)[:500]}'"
+                    '        return json.dumps({"error": str(e)}, ensure_ascii=False)'
                 ),
                 "script_enabled": 1,
                 "is_enabled": 1,
@@ -1579,10 +1585,16 @@ def _seed_script_tools():
                     "        songs = data_sources[0].get('data', [])\n"
                     "        if isinstance(songs, list) and len(songs) > 0:\n"
                     "            song = random.choice(songs)\n"
-                    "            return f'🎵 {song.get(\"name\",\"?\")} — {song.get(\"artist\",\"?\")}'\n"
-                    "        return '未找到歌曲'\n"
+                    "            return json.dumps({\n"
+                    '                "name": song.get("name", ""),\n'
+                    '                "artist": song.get("artist", ""),\n'
+                    '                "cover": song.get("pic", ""),\n'
+                    '                "url": song.get("url", ""),\n'
+                    '                "source": "网易云音乐热歌榜"\n'
+                    "            }, ensure_ascii=False)\n"
+                    '        return json.dumps({"error": "未找到歌曲"}, ensure_ascii=False)\n'
                     "    except Exception as e:\n"
-                    "        return f'音乐数据解析失败: {e}'"
+                    '        return json.dumps({"error": str(e)}, ensure_ascii=False)'
                 ),
                 "script_enabled": 1,
                 "is_enabled": 1,

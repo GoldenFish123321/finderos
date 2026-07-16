@@ -101,12 +101,13 @@ def test_missing_model_is_rebuilt_when_contrib_becomes_available(
             pass
 
     recognizer = _Recognizer()
+    fake_image = SimpleNamespace(shape=(100, 100))
     cv2_module = _Cv2WithoutFace()
     cv2_module.face = SimpleNamespace(
         LBPHFaceRecognizer_create=lambda: recognizer
     )
     cv2_module.IMREAD_GRAYSCALE = 0
-    cv2_module.imread = lambda path, mode: object()
+    cv2_module.imdecode = lambda data, mode: fake_image
     monkeypatch.setitem(sys.modules, "cv2", cv2_module)
     monkeypatch.setitem(
         sys.modules,
@@ -115,6 +116,7 @@ def test_missing_model_is_rebuilt_when_contrib_becomes_available(
             uint8=object(),
             int32=object(),
             array=lambda values, dtype=None: values,
+            fromfile=lambda path, dtype=None: SimpleNamespace(size=1),
         ),
     )
     module = _load_face_auth("face_auth_rebuild_model")

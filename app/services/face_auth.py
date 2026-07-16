@@ -28,6 +28,9 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 _MODEL_PATH = os.path.join(UPLOAD_DIR, "face_model.yml")
 _LABELS_PATH = os.path.join(UPLOAD_DIR, "face_labels.json")
+_FACE_SIZE = (100, 100)
+_FACE_MARGIN_RATIO = 0.20
+_FACE_CONFIDENCE_THRESHOLD = float(os.environ.get("FACE_CONFIDENCE_THRESHOLD", "105"))
 
 # Haar cascade 文件路径（本地预下载）
 _CASCADE_PATH = os.path.join(_BASE_DIR, "haarcascades", "haarcascade_frontalface_default.xml")
@@ -77,13 +80,137 @@ if _cv2_face is not None and hasattr(_cv2_face, "LBPHFaceRecognizer_create"):
 _model_loaded = False
 
 
-def is_face_recognition_available() -> bool:
-    """Return whether the installed OpenCV build provides usable LBPH support."""
+def is_face_detection_available() -> bool:
+    """Return whether the Haar cascade required for face detection is usable."""
     return (
-        _recognizer is not None
-        and _face_cascade is not None
+        _face_cascade is not None
         and not _face_cascade.empty()
+        and hasattr(cv2, "imdecode")
     )
+
+
+def is_face_recognition_available() -> bool:
+    """Return whether detection and the LBPH recognizer are both usable."""
+    return _recognizer is not None and is_face_detection_available()
+
+
+def _normalize_face(face_gray):
+    """Normalize a cropped grayscale face for LBPH training and prediction."""
+    if face_gray is None or face_gray.size == 0:
+        return None
+    if len(face_gray.shape) == 3:
+        face_gray = cv2.cvtColor(face_gray, cv2.COLOR_BGR2GRAY)
+    face = cv2.resize(face_gray, _FACE_SIZE, interpolation=cv2.INTER_AREA)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    face = clahe.apply(face)
+    face = cv2.GaussianBlur(face, (3, 3), 0)
+    return face
+
+
+def _crop_face_with_margin(gray, rect):
+    """Crop the detected face with margin to reduce Haar box jitter."""
+    x, y, w, h = [int(v) for v in rect]
+    margin_x = int(w * _FACE_MARGIN_RATIO)
+    margin_y = int(h * _FACE_MARGIN_RATIO)
+    x1 = max(0, x - margin_x)
+    y1 = max(0, y - margin_y)
+    x2 = min(gray.shape[1], x + w + margin_x)
+    y2 = min(gray.shape[0], y + h + margin_y)
+    return gray[y1:y2, x1:x2]
+
+
+def _detect_largest_face(gray):
+    """Detect the largest likely face using a few conservative fallbacks."""
+    if _face_cascade.empty():
+        logger.error("Face cascade is empty; cannot detect faces")
+        return None
+    detect_gray = cv2.equalizeHist(gray)
+    configs = (
+        (1.1, 5, (80, 80)),
+        (1.08, 4, (60, 60)),
+        (1.05, 3, (50, 50)),
+    )
+    for scale, neighbors, min_size in configs:
+        faces = _face_cascade.detectMultiScale(
+            detect_gray,
+            scaleFactor=scale,
+            minNeighbors=neighbors,
+            minSize=min_size,
+        )
+        if len(faces) > 0:
+            return max(faces, key=lambda item: item[2] * item[3])
+    return None
+
+
+def _temp_ascii_path(filename: str) -> str:
+    """Return an ASCII temp path for OpenCV APIs that dislike Unicode paths."""
+    safe_name = "".join(ch if ch.isascii() and (ch.isalnum() or ch in "._-") else "_" for ch in filename)
+    return os.path.join(tempfile.gettempdir(), f"finderos_{os.getpid()}_{safe_name}")
+
+
+def _read_image_file(path: str, flags):
+    """Unicode-safe image read for Windows paths containing non-ASCII chars."""
+    try:
+        data = np.fromfile(path, dtype=np.uint8)
+        if data.size == 0:
+            return None
+        return cv2.imdecode(data, flags)
+    except Exception as e:
+        logger.warning("Failed to read image from %s: %s", path, e)
+        return None
+
+
+def _write_image_file(path: str, image) -> bool:
+    """Unicode-safe image write; unlike cv2.imwrite, works under Chinese paths."""
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        ext = os.path.splitext(path)[1] or ".jpg"
+        ok, encoded = cv2.imencode(ext, image)
+        if not ok:
+            logger.error("Failed to encode face image for %s", path)
+            return False
+        encoded.tofile(path)
+        return os.path.exists(path) and os.path.getsize(path) > 0
+    except Exception as e:
+        logger.error("Failed to write face image to %s: %s", path, e)
+        return False
+
+
+def _write_recognizer_model(path: str) -> bool:
+    """Unicode-safe LBPH model write via an ASCII temporary path."""
+    tmp_path = _temp_ascii_path("face_model.yml")
+    try:
+        _recognizer.write(tmp_path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        shutil.copyfile(tmp_path, path)
+        return os.path.exists(path) and os.path.getsize(path) > 0
+    except Exception as e:
+        logger.error("Failed to write face model to %s: %s", path, e)
+        return False
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
+
+
+def _read_recognizer_model(path: str) -> bool:
+    """Unicode-safe LBPH model read via an ASCII temporary path."""
+    tmp_path = _temp_ascii_path("face_model_read.yml")
+    try:
+        shutil.copyfile(path, tmp_path)
+        _recognizer.read(tmp_path)
+        return True
+    except Exception as e:
+        logger.warning("Failed to read face model from %s: %s", path, e)
+        return False
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
 
 
 def _ensure_model():
@@ -95,12 +222,9 @@ def _ensure_model():
         _save_model()
         return
     if not _model_loaded and os.path.exists(_MODEL_PATH):
-        try:
-            _recognizer.read(_MODEL_PATH)
+        if _read_recognizer_model(_MODEL_PATH):
             _model_loaded = True
             logger.info("Face recognition model loaded from %s", _MODEL_PATH)
-        except Exception as e:
-            logger.warning("Failed to load face model: %s", e)
 
 
 def _save_model():
@@ -110,7 +234,7 @@ def _save_model():
         logger.warning("OpenCV contrib face module is unavailable; face model was not trained")
         return
     if not os.path.exists(_LABELS_PATH):
-        return
+        return False
 
     with open(_LABELS_PATH, "r", encoding="utf-8") as f:
         label_map = json.load(f)
@@ -121,8 +245,10 @@ def _save_model():
     new_map = {}
     for username in label_map:
         face_path = os.path.join(UPLOAD_DIR, f"{username}.jpg")
-        img = cv2.imread(face_path, cv2.IMREAD_GRAYSCALE)
+        img = _read_image_file(face_path, cv2.IMREAD_GRAYSCALE)
         if img is not None:
+            if img.shape[:2] != _FACE_SIZE:
+                img = cv2.resize(img, _FACE_SIZE, interpolation=cv2.INTER_AREA)
             faces.append(img)
             labels.append(lid)
             new_map[username] = lid
@@ -130,11 +256,14 @@ def _save_model():
 
     if faces:
         _recognizer.train(faces, np.array(labels, dtype=np.int32))
-        _recognizer.write(_MODEL_PATH)
+        if not _write_recognizer_model(_MODEL_PATH):
+            _model_loaded = False
+            return False
         with open(_LABELS_PATH, "w", encoding="utf-8") as f:
             json.dump(new_map, f)
         _model_loaded = True
         logger.info("Face model retrained with %d samples", len(faces))
+        return True
     else:
         # 没有人脸数据时删除模型文件
         if os.path.exists(_MODEL_PATH):
@@ -142,6 +271,7 @@ def _save_model():
         _model_loaded = False
         with open(_LABELS_PATH, "w", encoding="utf-8") as f:
             json.dump({}, f)
+        return False
 
 
 def detect_face(image_bytes: bytes):
@@ -153,24 +283,26 @@ def detect_face(image_bytes: bytes):
     Returns:
         numpy.ndarray | None: 100×100 的灰度人脸图
     """
-    if not is_face_recognition_available():
+    if not is_face_detection_available():
         return None
     nparr = np.frombuffer(image_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
         return None
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    faces = _face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(100, 100))
+    # 降低超大摄像头图像对 Haar 检测的抖动影响，同时保留足够细节。
+    max_side = max(img.shape[:2])
+    if max_side > 960:
+        scale = 960.0 / max_side
+        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
 
-    if len(faces) != 1:
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    rect = _detect_largest_face(gray)
+    if rect is None:
         return None
 
-    x, y, w, h = faces[0]
-    face = gray[y : y + h, x : x + w]
-    face = cv2.resize(face, (100, 100))
-    face = cv2.equalizeHist(face)  # 直方图均衡化，改善光照影响
-    return face
+    face = _crop_face_with_margin(gray, rect)
+    return _normalize_face(face)
 
 
 def register_face(username: str, image_bytes: bytes) -> bool:
@@ -185,21 +317,29 @@ def register_face(username: str, image_bytes: bytes) -> bool:
     Returns:
         bool: 是否注册成功（检测到且只有一张人脸）
     """
-    if not is_face_recognition_available():
-        return False
     face = detect_face(image_bytes)
     if face is None:
         return False
 
     # 保存人脸图像
     face_path = os.path.join(UPLOAD_DIR, f"{username}.jpg")
-    cv2.imwrite(face_path, face)
+    previous_face_bytes = None
+    if os.path.exists(face_path):
+        try:
+            with open(face_path, "rb") as f:
+                previous_face_bytes = f.read()
+        except OSError:
+            previous_face_bytes = None
+
+    if not _write_image_file(face_path, face):
+        return False
 
     # 更新标签映射
     label_map = {}
     if os.path.exists(_LABELS_PATH):
         with open(_LABELS_PATH, "r", encoding="utf-8") as f:
             label_map = json.load(f)
+    original_label_map = dict(label_map)
     if username not in label_map:
         label_map[username] = 0  # 占位，_save_model 会重新分配
 
@@ -207,7 +347,19 @@ def register_face(username: str, image_bytes: bytes) -> bool:
         json.dump(label_map, f)
 
     # 重新训练模型
-    _save_model()
+    if not _save_model():
+        logger.error("Face model training failed after registering %s", username)
+        try:
+            if previous_face_bytes is not None:
+                with open(face_path, "wb") as f:
+                    f.write(previous_face_bytes)
+            elif os.path.exists(face_path):
+                os.remove(face_path)
+            with open(_LABELS_PATH, "w", encoding="utf-8") as f:
+                json.dump(original_label_map, f)
+        except Exception as e:
+            logger.warning("Failed to rollback face registration for %s: %s", username, e)
+        return False
     return True
 
 
@@ -232,8 +384,13 @@ def recognize_face(image_bytes: bytes):
 
     try:
         label, confidence = _recognizer.predict(face)
-        # LBPH：置信度越低表示匹配度越高，通常 < 80 为可靠匹配
-        if confidence > 80:
+        # LBPH：置信度越低表示匹配度越高。摄像头光照/距离变化较大，阈值允许通过环境变量调整。
+        if confidence > _FACE_CONFIDENCE_THRESHOLD:
+            logger.info(
+                "Face recognition rejected by confidence: %.2f > %.2f",
+                confidence,
+                _FACE_CONFIDENCE_THRESHOLD,
+            )
             return None
 
         if not os.path.exists(_LABELS_PATH):

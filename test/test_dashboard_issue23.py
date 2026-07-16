@@ -14,6 +14,9 @@ import sys
 import json
 import re
 import pytest
+from types import SimpleNamespace
+from tornado.escape import json_encode
+from tornado.template import Loader
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -91,6 +94,38 @@ class TestDashboardTemplate:
             content = f.read()
         assert "keyword-list" in content, "缺少关键词列表"
         assert "热门关键词" in content, "缺少热门关键词标题"
+
+
+    def test_template_renders_keyword_ranking_without_jinja_loop(self):
+        """回归：Tornado 模板没有 Jinja 的 loop.index，排行榜应能实际渲染。"""
+        class _Settings:
+            SYSTEM_NAME = "FinderOS"
+            SYSTEM_SUBTITLE = "Test"
+            SYSTEM_LOGO = ""
+
+        handler = SimpleNamespace(request=SimpleNamespace(path="/admin/dashboard"))
+        html = Loader(os.path.join(os.path.dirname(os.path.dirname(__file__)), "app", "templates", "admin")).load("dashboard.html").generate(
+            title="数智大屏",
+            username="admin",
+            xsrf_token="test-token",
+            settings=_Settings,
+            app_version="test",
+            static_url=lambda path: "/static/" + path,
+            admin_can=lambda route: True,
+            handler=handler,
+            json_encode=json_encode,
+            stats={
+                "total": 1, "today_count": 1, "deep_collected": 0,
+                "deep_pct": 0, "source_count": 1, "top_source": "测试",
+            },
+            source_distribution=[{"name": "测试", "value": 1}],
+            trend={"dates": ["2026-07-16"], "counts": [1]},
+            keywords=[{"name": "天气", "value": 3}, {"name": "音乐", "value": 2}],
+        ).decode("utf-8")
+
+        assert "rank-1" in html
+        assert "天气" in html
+        assert "loop.index" not in html
 
     def test_refresh_button(self):
         """模板包含刷新按钮"""

@@ -40,7 +40,7 @@ _ALLOWED_NODE_TYPES = {
     ast.Constant, ast.Name, ast.Attribute, ast.Subscript,
     ast.List, ast.Dict, ast.Tuple, ast.Set,
     ast.ListComp, ast.DictComp, ast.SetComp,
-    ast.comprehension, ast.Call, ast.Slice, ast.Load, ast.Store,
+    ast.comprehension, ast.Call, ast.keyword, ast.Slice, ast.Load, ast.Store,
     ast.And, ast.Or, ast.Add, ast.Sub, ast.Mult, ast.Div,
     ast.Mod, ast.Pow, ast.Eq, ast.NotEq, ast.Lt, ast.Gt,
     ast.LtE, ast.GtE, ast.In, ast.NotIn, ast.Is, ast.IsNot,
