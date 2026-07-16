@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # 工具分类定义
 MCP_TOOL_CATEGORIES = [
     {"value": "warehouse", "name": "🔍 数据仓库", "color": "#5EA3FF"},
+    {"value": "data_warehouse", "name": "📊 数据仓库(脚本)", "color": "#3B82F6"},
     {"value": "collect", "name": "🔭 瞭望采集", "color": "#5FB878"},
     {"value": "employee", "name": "🤖 数字员工", "color": "#A855F7"},
     {"value": "model", "name": "🧠 AI 模型", "color": "#06B6D4"},

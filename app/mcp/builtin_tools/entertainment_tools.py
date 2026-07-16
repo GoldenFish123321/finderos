@@ -60,8 +60,9 @@ async def _get_random_music() -> Dict[str, Any]:
 # music/netease handler — 统一对外出口
 # ═══════════════════════════════════════════════════════════════
 
-async def _music_netease_handler():
-    """music/netease handler — 从网易云音乐热歌榜获取歌曲列表。"""
+async def __music_netease_handler():
+    """music/netease handler — 从网易云音乐热歌榜获取歌曲列表。
+    注意：函数名以双下划线开头，避免被 MCP 自动发现机制扫描为公共工具。"""
     import json as _json
     from app.utils.safe_http import safe_http_request, SafeHttpError
 
@@ -83,9 +84,9 @@ async def _music_netease_handler():
 
 
 # ── 自注册到 local_api_client ──
-def _register_music_handler():
+def __register_music_handler():
     from app.services.local_api_client import register_local_handler
-    register_local_handler("music/netease", _music_netease_handler)
+    register_local_handler("music/netease", __music_netease_handler)
 
 
-_register_music_handler()
+__register_music_handler()

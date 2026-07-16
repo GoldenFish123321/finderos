@@ -69,7 +69,7 @@
                 <div class="layui-form-item">
                     <label class="layui-form-label">类型</label>
                     <div class="layui-input-block">
-                        <select name="tool_type" id="toolType" onchange="toggleTypeFields()">
+                        <select name="tool_type" id="toolType" lay-filter="tool_type">
                             {% for t in tool_types %}
                             <option value="{{ t['value'] }}" {{ 'selected' if tool and tool['tool_type'] == t['value'] else '' }}>{{ t['name'] }}</option>
                             {% end %}
@@ -199,12 +199,20 @@
 
 {% block admin_scripts %}
 <script>
+layui.use('form', function(){
+    var form = layui.form;
+    form.on('select(tool_type)', function(data){
+        toggleTypeFields();
+    });
+    // 页面加载时初始化
+    toggleTypeFields();
+});
+
 function toggleTypeFields() {
     var type = document.getElementById('toolType').value;
     document.getElementById('builtinFields').style.display = type === 'builtin' ? '' : 'none';
     document.getElementById('apiFields').style.display = type === 'api' ? '' : 'none';
     document.getElementById('scriptFields').style.display = type === 'script' ? '' : 'none';
 }
-toggleTypeFields();
 </script>
 {% end %}

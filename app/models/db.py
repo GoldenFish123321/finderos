@@ -801,6 +801,7 @@ def seed_default_data():
     _seed_default_mcp_tools()
     skills_created = _seed_default_skills()
     _seed_default_interfaces()
+    _seed_script_tools()
     employees_created = _seed_default_employees()
 
     # ── v1.2.0 舆情大屏：默认敏感词 ──
@@ -1479,6 +1480,162 @@ def _seed_default_mcp_tools():
             tools_data,
         )
         print("[种子] 默认 MCP 工具已创建（18个工具，覆盖7个分类）")
+
+
+def _seed_script_tools():
+    """v2.0 种子: script 型 MCP 工具。按名称动态查询 api_interfaces 获取 interface_id。
+    如果接口不存在则自动创建（幂等），不依赖外部调用顺序。"""
+    import json
+    with get_db() as conn:
+        # ── 确保天气接口存在 ──
+        weather_iface = conn.execute(
+            "SELECT id FROM api_interfaces WHERE name='天气查询接口' AND interface_type='external'"
+        ).fetchone()
+        if not weather_iface:
+            cur = conn.execute(
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, "
+                "api_headers, api_params_template, interface_type, is_system, is_enabled, sort_order) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'external', 0, 1, 1)",
+                ("天气查询接口", "wttr.in 天气查询 JSON 接口",
+                 "https://wttr.in/{message}?format=j1", "GET",
+                 json.dumps({"Accept": "application/json"}), ""),
+            )
+            weather_id = cur.lastrowid
+        else:
+            weather_id = weather_iface["id"]
+
+        # ── 确保音乐接口存在 ──
+        music_iface = conn.execute(
+            "SELECT id FROM api_interfaces WHERE name='网易云音乐热歌榜' AND interface_type='external'"
+        ).fetchone()
+        if not music_iface:
+            cur = conn.execute(
+                "INSERT INTO api_interfaces (name, description, api_url, api_method, "
+                "api_headers, api_params_template, interface_type, is_system, is_enabled, sort_order) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'external', 0, 1, 1)",
+                ("网易云音乐热歌榜", "从网易云音乐热歌榜获取推荐歌曲列表（外部API接口）。",
+                 "https://api.injahow.cn/meting/?server=netease&type=playlist&id=3778678", "GET",
+                 "{}", ""),
+            )
+            music_id = cur.lastrowid
+        else:
+            music_id = music_iface["id"]
+
+        tools = [
+            # ── 天气 script 型工具 ──
+            {
+                "name": "weather_script",
+                "display_name": "天气查询 (脚本)",
+                "description": "通过 wttr.in 免费 API 查询指定城市的实时天气信息。脚本型工具。",
+                "category": "data_warehouse",
+                "tool_type": "script",
+                "input_schema": json.dumps({
+                    "type": "object",
+                    "properties": {
+                        "city": {"type": "string", "description": "城市名称，如 Beijing、成都、London"}
+                    },
+                    "required": ["city"]
+                }, ensure_ascii=False),
+                "data_sources": json.dumps([{
+                    "interface_id": weather_id,
+                    "param_mapping": {"city": "message"}
+                }], ensure_ascii=False),
+                "transform_script": (
+                    "def transform(data_sources):\n"
+                    "    try:\n"
+                    "        w = data_sources[0]['data']\n"
+                    "        cur = w.get('current_condition', [{}])[0]\n"
+                    "        loc = w.get('nearest_area', [{}])[0]\n"
+                    "        city = loc.get('areaName', [{}])[0].get('value', '未知')\n"
+                    "        country = loc.get('country', [{}])[0].get('value', '')\n"
+                    "        temp = cur.get('temp_C', '?')\n"
+                    "        desc = cur.get('weatherDesc', [{}])[0].get('value', '未知')\n"
+                    "        humidity = cur.get('humidity', '?')\n"
+                    "        wind = cur.get('winddir16Point', '?') + ' ' + cur.get('windspeedKmph', '?') + 'km/h'\n"
+                    "        return f'{city}, {country} 当前天气: {desc}, 温度 {temp}°C, 湿度 {humidity}%, 风向风速 {wind}'\n"
+                    "    except Exception as e:\n"
+                    "        return f'天气数据解析失败: {e}, 原始数据: {json.dumps(data_sources)[:500]}'"
+                ),
+                "script_enabled": 1,
+                "is_enabled": 1,
+                "sort_order": 98,
+            },
+            # ── 音乐 script 型工具 ──
+            {
+                "name": "music_script",
+                "display_name": "随机音乐推荐 (脚本)",
+                "description": "从网易云音乐热歌榜随机推荐一首歌曲。脚本型工具。",
+                "category": "entertainment",
+                "tool_type": "script",
+                "input_schema": json.dumps({
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }, ensure_ascii=False),
+                "data_sources": json.dumps([{
+                    "interface_id": music_id,
+                    "param_mapping": {}
+                }], ensure_ascii=False),
+                "transform_script": (
+                    "def transform(data_sources):\n"
+                    "    try:\n"
+                    "        songs = data_sources[0].get('data', [])\n"
+                    "        if isinstance(songs, list) and len(songs) > 0:\n"
+                    "            song = random.choice(songs)\n"
+                    "            return f'🎵 {song.get(\"name\",\"?\")} — {song.get(\"artist\",\"?\")}'\n"
+                    "        return '未找到歌曲'\n"
+                    "    except Exception as e:\n"
+                    "        return f'音乐数据解析失败: {e}'"
+                ),
+                "script_enabled": 1,
+                "is_enabled": 1,
+                "sort_order": 99,
+            },
+        ]
+
+        # ──────────────────────────────────────────────
+        # 按名称 UPDATE 原记录 (weather_query / get_random_music)，
+        # 不创建新的 weather_script / music_script。
+        # ──────────────────────────────────────────────
+        # weather_query → script 型
+        conn.execute(
+            "UPDATE mcp_tools SET "
+            "tool_type='script', "
+            "data_sources=?, "
+            "transform_script=?, "
+            "script_enabled=1, "
+            "api_url='', api_method='', api_headers='{}', api_params_template='', "
+            "category='data_warehouse', "
+            "is_enabled=1 "
+            "WHERE name='weather_query'",
+            (
+                tools[0]["data_sources"],
+                tools[0]["transform_script"],
+            ),
+        )
+        # get_random_music → script 型
+        conn.execute(
+            "UPDATE mcp_tools SET "
+            "tool_type='script', "
+            "data_sources=?, "
+            "transform_script=?, "
+            "script_enabled=1, "
+            "handler_module='', "
+            "is_enabled=1 "
+            "WHERE name='get_random_music'",
+            (
+                tools[1]["data_sources"],
+                tools[1]["transform_script"],
+            ),
+        )
+
+        # 清理历史残留的 weather_script / music_script 记录（如果有）
+        conn.execute(
+            "DELETE FROM mcp_tools WHERE name IN ('weather_script', 'music_script')"
+        )
+
+        conn.commit()
+        print(f"[种子] script 型 MCP 工具已更新（weather_query + get_random_music → script 型）")
 
 
 def _synchronize_default_capabilities(skills_created: bool, employees_created: bool):
