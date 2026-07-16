@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.9.5-beta (2026-07-17) — 数字员工对话历史上下文修复
+
+- 修复 @数字员工 LLM 调用始终看不到历史对话的问题：`_invoke_llm_employee()` 现在加载最近 10 条对话消息并传入 LLM messages 数组。
+- 补充 @数字员工 路径的会话归属校验（此前仅普通聊天路径有校验），防止跨用户访问对话历史。
+- 员工路径消息保存改为 `loop.run_in_executor` 异步执行，与常规聊天路径保持一致。
+- 新增 `test_employee_history_loading_in_invoke_llm`、`test_employee_post_ownership_validation`、`test_employee_message_save_is_async` 三个测试。
+- 根因：`_invoke_llm_employee()` 构建 messages 时仅包含 system prompt + 当前用户消息，完全未调用 `ConversationRepository.get_recent_messages()`。
+
 ## v1.9.4-beta (2026-07-16) — 账户与脚本工具稳定性修复
 
 - 修复 #149：缺少 OpenCV contrib 时 `/account` 保留密码修改和账户管理，人脸登录返回受控提示。
