@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.5.1-beta (2026-07-16) — Crawl4ai 工具处理函数修复
+
+- 🐛 **Bug 修复**：修复 `collect_with_crawl4ai` 和 `batch_deep_collect` 两个 MCP 工具启动时报 "处理函数未找到" 警告
+  - `crawl4ai_tools.py` 函数重命名：`_deep_collect_url` → `_collect_with_crawl4ai`，`_batch_deep_collect_url` → `_batch_deep_collect`
+  - 消除与 `collect_tools._deep_collect_url` 的命名冲突
+  - 在 `catalog.py` 的 `upsert_builtin_tools` 中添加残留内置工具记录自动清理逻辑
+
 ## v1.5.0-beta (2026-07-16) — 管理侧消息管理 (Issue #18)
 
 - ✨ **新功能 #18**：管理侧独立消息管理页面，支持逐条查看/筛选/标记/删除所有跨会话消息
