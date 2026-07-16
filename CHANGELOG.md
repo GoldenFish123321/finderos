@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.3.3-beta (2026-07-16) — Bug 修复
+
+- 🐛 **修复 #118**：`test/test_system_config.py` 移除硬编码 Windows 绝对路径（`d:\Code\shitproject\1\finderos`），改用 `os.path.dirname(os.path.abspath(__file__))` 动态构建项目路径，确保跨平台（Linux/macOS）测试可正常运行
+- 🧪 **测试 #118**：同步修复登录检测断言，适配登录后重定向至 `/chat` 页面的当前行为
+
 ## v1.3.2-beta (2026-07-16) — Bug 修复
 
 - 🐛 **修复 #120**：`deep_collector.py` 编码探测改为两阶段策略（`errors="strict"` 试探 + `errors="replace"` 容错），防止 GB18030 等编码含非法字节时抛出 `UnicodeDecodeError` 导致采集失败，同时确保 GBK/GB18030 中文页面能被正确检测编码
