@@ -91,6 +91,11 @@ def make_app() -> tornado.web.Application:
     # cookie_secret: 使用 settings 中已有的值（在 __main__ 块中已初始化）
     cookie_secret = settings.COOKIE_SECRET
 
+    # 计算相对于 main.py 所在目录的绝对路径
+    _base_dir = os.path.dirname(os.path.abspath(__file__))
+    _template_dir = os.path.join(_base_dir, "app", "templates")
+    _static_dir = os.path.join(_base_dir, "app", "static")
+
     return tornado.web.Application(
         [
             # 登录/登出/注册
@@ -224,8 +229,8 @@ def make_app() -> tornado.web.Application:
             # TTS 语音合成（Edge TTS）
             (r"/api/chat/tts", UserChatTTSHandler),
         ],
-        template_path="app/templates",
-        static_path="app/static",
+        template_path=_template_dir,
+        static_path=_static_dir,
         cookie_secret=cookie_secret,
         login_url=settings.LOGIN_URL,
         xsrf_cookies=settings.XSRF_COOKIES,
