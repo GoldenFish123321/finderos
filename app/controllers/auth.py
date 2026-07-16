@@ -342,15 +342,7 @@ class FaceLoginHandler(BaseHandler):
         )
         write_audit_log("FACE_LOGIN_SUCCESS", username, "", "人脸登录成功", client_ip)
 
-        role = UserRepository.get_user_role(username)
-        if role:
-            routes = [r for r in UserRepository.get_user_function_routes(username)
-                      if r.startswith("/admin")]
-            redirect = "/admin" if "/admin" in routes else (routes[0] if routes else "/index")
-        else:
-            redirect = "/index"
-
-        self.write({"code": 0, "msg": "登录成功", "redirect": redirect})
+        self.write({"code": 0, "msg": "登录成功", "redirect": "/chat"})
 
 
 class UserAccountHandler(BaseHandler):
