@@ -361,11 +361,16 @@ def init_db():
                 role            TEXT NOT NULL,
                 content         TEXT DEFAULT '',
                 token_count     INTEGER DEFAULT 0,
+                is_sensitive    INTEGER DEFAULT 0,
+                review_status   TEXT DEFAULT 'pending',
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_msgs_conv ON conversation_messages(conversation_id)")
+        # v1.3.5 Issue #18: 消息管理索引
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_msgs_sensitive ON conversation_messages(is_sensitive)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_msgs_review ON conversation_messages(review_status)")
 
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id)")
@@ -545,6 +550,8 @@ def seed_default_data():
                 (21, "数智大屏", "layui-icon-screen-full", "/admin/dashboard", None, 3, 1),
                 # 舆情大屏 (v1.2.0 新增)
                 (22, "舆情大屏", "layui-icon-log", "/admin/sentiment", None, 14, 1),
+                # 消息管理 (v1.3.5 Issue #18 新增)
+                (23, "消息管理", "layui-icon-email", "/admin/message", None, 15, 1),
             ]
             conn.executemany(
                 "INSERT INTO functions (id, name, icon, route_path, parent_id, sort_order, is_enabled) "
@@ -564,6 +571,7 @@ def seed_default_data():
             ("常规设置", "layui-icon-set-fill", "/admin/config", 3, 2),
             ("数智大屏", "layui-icon-screen-full", "/admin/dashboard", None, 3),
             ("舆情大屏", "layui-icon-log", "/admin/sentiment", None, 14),
+            ("消息管理", "layui-icon-email", "/admin/message", None, 15),
         ):
             func = conn.execute(
                 "SELECT id FROM functions WHERE route_path = ?", (route_path,)

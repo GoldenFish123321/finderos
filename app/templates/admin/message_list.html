@@ -1,0 +1,363 @@
+{% extends "base_layout.html" %}
+
+{% block admin_content %}
+<style>
+.msg-stat { text-align:center; padding:18px 14px; background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:var(--radius-md); }
+.msg-stat .num { font-size:30px; font-weight:700; }
+.msg-stat .lbl { font-size:12px; color:var(--text-muted); margin-top:4px; }
+.msg-search { display:flex; gap:10px; align-items:center; margin:16px 0; flex-wrap:wrap; }
+.msg-search select, .msg-search input { height:36px; }
+.msg-table-wrap { background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:var(--radius-md); overflow:hidden; }
+.msg-table-wrap table { width:100%; border-collapse:collapse; }
+.msg-table-wrap th { background:rgba(255,255,255,0.03); color:var(--text-muted); font-size:12px; font-weight:500; padding:10px 8px; text-align:left; border-bottom:1px solid var(--border-subtle); white-space:nowrap; }
+.msg-table-wrap td { padding:8px 8px; font-size:13px; color:var(--text-secondary); border-bottom:1px solid var(--border-subtle); vertical-align:middle; }
+.msg-table-wrap tr:hover td { background:rgba(94,163,255,0.04); }
+.msg-table-wrap tr.sensitive-row td { background:rgba(239,68,68,0.06); }
+.msg-user { display:inline-block; padding:2px 8px; border-radius:12px; background:rgba(94,163,255,0.12); color:var(--accent-blue); font-size:11px; font-weight:600; }
+.msg-role-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+.msg-role-user { background:rgba(94,163,255,0.15); color:var(--accent-blue); }
+.msg-role-assistant { background:rgba(34,197,94,0.15); color:#22c55e; }
+.msg-role-system { background:rgba(249,115,22,0.15); color:#f97316; }
+.msg-preview { max-width:360px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.msg-sensitive-tag { display:inline-block; padding:1px 6px; border-radius:4px; background:rgba(239,68,68,0.15); color:#ef4444; font-size:10px; font-weight:700; }
+.msg-review-tag { display:inline-block; padding:1px 6px; border-radius:4px; font-size:10px; font-weight:700; }
+.msg-review-pending { background:rgba(250,204,21,0.15); color:#facc15; }
+.msg-review-reviewed { background:rgba(34,197,94,0.15); color:#22c55e; }
+.msg-review-flagged { background:rgba(239,68,68,0.15); color:#ef4444; }
+.msg-review-cleared { background:rgba(148,163,184,0.15); color:#94a3b8; }
+.msg-actions { display:flex; gap:4px; flex-wrap:wrap; }
+.msg-actions .btn-glass { padding:3px 8px; font-size:11px; }
+.btn-danger { color:#ef4444 !important; border-color:rgba(239,68,68,0.3) !important; }
+.btn-danger:hover { background:rgba(239,68,68,0.1) !important; }
+.btn-warn { color:#facc15 !important; border-color:rgba(250,204,21,0.3) !important; }
+.btn-success { color:#22c55e !important; border-color:rgba(34,197,94,0.3) !important; }
+.empty-msg { text-align:center; padding:48px 20px; color:var(--text-muted); }
+.batch-bar { display:flex; gap:8px; align-items:center; padding:10px 12px; background:rgba(94,163,255,0.06); border:1px solid rgba(94,163,255,0.15); border-radius:var(--radius-md); margin-bottom:12px; font-size:13px; }
+.batch-bar.hidden { display:none; }
+</style>
+
+<div class="glass-panel" style="padding:20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h3 style="margin:0;font-size:17px;color:var(--text-primary);">📩 消息管理</h3>
+        <div style="display:flex;gap:10px;align-items:center;">
+            <span style="color:var(--accent-green);font-size:13px;">{{ handler.get_query_argument('msg', '') }}</span>
+            <a href="/admin/sentiment" class="btn-glass" style="font-size:12px;">📊 舆情大屏</a>
+            <a href="/admin/conversation" class="btn-glass" style="font-size:12px;">💬 会话管理</a>
+        </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px;">
+        <div class="msg-stat"><div class="num" style="color:var(--accent-blue);">{{ stats['total'] }}</div><div class="lbl">消息总数</div></div>
+        <div class="msg-stat"><div class="num" style="color:#ef4444;">{{ stats['sensitive'] }}</div><div class="lbl">敏感消息</div></div>
+        <div class="msg-stat"><div class="num" style="color:#facc15;">{{ stats['pending'] }}</div><div class="lbl">待审核</div></div>
+        <div class="msg-stat"><div class="num" style="color:#ef4444;">{{ stats['flagged'] }}</div><div class="lbl">已标记</div></div>
+    </div>
+
+    <!-- 筛选栏 -->
+    <div class="msg-search">
+        <select id="filter-user" class="input-dark" style="width:150px;">
+            <option value="">全部用户</option>
+            {% for u in users %}
+            <option value="{{ u }}" {% if username_filter == u %}selected{% end %}>{{ u }}</option>
+            {% end %}
+        </select>
+        <input type="text" id="search-kw" class="input-dark" placeholder="搜索消息内容..." value="{{ keyword }}" style="width:220px;">
+        <select id="filter-role" class="input-dark" style="width:110px;">
+            <option value="">全部角色</option>
+            <option value="user" {% if role_filter == 'user' %}selected{% end %}>👤 用户</option>
+            <option value="assistant" {% if role_filter == 'assistant' %}selected{% end %}>🤖 助手</option>
+            <option value="system" {% if role_filter == 'system' %}selected{% end %}>⚙️ 系统</option>
+        </select>
+        <select id="filter-sensitive" class="input-dark" style="width:110px;">
+            <option value="">敏感状态</option>
+            <option value="1" {% if sensitive_filter == '1' %}selected{% end %}>🔴 敏感</option>
+            <option value="0" {% if sensitive_filter == '0' %}selected{% end %}>🟢 正常</option>
+        </select>
+        <select id="filter-review" class="input-dark" style="width:110px;">
+            <option value="">审核状态</option>
+            <option value="pending" {% if review_filter == 'pending' %}selected{% end %}>⏳ 待审核</option>
+            <option value="reviewed" {% if review_filter == 'reviewed' %}selected{% end %}>✅ 已审核</option>
+            <option value="flagged" {% if review_filter == 'flagged' %}selected{% end %}>🚩 已标记</option>
+            <option value="cleared" {% if review_filter == 'cleared' %}selected{% end %}>✔️ 已排除</option>
+        </select>
+        <input type="date" id="filter-date-from" class="input-dark" value="{{ date_from }}" style="width:140px;" title="开始日期">
+        <input type="date" id="filter-date-to" class="input-dark" value="{{ date_to }}" style="width:140px;" title="结束日期">
+        <button class="btn-glass btn-sm" id="btn-search">🔍 筛选</button>
+        {% if username_filter or keyword or role_filter or sensitive_filter or review_filter or date_from or date_to %}
+        <a class="btn-glass btn-sm" href="/admin/message">清空筛选</a>
+        {% end %}
+    </div>
+
+    <!-- 批量操作栏 -->
+    <div class="batch-bar hidden" id="batch-bar">
+        <span>已选择 <strong id="batch-count">0</strong> 条消息</span>
+        <button class="btn-glass btn-sm btn-danger" id="btn-batch-delete">🗑 批量删除</button>
+        <button class="btn-glass btn-sm btn-warn" id="btn-batch-sensitive">🔴 标记敏感</button>
+        <button class="btn-glass btn-sm btn-success" id="btn-batch-reviewed">✅ 审核通过</button>
+        <button class="btn-glass btn-sm" id="btn-batch-clear">取消选择</button>
+    </div>
+
+    <!-- 消息表格 -->
+    <div class="msg-table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th width="36"><input type="checkbox" id="check-all" title="全选/取消"></th>
+                    <th width="60">ID</th>
+                    <th width="100">用户</th>
+                    <th width="70">角色</th>
+                    <th>消息预览</th>
+                    <th width="90">会话ID</th>
+                    <th width="70">Token</th>
+                    <th width="80">敏感</th>
+                    <th width="80">审核</th>
+                    <th width="140">时间</th>
+                    <th width="180">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if messages %}
+                {% for m in messages %}
+                <tr class="{% if m.get('is_sensitive') %}sensitive-row{% end %}" data-msg-id="{{ m['id'] }}">
+                    <td><input type="checkbox" class="msg-check" value="{{ m['id'] }}"></td>
+                    <td>#{{ m['id'] }}</td>
+                    <td><span class="msg-user">{{ m.get('username') or '匿名' }}</span></td>
+                    <td>
+                        <span class="msg-role-badge msg-role-{{ m.get('role') or 'user' }}">
+                            {% if m.get('role') == 'user' %}👤 用户
+                            {% elif m.get('role') == 'assistant' %}🤖 助手
+                            {% elif m.get('role') == 'system' %}⚙️ 系统
+                            {% else %}{{ m.get('role') }}{% end %}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="msg-preview" title="{{ m.get('content') or '' }}">
+                            {{ (m.get('content') or '')[:120] }}
+                        </div>
+                    </td>
+                    <td>
+                        {% if m.get('conversation_id') %}
+                        <a href="/admin/conversation?id={{ m['conversation_id'] }}" target="_blank" style="color:var(--accent-blue);">
+                            #{{ m['conversation_id'] }}
+                        </a>
+                        {% else %}—{% end %}
+                    </td>
+                    <td>{{ m.get('token_count', 0) }}</td>
+                    <td>
+                        {% if m.get('is_sensitive') %}
+                        <span class="msg-sensitive-tag">🔴 敏感</span>
+                        {% else %}
+                        <span style="color:var(--text-muted);font-size:11px;">—</span>
+                        {% end %}
+                    </td>
+                    <td>
+                        {% set rs = m.get('review_status', 'pending') %}
+                        <span class="msg-review-tag msg-review-{{ rs }}">
+                            {% if rs == 'pending' %}⏳ 待审
+                            {% elif rs == 'reviewed' %}✅ 已审
+                            {% elif rs == 'flagged' %}🚩 标记
+                            {% elif rs == 'cleared' %}✔️ 排除
+                            {% else %}{{ rs }}{% end %}
+                        </span>
+                    </td>
+                    <td>{{ m.get('created_at') or '—' }}</td>
+                    <td>
+                        <div class="msg-actions">
+                            <button class="btn-glass btn-sm btn-toggle-sensitive" data-id="{{ m['id'] }}" data-val="{{ '0' if m.get('is_sensitive') else '1' }}">
+                                {% if m.get('is_sensitive') %}🟢 取消{% else %}🔴 敏感{% end %}
+                            </button>
+                            {% if m.get('review_status', 'pending') != 'reviewed' %}
+                            <button class="btn-glass btn-sm btn-success btn-set-review" data-id="{{ m['id'] }}" data-val="reviewed">✅ 审核</button>
+                            {% end %}
+                            {% if m.get('review_status', 'pending') != 'flagged' %}
+                            <button class="btn-glass btn-sm btn-warn btn-set-review" data-id="{{ m['id'] }}" data-val="flagged">🚩 标记</button>
+                            {% end %}
+                            {% if m.get('review_status', 'pending') != 'cleared' %}
+                            <button class="btn-glass btn-sm btn-set-review" data-id="{{ m['id'] }}" data-val="cleared" style="color:#94a3b8;">✔️</button>
+                            {% end %}
+                            <button class="btn-glass btn-sm btn-danger btn-delete-msg" data-id="{{ m['id'] }}">🗑</button>
+                        </div>
+                    </td>
+                </tr>
+                {% end %}
+                {% else %}
+                <tr><td colspan="11" class="empty-msg">
+                    <div style="font-size:42px;margin-bottom:8px;">📩</div>
+                    <p>暂无消息</p>
+                </td></tr>
+                {% end %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if total_pages > 1 %}
+    <div style="text-align:center;margin-top:16px;"><div id="msg-pagination"></div></div>
+    {% end %}
+</div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+layui.use(['laypage', 'jquery', 'layer'], function(){
+    var laypage = layui.laypage, $ = layui.$, layer = layui.layer;
+
+    function buildUrl(page) {
+        var params = new URLSearchParams();
+        params.set('page', page || 1);
+        var user = $('#filter-user').val();
+        var kw = $('#search-kw').val().trim();
+        var role = $('#filter-role').val();
+        var sens = $('#filter-sensitive').val();
+        var review = $('#filter-review').val();
+        var df = $('#filter-date-from').val();
+        var dt = $('#filter-date-to').val();
+        if (user) params.set('username', user);
+        if (kw) params.set('keyword', kw);
+        if (role) params.set('role', role);
+        if (sens) params.set('is_sensitive', sens);
+        if (review) params.set('review_status', review);
+        if (df) params.set('date_from', df);
+        if (dt) params.set('date_to', dt);
+        return '/admin/message?' + params.toString();
+    }
+
+    $('#btn-search').on('click', function(){ location.href = buildUrl(1); });
+    $('#search-kw').on('keydown', function(e){ if (e.key === 'Enter') $('#btn-search').click(); });
+    $('#filter-user').on('change', function(){ location.href = buildUrl(1); });
+
+    // 全选/取消
+    $('#check-all').on('change', function(){
+        $('.msg-check').prop('checked', this.checked);
+        updateBatchBar();
+    });
+    $(document).on('change', '.msg-check', updateBatchBar);
+
+    function getSelectedIds() {
+        return $('.msg-check:checked').map(function(){ return $(this).val(); }).get();
+    }
+
+    function updateBatchBar() {
+        var ids = getSelectedIds();
+        var $bar = $('#batch-bar');
+        $('#batch-count').text(ids.length);
+        if (ids.length > 0) {
+            $bar.removeClass('hidden');
+        } else {
+            $bar.addClass('hidden');
+        }
+    }
+
+    // 批量操作
+    $('#btn-batch-clear').on('click', function(){
+        $('.msg-check').prop('checked', false);
+        $('#check-all').prop('checked', false);
+        updateBatchBar();
+    });
+
+    function doBatch(action, confirmMsg) {
+        var ids = getSelectedIds();
+        if (!ids.length) { layer.msg('请先选择消息', {icon: 2}); return; }
+        layer.confirm(confirmMsg, {icon: 3, title: '批量操作'}, function(idx){
+            layer.close(idx);
+            $.post('/admin/message/batch', {
+                '_xsrf': '{{ xsrf_token }}',
+                'ids': ids.join(','),
+                'action': action
+            }, function(res){
+                if (res.code === 0) {
+                    layer.msg(res.msg, {icon: 1});
+                    setTimeout(function(){ location.reload(); }, 800);
+                } else {
+                    layer.msg(res.msg, {icon: 2});
+                }
+            }, 'json').fail(function(){
+                layer.msg('操作失败，请重试', {icon: 2});
+            });
+        });
+    }
+
+    $('#btn-batch-delete').on('click', function(){
+        doBatch('batch_delete', '确认删除选中的消息？此操作不可恢复。');
+    });
+    $('#btn-batch-sensitive').on('click', function(){
+        doBatch('batch_mark_sensitive', '确认标记选中的消息为敏感内容？');
+    });
+    $('#btn-batch-reviewed').on('click', function(){
+        doBatch('batch_mark_reviewed', '确认批量审核通过选中的消息？');
+    });
+
+    // 单条删除
+    $(document).on('click', '.btn-delete-msg', function(){
+        var id = $(this).data('id');
+        layer.confirm('确认删除消息 #' + id + '？此操作不可恢复。', {icon: 3, title: '删除消息'}, function(idx){
+            layer.close(idx);
+            $.post('/admin/message/delete', {
+                '_xsrf': '{{ xsrf_token }}',
+                'id': id
+            }, function(){
+                layer.msg('已删除', {icon: 1});
+                setTimeout(function(){ location.reload(); }, 600);
+            }).fail(function(){
+                layer.msg('删除失败', {icon: 2});
+            });
+        });
+    });
+
+    // 切换敏感标记
+    $(document).on('click', '.btn-toggle-sensitive', function(){
+        var id = $(this).data('id');
+        var val = $(this).data('val');
+        $.post('/admin/message/mark', {
+            '_xsrf': '{{ xsrf_token }}',
+            'id': id,
+            'action': 'toggle_sensitive',
+            'value': val
+        }, function(res){
+            if (res.code === 0) {
+                layer.msg(res.msg, {icon: 1});
+                setTimeout(function(){ location.reload(); }, 400);
+            } else {
+                layer.msg(res.msg, {icon: 2});
+            }
+        }, 'json').fail(function(){
+            layer.msg('操作失败', {icon: 2});
+        });
+    });
+
+    // 设置审核状态
+    $(document).on('click', '.btn-set-review', function(){
+        var id = $(this).data('id');
+        var val = $(this).data('val');
+        $.post('/admin/message/mark', {
+            '_xsrf': '{{ xsrf_token }}',
+            'id': id,
+            'action': 'set_review',
+            'value': val
+        }, function(res){
+            if (res.code === 0) {
+                layer.msg(res.msg, {icon: 1});
+                setTimeout(function(){ location.reload(); }, 400);
+            } else {
+                layer.msg(res.msg, {icon: 2});
+            }
+        }, 'json').fail(function(){
+            layer.msg('操作失败', {icon: 2});
+        });
+    });
+
+    {% if total_pages > 1 %}
+    laypage.render({
+        elem: 'msg-pagination',
+        count: {{ total }},
+        limit: 30,
+        curr: {{ page }},
+        layout: ['prev', 'page', 'next', 'skip', 'count'],
+        jump: function(obj, first){
+            if (!first) location.href = buildUrl(obj.curr);
+        }
+    });
+    {% end %}
+});
+</script>
+{% end %}
