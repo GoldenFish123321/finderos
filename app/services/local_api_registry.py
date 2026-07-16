@@ -37,10 +37,26 @@ LOCAL_API_SEEDS = [
     {"name": "网易云音乐", "handler": "music/netease", "desc": "从网易云音乐热歌榜获取推荐歌曲列表（统一对外出口）。"},
 ]
 
+# ── 外部接口种子数据 ──
+# 这些 external 类型接口可在管理后台"接口管理"页面中查看和管理。
+EXTERNAL_API_SEEDS = [
+    {
+        "name": "网易云音乐热歌榜",
+        "api_url": "https://api.injahow.cn/meting/?server=netease&type=playlist&id=3778678",
+        "api_method": "GET",
+        "interface_type": "external",
+        "is_system": 0,
+        "is_enabled": 1,
+        "response_content_type": "json",
+        "description": "从网易云音乐热歌榜获取推荐歌曲列表（外部API接口）。",
+    },
+]
+
 
 def sync_local_api_interfaces():
-    """同步 18 个系统内置本地接口到 api_interfaces 表（幂等，不重复插入）。"""
+    """同步 18 个系统内置本地接口 + 外部接口种子到 api_interfaces 表（幂等，不重复插入）。"""
     with get_db() as conn:
+        # ── 本地接口 ──
         for seed in LOCAL_API_SEEDS:
             existing = conn.execute(
                 "SELECT id FROM api_interfaces WHERE local_handler = ?", (seed["handler"],)
@@ -60,5 +76,47 @@ def sync_local_api_interfaces():
                     VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 0)""",
                     (seed["name"], seed["desc"], seed["handler"]),
                 )
+
+        # ── 外部接口 ──
+        for seed in EXTERNAL_API_SEEDS:
+            existing = conn.execute(
+                "SELECT id FROM api_interfaces WHERE name = ? AND interface_type = 'external'",
+                (seed["name"],),
+            ).fetchone()
+            if existing:
+                # 已存在，更新 URL 等字段
+                conn.execute(
+                    """UPDATE api_interfaces SET
+                        api_url = ?, api_method = ?, description = ?,
+                        response_content_type = ?, is_enabled = ?, is_system = ?
+                    WHERE id = ?""",
+                    (
+                        seed["api_url"],
+                        seed["api_method"],
+                        seed.get("description", ""),
+                        seed.get("response_content_type", "json"),
+                        seed.get("is_enabled", 1),
+                        seed.get("is_system", 0),
+                        existing["id"],
+                    ),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO api_interfaces
+                    (name, description, api_url, api_method, api_headers, api_params_template,
+                     interface_type, is_system, local_handler, response_content_type,
+                     is_enabled, sort_order)
+                    VALUES (?, ?, ?, ?, '{}', '', ?, ?, '', ?, ?, 0)""",
+                    (
+                        seed["name"],
+                        seed.get("description", ""),
+                        seed["api_url"],
+                        seed["api_method"],
+                        seed["interface_type"],
+                        seed.get("is_system", 0),
+                        seed.get("response_content_type", "json"),
+                        seed.get("is_enabled", 1),
+                    ),
+                )
         conn.commit()
-    logger.info(f"已同步 {len(LOCAL_API_SEEDS)} 个本地接口到 api_interfaces 表")
+    logger.info(f"已同步 {len(LOCAL_API_SEEDS)} 个本地接口 + {len(EXTERNAL_API_SEEDS)} 个外部接口到 api_interfaces 表")
