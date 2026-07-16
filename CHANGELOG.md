@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.8.0-beta (2026-07-16) — 随机音乐员工 LLM→API 型重构
+
+- ✨ **功能变更**：「随机音乐」数字员工从 LLM 型改为 API 型
+  - 种子数据 `_seed_default_employees` 中 `employee_type` 从 `"llm"` 改为 `"api"`
+  - 通过 `mcp_tool_id` 单工具绑定 `get_random_music`，不再依赖 LLM system_prompt
+  - `_synchronize_default_capabilities` 跳过 API 型员工的 `mcp_tool_ids` 数组同步
+- 🐛 **Bug 修复**：`_invoke_api_via_mcp` 参数传递逻辑修复（user_chat.py + admin_employee.py）
+  - **根因**：`input_schema` 的 `properties` 为空时（如 `get_random_music`），仍传入 `{"message": message}`，导致 handler 收到多余 kwarg → `TypeError` → 回退 Mock 数据
+  - **修复**：`props` 为空时设置 `arguments = {}`，确保无参工具正常调用
+- 🧪 **测试**：新增 `test_api_music_employee_mcp_invoke_no_args` / `test_api_music_employee_card_building` 集成测试
+- 📝 **文档**：更新 README 员工类型表、`docs/test_case.md` TC-EMP-03b 描述
+
 ## v1.7.1-beta (2026-07-16) — 员工编辑页类型切换 UI Bug 修复
 
 - 🐛 **Bug 修复**：编辑员工页在 LLM 型/API 型之间切换时底部配置 UI 不更新
