@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.9.7-beta (2026-07-17) — script工具防御性参数处理
+
+- 修复 `search_warehouse_fulltext` LLM 漏传 `query` 参数时 `TypeError` 崩溃
+- `registry.py`: `_build_script_tool` 缺参时从 `input_schema.default` 取值回退，22个工具永久免疫
+- `client.py`: `_extract_arguments` 新增 `search_warehouse_fulltext` case，MCP fallback 路径能正确提取参数
+- `db.py`: `_seed_script_tools` 补充 `search_warehouse_fulltext` 的 `input_schema`
+
 ## v1.9.6-beta (2026-07-17) — 手势识别成功后自动关闭摄像头
 
 - 修复 #手势：手势控制成功识别后不会自动关闭手势页面回到对话的问题。
