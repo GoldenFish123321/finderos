@@ -1083,6 +1083,7 @@ function doSend(employeeId, message, employeeName) {
         // @数字员工调用
         formData.append('employee_id', employeeId);
         formData.append('message', message);
+        formData.append('conversation_id', currentConversationId || '');
         streamFetch('/chat/employee/invoke', formData, aiContent, aiMeta, startTime);
     } else {
         // 普通 AI 对话
@@ -1135,6 +1136,11 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
                                     aiMeta.innerHTML += ' · ⚠️ Mock';
                                 }
                             }
+                            // 后端自动创建的对话 ID，同步到前端
+                            if (statsData.conversation_id && !currentConversationId) {
+                                currentConversationId = statsData.conversation_id;
+                                refreshTaskList();
+                            }
                         } catch(e) {}
                         currentEvent = '';
                         continue;
@@ -1164,6 +1170,20 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
                                         avatar.title = empInfo.name;
                                     }
                                 }
+                            }
+                        } catch(e) {}
+                        currentEvent = '';
+                        continue;
+                    }
+
+                    // 处理敏感词预警（Issue #98）
+                    if (currentEvent === 'sensitive_warning') {
+                        try {
+                            const warn = JSON.parse(dataStr);
+                            if (warn.msg && typeof layui !== 'undefined') {
+                                layui.use(['layer'], function(l){
+                                    l.layer.msg('⚠️ ' + warn.msg, {time: 5000, icon: 0});
+                                });
                             }
                         } catch(e) {}
                         currentEvent = '';

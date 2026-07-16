@@ -241,7 +241,6 @@ class RegisterHandler(BaseHandler):
             samesite="Lax",
             secure=is_https,
         )
-<<<<<<< HEAD
         self.redirect("/index?msg=注册成功，欢迎使用瞭望与问数系统！")
 
 
@@ -339,6 +338,3 @@ class FaceLoginHandler(BaseHandler):
             redirect = "/index"
 
         self.write({"code": 0, "msg": "登录成功", "redirect": redirect})
-=======
-        self.redirect("/chat")
->>>>>>> a94f0df28c2a08e446c3e48a91289f487914fa1c
