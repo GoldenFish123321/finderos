@@ -266,8 +266,8 @@ class DataWarehouseRepository:
                 ).fetchall()
                 if rows:
                     return [dict(r) for r in rows]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("FTS5 search failed for query %r; using fallback search: %s", kw, e)
 
             return []
 

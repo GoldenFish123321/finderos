@@ -8,8 +8,24 @@ import logging
 import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
 from app.models.sensitive_word import SensitiveWordRepository
+from app.models.user import UserRepository
+from app.utils.security import write_audit_log
 
 logger = logging.getLogger(__name__)
+
+
+def _redact_conversation_alerts(items, username):
+    role = UserRepository.get_user_role(username)
+    if role and role.get("is_system") == 1:
+        return items
+    redacted = []
+    for row in items:
+        item = dict(row)
+        if item.get("source_type") in {"conversation", "live_chat"}:
+            item["content_preview"] = "[会话内容仅系统管理员可见]"
+            item["source_detail"] = ""
+        redacted.append(item)
+    return redacted
 
 
 class AdminSentimentHandler(AdminBaseHandler):
@@ -18,7 +34,7 @@ class AdminSentimentHandler(AdminBaseHandler):
     @tornado.web.authenticated
     def get(self):
         stats = SensitiveWordRepository.get_alert_stats()
-        recent = SensitiveWordRepository.get_recent_alerts(20)
+        recent = _redact_conversation_alerts(SensitiveWordRepository.get_recent_alerts(20), self.current_user)
         words, _ = SensitiveWordRepository.get_all(page=1, page_size=200)
 
         self.render(
@@ -38,7 +54,7 @@ class AdminSentimentApiHandler(AdminBaseHandler):
     @tornado.web.authenticated
     def get(self):
         stats = SensitiveWordRepository.get_alert_stats()
-        recent = SensitiveWordRepository.get_recent_alerts(50)
+        recent = _redact_conversation_alerts(SensitiveWordRepository.get_recent_alerts(50), self.current_user)
         # 序列化 datetime 对象
         items = []
         for r in recent:
@@ -63,6 +79,9 @@ class AdminSentimentScanHandler(AdminBaseHandler):
     @tornado.web.authenticated
     def post(self):
         result = SensitiveWordRepository.scan_all()
+        from app.services.system_operations import send_alert_notification
+        send_alert_notification(result["total"])
+        write_audit_log("SENTIMENT_SCAN", self.current_user, "sentiment", f"alerts={result['total']}", self.request.remote_ip or "")
         self.write({"code": 0, "msg": f"扫描完成", "data": result})
 
 
@@ -80,6 +99,7 @@ class AdminSentimentAlertDetailHandler(AdminBaseHandler):
         if not detail:
             self.write({"code": 1, "msg": "预警不存在"})
             return
+        detail = _redact_conversation_alerts([detail], self.current_user)[0]
         self.write({"code": 0, "data": detail})
 
 
@@ -94,5 +114,10 @@ class AdminSentimentResolveHandler(AdminBaseHandler):
             self.write({"code": 1, "msg": "无效的预警ID"})
             return
         status = self.get_body_argument("status", "resolved")
+        if status not in {"pending", "resolved", "ignored"}:
+            self.set_status(400)
+            self.write({"code": 1, "msg": "无效的预警状态"})
+            return
         SensitiveWordRepository.update_alert_status(alert_id, status)
+        write_audit_log("SENTIMENT_ALERT_STATUS", self.current_user, f"alert:{alert_id}", status, self.request.remote_ip or "")
         self.write({"code": 0, "msg": "已更新"})

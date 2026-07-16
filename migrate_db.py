@@ -28,6 +28,7 @@ Usage:
 import logging
 import json
 import os
+import re
 import sqlite3
 import sys
 
@@ -392,9 +393,11 @@ def _table_exists(conn, table_name: str) -> bool:
 
 def _column_exists(conn, table_name: str, column_name: str) -> bool:
     """检查列是否存在。"""
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name):
+        raise ValueError(f"Invalid SQLite identifier: {table_name!r}")
     if not _table_exists(conn, table_name):
         return False
-    rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    rows = conn.execute(f'PRAGMA table_info("{table_name}")').fetchall()
     return any(r["name"] == column_name for r in rows)
 
 

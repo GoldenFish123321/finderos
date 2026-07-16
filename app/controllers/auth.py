@@ -137,6 +137,7 @@ class LoginHandler(BaseHandler):
             httponly=True,
             samesite="Lax",
             secure=is_https,
+            expires_days=settings.SESSION_EXPIRY_MINUTES / 1440,
         )
         write_audit_log("LOGIN_SUCCESS", username, "", "登录成功", client_ip)
         self._redirect_by_role(username)
@@ -167,12 +168,16 @@ class RegisterHandler(BaseHandler):
     def get(self):
         if self.current_user:
             return self.redirect("/chat")
+        if not settings.REGISTRATION_ENABLED:
+            raise tornado.web.HTTPError(403, "用户注册已关闭")
 
         self.render("register.html", title="用户注册 - 瞭望与问数系统", error=None)
 
     def post(self):
         if self.current_user:
             return self.redirect("/chat")
+        if not settings.REGISTRATION_ENABLED:
+            raise tornado.web.HTTPError(403, "用户注册已关闭")
 
         client_ip = self.request.remote_ip or "0.0.0.0"
         allowed, rate_limit_error = register_limiter.check(client_ip, "*")
@@ -198,11 +203,11 @@ class RegisterHandler(BaseHandler):
                 title="用户注册 — 瞭望与问数系统",
                 error="用户名至少需要2个字符",
             )
-        if len(password) < 6:
+        if len(password) < 8:
             return self.render(
                 "register.html",
                 title="用户注册 — 瞭望与问数系统",
-                error="密码至少需要6个字符",
+                error="密码至少需要8个字符",
             )
         if password != password_confirm:
             return self.render(
@@ -239,5 +244,6 @@ class RegisterHandler(BaseHandler):
             httponly=True,
             samesite="Lax",
             secure=is_https,
+            expires_days=settings.SESSION_EXPIRY_MINUTES / 1440,
         )
         self.redirect("/chat")

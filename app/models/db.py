@@ -619,9 +619,7 @@ def seed_default_data():
                 )
 
         # ── 种子：系统配置默认值（v0.11 新增）──
-        existing_config = conn.execute("SELECT COUNT(*) as cnt FROM system_config").fetchone()
-        if existing_config["cnt"] == 0:
-            default_configs = [
+        default_configs = [
                 ("system_name", "瞭望与问数系统", "系统名称，显示在页面标题和头部导航栏", "general"),
                 ("system_subtitle", "DataFinderAgentOS", "系统副标题/英文名称，显示在头部版本号旁", "general"),
                 ("system_logo", "", "系统 Logo 图片路径（相对于 static 目录），为空则显示文字 Logo", "general"),
@@ -630,12 +628,20 @@ def seed_default_data():
                 ("ai_default_model", "", "AI 默认模型 ID（空=使用 is_default=1 的模型）", "ai"),
                 ("ai_default_temperature", "0.7", "AI 默认温度参数（0-2）", "ai"),
                 ("ai_default_max_tokens", "4096", "AI 默认最大输出 Token 数", "ai"),
-            ]
-            conn.executemany(
-                "INSERT INTO system_config (key, value, description, category) VALUES (?, ?, ?, ?)",
-                default_configs,
-            )
-            print("[种子] 默认系统配置已创建（8 项）")
+                ("backup_path", "database/backups", "数据库备份目录", "operations"),
+                ("backup_interval_days", "1", "自动备份间隔天数", "operations"),
+                ("backup_retention", "7", "备份保留份数", "operations"),
+                ("log_level", "INFO", "日志级别", "operations"),
+                ("notification_webhook", "", "通知 Webhook URL", "operations"),
+                ("default_collection_interval", "60", "默认采集间隔（秒）", "operations"),
+                ("registration_enabled", "true", "是否允许用户注册", "security"),
+                ("session_expiry_minutes", "1440", "会话过期时间（分钟）", "security"),
+                ("max_upload_mb", "10", "文件上传大小上限（MB）", "security"),
+        ]
+        conn.executemany(
+            "INSERT OR IGNORE INTO system_config (key, value, description, category) VALUES (?, ?, ?, ?)",
+            default_configs,
+        )
 
         conn.commit()
 

@@ -202,6 +202,11 @@ body.dark-theme {
     font-size: 11px;
     color: rgba(255,255,255,0.3);
 }
+/* Enterprise visual override: restrained surfaces, no neon gradients/glow. */
+.dashboard-wrap { background: #111827; }
+.dashboard-header h1, .stat-number { background: none !important; color: #e5e7eb !important; -webkit-text-fill-color: initial !important; }
+.dashboard-header::after { background: #2563eb; }
+.dash-stat, .dash-panel { background: #182233 !important; box-shadow: none !important; border-color: #334155 !important; }
 </style>
 
 <div class="dashboard-wrap">
@@ -370,7 +375,6 @@ body.dark-theme {
         ];
 
         // 根据关键词词频生成数据点密度
-        var totalFreq = keywordData.reduce(function(s, k) { return s + k.value; }, 0) || 100;
         var scatterData = [];
         cities.forEach(function(c, idx) {
             var count = Math.max(1, Math.round((keywordData.length - idx) / keywordData.length * 20));

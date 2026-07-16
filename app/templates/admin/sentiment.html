@@ -162,6 +162,11 @@ body.dark-theme { background: #080a1a !important; }
 .alert-table .sev-dot {
     display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px;
 }
+/* Enterprise visual override: alerts retain severity color without decorative glow. */
+.sentiment-wrap { background: #111827; }
+.sent-header h1, .sent-stat .number { background: none !important; color: #e5e7eb !important; -webkit-text-fill-color: initial !important; }
+.sent-header::after { background: #dc2626; }
+.sent-stat, .sent-panel { background: #182233 !important; box-shadow: none !important; border-color: #334155 !important; }
 </style>
 
 <div class="sentiment-wrap">
@@ -170,7 +175,7 @@ body.dark-theme { background: #080a1a !important; }
         <h1>🛡️ 舆情大屏</h1>
         <div class="header-actions">
             <span id="update-time">更新中...</span>
-            <button class="btn-glass danger" onclick="triggerScan()">🔍 立即扫描</button>
+            <button class="btn-glass danger" onclick="triggerScan(this)">🔍 立即扫描</button>
             <button class="btn-glass" onclick="refreshSentiment()">⟳ 刷新</button>
             <a href="/admin" class="btn-glass">✕ 返回</a>
         </div>
@@ -261,6 +266,9 @@ body.dark-theme { background: #080a1a !important; }
 (function() {
     var charts = {};
     var chartObservers = {};
+    var statsData = {% raw json_encode(stats) %};
+    var trendData = statsData.trend || [];
+    var sourcesData = statsData.sources || [];
 
     function disposeChart(id) {
         if (charts[id]) { charts[id].dispose(); delete charts[id]; }
@@ -276,10 +284,6 @@ body.dark-theme { background: #080a1a !important; }
         Object.keys(charts).forEach(disposeChart);
 
         document.getElementById('update-time').textContent = '🕐 ' + new Date().toLocaleString('zh-CN');
-
-        var statsData = {% raw json_encode(stats) %};
-        var trendData = statsData.trend || [];
-        var sourcesData = statsData.sources || [];
 
         // 预警趋势
         var trendDom = document.getElementById('chart-trend');
@@ -375,6 +379,9 @@ body.dark-theme { background: #080a1a !important; }
             .then(function(d) {
                 if (d.code === 0) {
                     var data = d.data;
+                    statsData = data.stats;
+                    trendData = data.stats.trend || [];
+                    sourcesData = data.stats.sources || [];
                     document.getElementById('update-time').textContent = '🕐 ' + new Date().toLocaleString('zh-CN');
                     document.getElementById('stat-total').textContent = data.stats.total;
                     document.getElementById('stat-pending').textContent = data.stats.pending;
@@ -403,12 +410,16 @@ body.dark-theme { background: #080a1a !important; }
                     {% raw json_encode(stats) %}; // 重置变量
                     initCharts();
                 }
+            })
+            .catch(function() {
+                document.getElementById('update-time').textContent = '刷新失败';
+                if (typeof layer !== 'undefined') layer.msg('舆情数据刷新失败', {icon: 2});
             });
     };
 
     // 扫描
-    window.triggerScan = function() {
-        var btn = event && event.target ? event.target : document.querySelector('.btn-glass.danger');
+    window.triggerScan = function(btn) {
+        btn = btn || document.querySelector('.btn-glass.danger');
         btn.textContent = '⏳ 扫描中...';
         btn.disabled = true;
         var formData = new URLSearchParams();
@@ -424,7 +435,8 @@ body.dark-theme { background: #080a1a !important; }
             btn.disabled = false;
             if (d.code === 0) {
                 if (typeof layui !== 'undefined') layui.use(['layer'], function(l){
-                    l.layer.msg('扫描完成: ' + (d.data ? d.data.total : 0) + ' 条新预警', {time: 2000});
+                    var total = Number(d.data ? d.data.total : 0) || 0;
+                    l.layer.msg('扫描完成: ' + total + ' 条新预警', {time: 2000});
                 });
                 refreshSentiment();
             }

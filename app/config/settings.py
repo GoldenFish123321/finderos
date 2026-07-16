@@ -39,6 +39,16 @@ class Settings:
     AI_DEFAULT_MAX_TOKENS = 4096
     """AI 默认最大输出 Token 数。"""
 
+    BACKUP_PATH = "database/backups"
+    BACKUP_INTERVAL_DAYS = 1
+    BACKUP_RETENTION = 7
+    LOG_LEVEL = "INFO"
+    NOTIFICATION_WEBHOOK = ""
+    DEFAULT_COLLECTION_INTERVAL = 60
+    REGISTRATION_ENABLED = True
+    SESSION_EXPIRY_MINUTES = 1440
+    MAX_UPLOAD_MB = 10
+
     # === 安全配置 ===
     COOKIE_SECRET = os.environ.get("COOKIE_SECRET", "")
     """Tornado 安全 Cookie 签名密钥。生产环境必须通过环境变量注入。"""
@@ -147,25 +157,64 @@ class Settings:
                 "system_subtitle": "SYSTEM_SUBTITLE",
                 "system_logo": "SYSTEM_LOGO",
                 "icp_number": "ICP_NUMBER",
+                "default_port": "PORT",
                 "ai_default_model": "AI_DEFAULT_MODEL",
                 "ai_default_temperature": "AI_DEFAULT_TEMPERATURE",
                 "ai_default_max_tokens": "AI_DEFAULT_MAX_TOKENS",
+                "backup_path": "BACKUP_PATH",
+                "backup_interval_days": "BACKUP_INTERVAL_DAYS",
+                "backup_retention": "BACKUP_RETENTION",
+                "log_level": "LOG_LEVEL",
+                "notification_webhook": "NOTIFICATION_WEBHOOK",
+                "default_collection_interval": "DEFAULT_COLLECTION_INTERVAL",
+                "registration_enabled": "REGISTRATION_ENABLED",
+                "session_expiry_minutes": "SESSION_EXPIRY_MINUTES",
+                "max_upload_mb": "MAX_UPLOAD_MB",
             }
 
             for db_key, attr_name in _DB_KEY_MAP.items():
                 if db_key in db_config and db_config[db_key]:
+                    if attr_name == "PORT" and "PORT" in os.environ:
+                        continue
                     raw_value = db_config[db_key]
                     # 类型转换：数值型属性
                     if attr_name in ("AI_DEFAULT_TEMPERATURE",):
                         try:
-                            setattr(self, attr_name, float(raw_value))
+                            value = float(raw_value)
+                            if not 0.0 <= value <= 2.0:
+                                raise ValueError("temperature out of range")
+                            setattr(self, attr_name, value)
                         except (ValueError, TypeError):
                             logger.warning(f"system_config.{db_key} 值 '{raw_value}' 无效，使用默认值")
                     elif attr_name in ("AI_DEFAULT_MAX_TOKENS",):
                         try:
-                            setattr(self, attr_name, int(raw_value))
+                            value = int(raw_value)
+                            if not 1 <= value <= 131072:
+                                raise ValueError("max_tokens out of range")
+                            setattr(self, attr_name, value)
                         except (ValueError, TypeError):
                             logger.warning(f"system_config.{db_key} 值 '{raw_value}' 无效，使用默认值")
+                    elif attr_name in ("PORT", "BACKUP_INTERVAL_DAYS", "BACKUP_RETENTION", "DEFAULT_COLLECTION_INTERVAL", "SESSION_EXPIRY_MINUTES", "MAX_UPLOAD_MB"):
+                        try:
+                            value = int(raw_value)
+                            limits = {
+                                "PORT": (1, 65535), "BACKUP_INTERVAL_DAYS": (1, 365),
+                                "BACKUP_RETENTION": (1, 365), "DEFAULT_COLLECTION_INTERVAL": (10, 86400),
+                                "SESSION_EXPIRY_MINUTES": (5, 525600), "MAX_UPLOAD_MB": (1, 1024),
+                            }
+                            low, high = limits[attr_name]
+                            if not low <= value <= high:
+                                raise ValueError("value out of range")
+                            setattr(self, attr_name, value)
+                        except (ValueError, TypeError):
+                            logger.warning("system_config.%s value %r is invalid", db_key, raw_value)
+                    elif attr_name == "REGISTRATION_ENABLED":
+                        setattr(self, attr_name, str(raw_value).lower() in {"1", "true", "yes", "on"})
+                    elif attr_name == "LOG_LEVEL":
+                        if str(raw_value).upper() in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+                            setattr(self, attr_name, str(raw_value).upper())
+                        else:
+                            logger.warning("system_config.log_level value %r is invalid", raw_value)
                     elif attr_name in ("AI_DEFAULT_MODEL",):
                         # 模型 ID 保留为字符串（模板中统一用字符串比较）
                         setattr(self, attr_name, raw_value)
@@ -173,6 +222,7 @@ class Settings:
                         setattr(self, attr_name, raw_value)
 
             logger.info(f"已从 system_config 表加载 {len(db_config)} 项配置")
+            logging.getLogger().setLevel(getattr(logging, self.LOG_LEVEL, logging.INFO))
         except Exception as e:
             logger.warning(f"从 system_config 表加载配置失败（将使用默认值）: {e}")
 

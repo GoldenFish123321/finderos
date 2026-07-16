@@ -148,8 +148,8 @@ def main():
         print("错误: 用户名长度应在 3-32 个字符之间")
         sys.exit(1)
 
-    if len(password) < 6:
-        print("错误: 密码长度至少 6 个字符")
+    if len(password) < 8:
+        print("错误: 密码长度至少 8 个字符")
         sys.exit(1)
 
     create_admin(username, password, args.role_id)

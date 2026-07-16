@@ -115,6 +115,7 @@ class UserFormHandler(AdminBaseHandler):
             update_role_id = role_id if role_id_str else existing["role_id"]
             ok = UserRepository.update_user(user_id, update_username, password, update_role_id)
             if ok:
+                write_audit_log("USER_UPDATE", self.current_user, f"user:{user_id}", update_username, self.request.remote_ip or "")
                 self.redirect("/admin/user?msg=更新成功")
             else:
                 self.write('<script>alert("更新失败，用户名可能重复");window.history.back();</script>')
@@ -124,6 +125,8 @@ class UserFormHandler(AdminBaseHandler):
                 return
             ok = UserRepository.create_user(username, password, role_id)
             if ok:
+                created = UserRepository.get_user_by_username(username)
+                write_audit_log("USER_CREATE", self.current_user, f"user:{created['id'] if created else username}", username, self.request.remote_ip or "")
                 self.redirect("/admin/user?msg=创建成功")
             else:
                 self.write('<script>alert("用户名已存在");window.history.back();</script>')
@@ -147,6 +150,7 @@ class UserDeleteHandler(AdminBaseHandler):
             self.write('<script>alert("不能删除自己的账号");window.history.back();</script>')
             return
         UserRepository.delete_user(user_id)
+        write_audit_log("USER_DELETE", self.current_user, f"user:{user_id}", user["username"], self.request.remote_ip or "")
         self.redirect("/admin/user?msg=已删除")
 
 
@@ -171,6 +175,7 @@ class UserToggleHandler(AdminBaseHandler):
         if status == -1:
             self.write('<script>alert("禁用失败");window.history.back();</script>')
         else:
+            write_audit_log("USER_TOGGLE", self.current_user, f"user:{user_id}", f"enabled={status}", self.request.remote_ip or "")
             self.redirect(f"/admin/user?msg={'已启用' if status == 1 else '已禁用'}")
 
 
@@ -277,8 +282,8 @@ class ChangePasswordHandler(AdminBaseHandler):
         if new_password != confirm_password:
             self.write('<script>alert("两次输入的新密码不一致");window.history.back();</script>')
             return
-        if len(new_password) < 6:
-            self.write('<script>alert("新密码长度不能少于6个字符");window.history.back();</script>')
+        if len(new_password) < 8:
+            self.write('<script>alert("新密码长度不能少于8个字符");window.history.back();</script>')
             return
 
         user = UserRepository.get_user_by_username(self.current_user)

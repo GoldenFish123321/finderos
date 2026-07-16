@@ -1,5 +1,16 @@
 # 代码安全修复报告（修复加固后）
 
+## 2026-07-16 current verification
+
+Authorization, SSRF/DNS pinning, API-key on-demand decryption,
+prompt-injection boundaries, CRLF header validation, audit coverage, rate
+limiting, and DOM output encoding are covered by regression tests. CSP still
+permits selected inline scripts/styles for legacy Layui templates; removing
+them requires migrating inline event handlers and remains a documented
+residual risk.
+
+Generate the DOCX deliverables with `python scripts/generate_audit_docx.py`.
+
 > **项目名称**：FinderOS (DataFinderAgentOS) — 智能瞭望与智能问数系统
 > **修复日期**：2026-07-16
 > **修复版本**：v0.9（修复后）

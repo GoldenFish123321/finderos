@@ -1,4 +1,13 @@
-# 测试用例文档 v1.0.3-beta
+# 测试用例文档 v{{ app_version }}
+
+## Issues 77-126 regression scope
+
+- Logo configuration commits before old files are deleted.
+- Sentiment scans enforce uniqueness, status allowlists, privacy, and audit logs.
+- Media generation uses the pinned safe HTTP client and redacts provider errors.
+- Chat database and file operations execute outside the Tornado IOLoop.
+- Mobile layout, fetch failure feedback, and chart observer cleanup are covered.
+- Password length, dependencies, migration identifiers, and setting ranges are validated.
 
 ## v1.0.3-beta security regression
 

@@ -289,12 +289,16 @@ class ModelFormHandler(AdminBaseHandler):
                 category, system_prompt, temperature, top_p, top_k, max_tokens, context_size
             )
             msg = "更新成功" if ok else "更新失败"
+            if ok:
+                write_audit_log("MODEL_UPDATE", self.current_user, f"model:{model_id}", name, self.request.remote_ip or "")
         else:
             new_id = AiModelRepository.create(
                 name, provider, api_base, api_key, model_name,
                 category, system_prompt, temperature, top_p, top_k, max_tokens, context_size
             )
             msg = "创建成功" if new_id > 0 else "创建失败"
+            if new_id > 0:
+                write_audit_log("MODEL_CREATE", self.current_user, f"model:{new_id}", name, self.request.remote_ip or "")
 
         self.redirect(f"/admin/model?msg={msg}")
 
@@ -514,6 +518,7 @@ class ModelDeleteHandler(AdminBaseHandler):
             self.write('<script>alert("该模型不属于管理员模型组");window.history.back();</script>')
             return
         AiModelRepository.delete(model_id)
+        write_audit_log("MODEL_DELETE", self.current_user, f"model:{model_id}", model.get("name", ""), self.request.remote_ip or "")
         self.redirect("/admin/model?msg=已删除")
 
 
@@ -535,6 +540,7 @@ class ModelToggleHandler(AdminBaseHandler):
         if status == -1:
             self.write('<script>alert("模型不存在");window.history.back();</script>')
         else:
+            write_audit_log("MODEL_TOGGLE", self.current_user, f"model:{model_id}", f"enabled={status}", self.request.remote_ip or "")
             self.redirect(
                 f"/admin/model?msg={'已启用' if status == 1 else '已禁用'}"
             )
@@ -554,7 +560,12 @@ class ModelDefaultHandler(AdminBaseHandler):
         if not model or model.get("model_scope", "admin") != "admin":
             self.write('<script>alert("该模型不属于管理员模型组");window.history.back();</script>')
             return
+        if model.get("is_enabled") != 1:
+            self.set_status(400)
+            self.write("禁用模型不能设为默认模型")
+            return
         AiModelRepository.set_default(model_id)
+        write_audit_log("MODEL_SET_DEFAULT", self.current_user, f"model:{model_id}", model.get("name", ""), self.request.remote_ip or "")
         self.redirect("/admin/model?msg=已设为默认模型")
 
 
