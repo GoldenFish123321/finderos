@@ -11,14 +11,14 @@
 ### POST / — 用户登录
 - **Content-Type**: `application/x-www-form-urlencoded`
 - **参数**: `username`, `password`
-- **成功**: 302 跳转（有后台功能权限→优先 `/admin`，否则第一个授权后台路由；无后台功能权限→`/index`）
+- **成功**: 302 跳转到 `/chat`，后台和模型 API 配置入口由页面链接按权限进入
 - **失败**: 渲染登录页 + 错误提示
 - **限速**: 同 IP+用户名 5次/15分钟
 
 ### POST /register — 用户注册
 - **Content-Type**: `application/x-www-form-urlencoded`
 - **参数**: `username`, `password`, `password_confirm`
-- **成功**: 自动登录并 302 跳转到 `/index`；若该用户角色拥有后台功能权限，`/index` 会继续跳转到 `/admin` 或第一个授权后台路由
+- **成功**: 自动登录并 302 跳转到 `/chat`
 - **失败**: 渲染注册页 + 错误提示（用户名已存在 / 密码不一致 / 密码强度不足等）
 
 ### GET /register — 注册页面
@@ -167,12 +167,15 @@ data: {"code":1,"msg":"请输入关键词"}
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/admin/model` | 模型引擎列表（?page=&category=） |
-| GET/POST | `/admin/model/config` | 模型 API 快速配置（普通用户默认权限，不含删除/启停/设默认） |
+| GET/POST | `/admin/model/config` | 模型 API 快速配置（普通用户默认权限，API Key 密码框回显且可显示/隐藏，不含删除/启停/设默认） |
+| POST | `/admin/model/config/test` | 测试模型 API 配置连通性；请求体同快速配置表单，返回 `code/msg/status/elapsed_ms` |
 | GET/POST | `/admin/model/add` | 新增模型 |
 | GET/POST | `/admin/model/edit` | 编辑模型 |
 | POST | `/admin/model/delete` | 删除模型 |
 | POST | `/admin/model/toggle` | 启用/禁用 |
 | POST | `/admin/model/default` | 设为默认模型 |
+
+> 安全约束：快速配置页修改 Provider、API Base 或 Model Name 时，必须重新输入新 API Key，或显式勾选确认复用当前密钥，避免旧密钥被误发送到新的接口地址。
 
 ### 4.2 模型对话 (SSE) — ⚠️ 已废弃
 

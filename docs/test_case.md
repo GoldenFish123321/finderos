@@ -75,6 +75,9 @@
 | TC-MODEL-04 | 真实API对话 | 配置有效API Key后发送 | SSE流式返回AI回复 |
 | TC-MODEL-05 | Token统计 | 多次对话 | total_tokens累计增长 |
 | TC-MODEL-06 | 审计日志 | 发送对话消息 | audit_logs表新增USER_CHAT记录 |
+| TC-MODEL-07 | 快速配置 Key 回显 | 打开 `/admin/model/config` | API Key 在密码框中回显，默认隐藏，可点击显示/隐藏 |
+| TC-MODEL-08 | 快速配置测试连接 | 填写 API Base/API Key/Model Name 后点击测试连接 | 返回 HTTP 状态、耗时与成功/失败提示，不展示或记录密钥 |
+| TC-MODEL-09 | 变更接口地址防误发 Key | 修改 API Base 后不重新输入 Key 且不勾选确认复用 | 拒绝保存/测试，提示重新输入或确认复用密钥 |
 
 ## 6. 接口管理（Issue #26）
 
@@ -104,6 +107,7 @@
 | 编号 | 测试项 | 步骤 | 预期结果 |
 |------|--------|------|----------|
 | TC-CHAT-01 | 用户访问对话页 | 普通用户登录后手动访问 /chat | 进入 A/B/C/D/E 五区对话页面 |
+| TC-CHAT-01b | 登录默认落点 | 普通用户或管理员登录成功 | 默认进入 `/chat`，不直接进入 `/admin/model/config` 或后台 |
 | TC-CHAT-02 | SSE 流式对话 | 输入消息并发送 | AI 逐字流式回复，Markdown 渲染 |
 | TC-CHAT-03 | 多轮对话上下文 | 连续发送关联问题 | AI 基于上下文正确回答 |
 | TC-CHAT-04 | @数字员工调用 | 输入 `@天气 北京` | 匹配天气员工，返回天气信息卡片 |

@@ -9,12 +9,22 @@ admin_model.py — 模型引擎控制器
 """
 import json
 import logging
+import time
+import asyncio
+import atexit
+import concurrent.futures
 import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
 from app.models.ai_model import AiModelRepository, CATEGORIES, PROVIDERS
 from app.utils.security import write_audit_log
+from app.utils.safe_http import SafeHttpError, safe_http_request
 
 logger = logging.getLogger(__name__)
+
+_model_api_test_executor = concurrent.futures.ThreadPoolExecutor(
+    max_workers=4, thread_name_prefix="model-api-test"
+)
+atexit.register(_model_api_test_executor.shutdown, wait=True)
 
 
 def _model_connection_changed(model: dict, provider: str, api_base: str, model_name: str) -> bool:
@@ -24,6 +34,153 @@ def _model_connection_changed(model: dict, provider: str, api_base: str, model_n
         (model.get("api_base") or "") != api_base,
         (model.get("model_name") or "") != model_name,
     ])
+
+
+def _resolve_quick_config_api_key(
+    model: dict | None,
+    provider: str,
+    api_base: str,
+    model_name: str,
+    submitted_api_key: str,
+    clear_key: bool = False,
+    confirm_reuse_key: bool = False,
+) -> tuple[str, str]:
+    """Resolve which API Key should be saved/tested for quick config.
+
+    The quick-config page renders the existing key into a password input so
+    the user can verify it and optionally toggle plaintext display. Empty input
+    still means "reuse existing key" when endpoint fields are unchanged.
+    """
+    if clear_key:
+        return "", ""
+    if submitted_api_key:
+        if (
+            model and model.get("api_key")
+            and submitted_api_key == model.get("api_key")
+            and _model_connection_changed(model, provider, api_base, model_name)
+            and not confirm_reuse_key
+        ):
+            return "", (
+                "检测到提供商、API Base 或 Model Name 已变更。"
+                "若要继续使用当前已保存密钥，请先勾选确认复用；"
+                "否则请重新输入新的 API Key"
+            )
+        return submitted_api_key, ""
+    if not model:
+        return "", ""
+    if _model_connection_changed(model, provider, api_base, model_name) and model.get("api_key"):
+        return "", "修改提供商、API Base 或 Model Name 时必须重新输入 API Key"
+    return model.get("api_key", "") or "", ""
+
+
+def _redact_model_test_text(text: str, api_key: str = "") -> str:
+    """Remove sensitive values from model test messages before UI/audit output."""
+    text = str(text or "")
+    if api_key:
+        text = text.replace(api_key, "[REDACTED]")
+        text = text.replace("Bearer " + api_key, "Bearer [REDACTED]")
+    return text[:300]
+
+
+def _extract_model_test_detail(status: int, reason: str, body: str, api_key: str = "") -> str:
+    """Build a short, non-secret detail message for model API test results."""
+    try:
+        data = json.loads(body or "{}")
+    except json.JSONDecodeError:
+        return _redact_model_test_text(body or reason or "", api_key)
+
+    if isinstance(data, dict):
+        if isinstance(data.get("error"), dict):
+            return _redact_model_test_text(data["error"].get("message") or data["error"], api_key)
+        choices = data.get("choices")
+        if isinstance(choices, list) and choices:
+            return "接口返回 choices，模型可正常响应"
+        if data.get("id") or data.get("model"):
+            return "接口返回模型响应元数据"
+    return _redact_model_test_text(f"HTTP {status}: {reason}", api_key)
+
+
+def _test_model_connection_sync(
+    provider: str,
+    api_base: str,
+    api_key: str,
+    model_name: str,
+    timeout: int = 20,
+) -> dict:
+    """Synchronously test an OpenAI-compatible chat completions endpoint."""
+    start = time.time()
+    api_base = (api_base or "").strip().rstrip("/")
+    model_name = (model_name or "").strip()
+    api_key = (api_key or "").strip()
+
+    if not api_base:
+        return {"code": 1, "msg": "请填写 API Base URL", "status": 0}
+    if not model_name:
+        return {"code": 1, "msg": "请填写 Model Name", "status": 0}
+    if not api_key:
+        return {"code": 1, "msg": "请填写 API Key", "status": 0}
+
+    url = f"{api_base}/chat/completions"
+    payload = json.dumps({
+        "model": model_name,
+        "messages": [
+            {"role": "user", "content": "ping"}
+        ],
+        "max_tokens": 1,
+        "temperature": 0,
+        "stream": False,
+    }).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json; charset=utf-8",
+        "Authorization": f"Bearer {api_key}",
+    }
+
+    try:
+        resp = safe_http_request(
+            url,
+            method="POST",
+            headers=headers,
+            body=payload,
+            timeout=timeout,
+            max_bytes=64 * 1024,
+        )
+        body = resp.body.decode("utf-8", errors="replace")
+        elapsed_ms = int((time.time() - start) * 1000)
+        detail = _extract_model_test_detail(resp.status, resp.reason, body, api_key)
+        ok = 200 <= resp.status < 300 and "error" not in (body[:200].lower())
+        if ok:
+            msg = f"测试成功：HTTP {resp.status}，{detail}"
+        elif resp.status in (401, 403):
+            msg = f"认证失败：HTTP {resp.status}，请检查 API Key 或模型权限"
+        else:
+            msg = f"测试失败：HTTP {resp.status} {resp.reason}，{detail}"
+        return {
+            "code": 0 if ok else 1,
+            "msg": msg,
+            "status": resp.status,
+            "elapsed_ms": elapsed_ms,
+            "provider": provider,
+            "resolved_ip": resp.resolved_ip,
+        }
+    except SafeHttpError as e:
+        msg = _redact_model_test_text(str(e), api_key)
+        return {
+            "code": 1,
+            "msg": msg,
+            "status": 0,
+            "elapsed_ms": int((time.time() - start) * 1000),
+            "provider": provider,
+        }
+    except Exception as e:
+        msg = _redact_model_test_text(str(e), api_key)
+        logger.warning("模型 API 测试失败: %s", msg)
+        return {
+            "code": 1,
+            "msg": f"模型 API 测试失败: {msg}",
+            "status": 0,
+            "elapsed_ms": int((time.time() - start) * 1000),
+            "provider": provider,
+        }
 
 
 class ModelListHandler(AdminBaseHandler):
@@ -185,19 +342,15 @@ class ModelQuickConfigHandler(AdminBaseHandler):
 
         if model:
             clear_key = self.get_body_argument("clear_key", "0") == "1"
-            connection_changed = _model_connection_changed(model, provider, api_base, model_name)
-            if connection_changed and model.get("api_key") and not api_key and not clear_key:
+            confirm_reuse_key = self.get_body_argument("confirm_reuse_key", "0") == "1"
+            api_key_to_save, key_error = _resolve_quick_config_api_key(
+                model, provider, api_base, model_name, api_key, clear_key, confirm_reuse_key
+            )
+            if key_error:
                 self.write(
-                    '<script>alert("修改提供商、API Base 或 Model Name 时必须重新输入 API Key，'
-                    '避免复用已有密钥到新的接口地址");window.history.back();</script>'
+                    f'<script>alert("{key_error}");window.history.back();</script>'
                 )
                 return
-            if clear_key:
-                api_key_to_save = ""
-            elif api_key:
-                api_key_to_save = api_key
-            else:
-                api_key_to_save = model.get("api_key", "")
 
             ok = AiModelRepository.update(
                 model["id"],
@@ -238,6 +391,45 @@ class ModelQuickConfigHandler(AdminBaseHandler):
             client_ip=self.request.remote_ip or "",
         )
         self.redirect(f"/admin/model/config?msg={msg}")
+
+
+class ModelQuickConfigTestHandler(AdminBaseHandler):
+    """AJAX: 测试模型 API 快速配置是否可连通。"""
+
+    @tornado.web.authenticated
+    async def post(self):
+        model = ModelQuickConfigHandler._get_target_model(self)
+        provider = self.get_body_argument("provider", "openai").strip()
+        api_base = self.get_body_argument("api_base", "").strip()
+        api_key = self.get_body_argument("api_key", "").strip()
+        model_name = self.get_body_argument("model_name", "").strip()
+        clear_key = self.get_body_argument("clear_key", "0") == "1"
+        confirm_reuse_key = self.get_body_argument("confirm_reuse_key", "0") == "1"
+
+        if provider not in {p["value"] for p in PROVIDERS}:
+            self.write({"code": 1, "msg": "无效的提供商", "status": 0})
+            return
+
+        api_key_to_test, key_error = _resolve_quick_config_api_key(
+            model, provider, api_base, model_name, api_key, clear_key, confirm_reuse_key
+        )
+        if key_error:
+            self.write({"code": 1, "msg": f"{key_error}后再测试", "status": 0})
+            return
+
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            _model_api_test_executor,
+            lambda: _test_model_connection_sync(provider, api_base, api_key_to_test, model_name),
+        )
+        write_audit_log(
+            action="MODEL_QUICK_CONFIG_TEST",
+            username=self.current_user,
+            target=f"model:{model['id']}" if model else "model:draft",
+            detail=("success" if result.get("code") == 0 else "failed") + f": {_redact_model_test_text(result.get('msg', ''), api_key_to_test)[:200]}",
+            client_ip=self.request.remote_ip or "",
+        )
+        self.write(result)
 
 
 class ModelDeleteHandler(AdminBaseHandler):

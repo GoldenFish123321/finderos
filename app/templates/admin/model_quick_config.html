@@ -12,6 +12,55 @@
     font-size:12px;
     line-height:1.7;
 }
+.quick-model-test-result {
+    display:none;
+    padding:10px 12px;
+    margin:12px 0;
+    border-radius:8px;
+    font-size:12px;
+    line-height:1.6;
+}
+.quick-model-test-result.ok {
+    display:block;
+    border:1px solid rgba(22,163,74,0.28);
+    background:rgba(22,163,74,0.10);
+    color:#16a34a;
+}
+.quick-model-test-result.fail {
+    display:block;
+    border:1px solid rgba(239,68,68,0.28);
+    background:rgba(239,68,68,0.10);
+    color:#ef4444;
+}
+.api-key-row {
+    display:flex;
+    gap:8px;
+}
+.api-key-row .layui-input {
+    flex:1;
+}
+.api-key-toggle {
+    min-width:74px;
+}
+.api-key-status {
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    padding:3px 8px;
+    border-radius:999px;
+    font-size:12px;
+    margin-top:8px;
+}
+.api-key-status.saved {
+    color:#16a34a;
+    background:rgba(22,163,74,0.10);
+    border:1px solid rgba(22,163,74,0.24);
+}
+.api-key-status.empty {
+    color:#f59e0b;
+    background:rgba(245,158,11,0.10);
+    border:1px solid rgba(245,158,11,0.24);
+}
 </style>
 
 <div class="layui-card">
@@ -26,10 +75,11 @@
         <div class="quick-model-help">
             该页面面向普通用户开放，只允许配置当前默认/首个模型的基础 API 连接信息；
             不提供模型删除、启停、设为默认等全局管理操作。如需完整模型管理，请联系管理员授权“模型引擎”。
-            修改提供商、API Base 或 Model Name 时必须重新输入 API Key，避免复用已有密钥到新的接口地址。
+            API Key 默认以密码形式隐藏但会回显，点击“显示”可明文确认；保存前可点击“测试连接”验证配置是否可用。
+            如果修改提供商、API Base 或 Model Name，系统会要求重新输入新密钥，或显式确认复用当前密钥。
         </div>
 
-        <form class="layui-form" action="/admin/model/config" method="post" style="max-width:700px;">
+        <form class="layui-form" id="quick-model-form" action="/admin/model/config" method="post" style="max-width:700px;">
             {% module xsrf_form_html() %}
 
             <div class="layui-form-item">
@@ -66,14 +116,26 @@
             <div class="layui-form-item">
                 <label class="layui-form-label">API Key</label>
                 <div class="layui-input-block">
-                    <input type="password" name="api_key" class="layui-input"
-                           value="" placeholder="{{ '留空则不修改' if model else 'sk-...' }}">
+                    <div class="api-key-row">
+                        <input type="password" name="api_key" id="api-key-input" class="layui-input"
+                               value="{{ model['api_key'] if model else '' }}" placeholder="sk-...">
+                        <button type="button" class="layui-btn layui-btn-primary api-key-toggle" id="toggle-api-key">👁 显示</button>
+                    </div>
+                    {% if model and model.get('api_key') %}
+                    <div class="api-key-status saved">● 已保存密钥</div>
+                    {% else %}
+                    <div class="api-key-status empty">● 未配置密钥</div>
+                    {% end %}
                     <div class="layui-form-mid layui-word-aux">
-                        修改提供商/API Base/Model Name 时必须重填；仅修改显示名称或分类时可留空保留。
+                        已保存的密钥会在密码框中回显，默认隐藏；请自行决定是否点击“显示”明文查看。
                     </div>
                     {% if model %}
                     <div style="margin-top:6px;">
                         <input type="checkbox" name="clear_key" value="1" title="清除密钥（将 API Key 设为空）">
+                    </div>
+                    <div style="margin-top:6px;">
+                        <input type="checkbox" name="confirm_reuse_key" value="1"
+                               title="我确认将当前密钥用于新的提供商 / API Base / Model Name">
                     </div>
                     {% end %}
                 </div>
@@ -103,10 +165,14 @@
 
             <div class="layui-form-item" style="margin-top:20px;">
                 <div class="layui-input-block">
+                    <button type="button" class="layui-btn layui-btn-warm" id="test-api-config">
+                        <i class="layui-icon layui-icon-vercode"></i> 测试连接
+                    </button>
                     <button type="submit" class="layui-btn layui-btn-normal">
                         <i class="layui-icon layui-icon-ok"></i> 保存 API 配置
                     </button>
                     <a href="/chat" class="layui-btn layui-btn-primary">返回前台问数</a>
+                    <div id="quick-model-test-result" class="quick-model-test-result"></div>
                 </div>
             </div>
         </form>
@@ -119,5 +185,56 @@
 layui.use('form', function(){
     layui.form.render();
 });
+
+(function(){
+    var keyInput = document.getElementById('api-key-input');
+    var toggleBtn = document.getElementById('toggle-api-key');
+    var testBtn = document.getElementById('test-api-config');
+    var form = document.getElementById('quick-model-form');
+    var resultBox = document.getElementById('quick-model-test-result');
+
+    if (toggleBtn && keyInput) {
+        toggleBtn.addEventListener('click', function(){
+            var visible = keyInput.type === 'text';
+            keyInput.type = visible ? 'password' : 'text';
+            toggleBtn.textContent = visible ? '👁 显示' : '🙈 隐藏';
+        });
+    }
+
+    function showResult(ok, text) {
+        resultBox.className = 'quick-model-test-result ' + (ok ? 'ok' : 'fail');
+        resultBox.textContent = text;
+    }
+
+    if (testBtn && form) {
+        testBtn.addEventListener('click', function(){
+            var formData = new FormData(form);
+            testBtn.disabled = true;
+            testBtn.innerHTML = '<i class="layui-icon layui-icon-loading layui-anim layui-anim-rotate layui-anim-loop"></i> 测试中...';
+            showResult(false, '正在测试模型 API 连接，请稍候...');
+            fetch('/admin/model/config/test', {
+                method: 'POST',
+                body: new URLSearchParams(formData),
+                credentials: 'same-origin',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'}
+            })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                var msg = d.msg || (d.code === 0 ? '测试成功' : '测试失败');
+                if (d.elapsed_ms !== undefined) {
+                    msg += '（耗时 ' + d.elapsed_ms + 'ms）';
+                }
+                showResult(d.code === 0, msg);
+            })
+            .catch(function(err){
+                showResult(false, '测试请求失败：' + err);
+            })
+            .finally(function(){
+                testBtn.disabled = false;
+                testBtn.innerHTML = '<i class="layui-icon layui-icon-vercode"></i> 测试连接';
+            });
+        });
+    }
+})();
 </script>
 {% end %}

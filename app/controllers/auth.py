@@ -2,7 +2,7 @@
 auth.py — 认证相关控制器
 
 处理用户登录、登出逻辑。
-登录后根据功能权限跳转：有后台功能权限 → 管理后台，无后台功能权限 → 用户前台。
+登录成功后统一进入前台智能问数页；后台入口由前台/导航中的链接进入。
 """
 
 import time
@@ -142,19 +142,8 @@ class LoginHandler(BaseHandler):
         self._redirect_by_role(username)
 
     def _redirect_by_role(self, username: str):
-        """根据用户角色跳转到对应页面。"""
-        role = UserRepository.get_user_role(username)
-        if not role:
-            self.redirect("/index")
-            return
-
-        # 根据是否有后台功能权限决定跳转（避免硬编码角色名）。
-        # 优先进入后台首页；若自定义角色没有 /admin，则进入第一个授权后台路由。
-        routes = [r for r in UserRepository.get_user_function_routes(username) if r.startswith("/admin")]
-        if routes:
-            self.redirect("/admin" if "/admin" in routes else routes[0])
-        else:
-            self.redirect("/index")
+        """登录后统一进入前台问数页，避免普通用户被带到模型配置页。"""
+        self.redirect("/chat")
 
 
 class LogoutHandler(BaseHandler):
@@ -177,13 +166,13 @@ class RegisterHandler(BaseHandler):
 
     def get(self):
         if self.current_user:
-            return self.redirect("/index")
+            return self.redirect("/chat")
 
         self.render("register.html", title="用户注册 - 瞭望与问数系统", error=None)
 
     def post(self):
         if self.current_user:
-            return self.redirect("/index")
+            return self.redirect("/chat")
 
         client_ip = self.request.remote_ip or "0.0.0.0"
         allowed, rate_limit_error = register_limiter.check(client_ip, "*")
@@ -251,4 +240,4 @@ class RegisterHandler(BaseHandler):
             samesite="Lax",
             secure=is_https,
         )
-        self.redirect("/index?msg=注册成功，欢迎使用瞭望与问数系统！")
+        self.redirect("/chat")

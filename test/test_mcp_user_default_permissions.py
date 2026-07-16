@@ -69,6 +69,7 @@ def test_admin_route_permission_resolves_specific_routes():
     handler = object.__new__(AdminBaseHandler)
     assert handler._resolve_required_route("/admin") == "/admin"
     assert handler._resolve_required_route("/admin/model/config") == "/admin/model/config"
+    assert handler._resolve_required_route("/admin/model/config/test") == "/admin/model/config"
     assert handler._resolve_required_route("/admin/model/add") == "/admin/model"
     assert handler._resolve_required_route("/admin/api/model/list") == "/admin/model"
     assert handler._resolve_required_route("/admin/mcp/reload") == "/admin/mcp/tool"
@@ -112,6 +113,7 @@ def test_model_quick_config_route_and_template():
     app = make_app()
     patterns = [rule.matcher.regex.pattern for rule in app.wildcard_router.rules]
     assert any("/admin/model/config" in p for p in patterns)
+    assert any("/admin/model/config/test" in p for p in patterns)
 
     template = Loader("app/templates").load("admin/model_quick_config.html")
     assert template is not None
@@ -135,12 +137,16 @@ def test_chat_page_exposes_model_api_config_link():
 
 
 def test_model_quick_config_detects_endpoint_change():
-    from app.controllers.admin_model import _model_connection_changed
+    from app.controllers.admin_model import (
+        _model_connection_changed,
+        _resolve_quick_config_api_key,
+    )
 
     model = {
         "provider": "openai",
         "api_base": "https://api.openai.com/v1",
         "model_name": "gpt-4o-mini",
+        "api_key": "sk-saved",
     }
     assert not _model_connection_changed(
         model, "openai", "https://api.openai.com/v1", "gpt-4o-mini"
@@ -154,6 +160,86 @@ def test_model_quick_config_detects_endpoint_change():
     assert _model_connection_changed(
         model, "openai", "https://api.openai.com/v1", "gpt-4o"
     )
+    assert _resolve_quick_config_api_key(
+        model, "openai", "https://api.openai.com/v1", "gpt-4o-mini", ""
+    ) == ("sk-saved", "")
+    assert _resolve_quick_config_api_key(
+        model, "openai", "https://example.invalid/v1", "gpt-4o-mini", ""
+    )[1]
+    assert _resolve_quick_config_api_key(
+        model, "openai", "https://example.invalid/v1", "gpt-4o-mini", "sk-saved"
+    )[1]
+    assert _resolve_quick_config_api_key(
+        model,
+        "openai",
+        "https://example.invalid/v1",
+        "gpt-4o-mini",
+        "sk-saved",
+        confirm_reuse_key=True,
+    ) == ("sk-saved", "")
+    assert _resolve_quick_config_api_key(
+        model, "openai", "https://example.invalid/v1", "gpt-4o-mini", "sk-new"
+    ) == ("sk-new", "")
+
+
+def test_model_quick_config_template_key_echo_and_test_ui():
+    from pathlib import Path
+    from tornado.template import Loader
+
+    source = Path("app/templates/admin/model_quick_config.html").read_text(encoding="utf-8")
+    Loader("app/templates").load("admin/model_quick_config.html")
+    assert 'id="api-key-input"' in source
+    assert 'value="{{ model[\'api_key\'] if model else \'\' }}"' in source
+    assert "toggle-api-key" in source
+    assert "已保存密钥" in source
+    assert "confirm_reuse_key" in source
+    assert "我确认将当前密钥用于新的提供商" in source
+    assert "测试连接" in source
+    assert "/admin/model/config/test" in source
+
+
+def test_model_quick_config_test_redacts_key_and_reports_success():
+    from app.controllers.admin_model import (
+        _redact_model_test_text,
+        _test_model_connection_sync,
+    )
+    from app.utils.safe_http import SafeHttpResponse
+    from unittest.mock import patch
+
+    assert "sk-secret" not in _redact_model_test_text("bad sk-secret", "sk-secret")
+
+    response = SafeHttpResponse(
+        status=200,
+        reason="OK",
+        headers={},
+        body=b'{"choices":[{"message":{"content":"ok"}}]}',
+        resolved_ip="93.184.216.34",
+    )
+    with patch("app.controllers.admin_model.safe_http_request", return_value=response) as req:
+        result = _test_model_connection_sync(
+            "openai",
+            "https://api.example.test/v1",
+            "sk-secret",
+            "gpt-test",
+        )
+    assert result["code"] == 0
+    assert "测试成功" in result["msg"]
+    assert "sk-secret" not in result["msg"]
+    call_kwargs = req.call_args.kwargs
+    assert call_kwargs["method"] == "POST"
+    assert call_kwargs["headers"]["Authorization"] == "Bearer sk-secret"
+
+
+def test_login_and_index_default_to_chat():
+    from pathlib import Path
+
+    auth_source = Path("app/controllers/auth.py").read_text(encoding="utf-8")
+    home_source = Path("app/controllers/home.py").read_text(encoding="utf-8")
+    redirect_body = auth_source[auth_source.index("def _redirect_by_role"):]
+    redirect_body = redirect_body[:redirect_body.index("class LogoutHandler")]
+    assert 'self.redirect("/chat")' in redirect_body
+    assert 'routes = [r for r in UserRepository.get_user_function_routes' not in redirect_body
+    assert 'self.redirect("/chat")' in home_source
 
 
 def test_mcp_registry_rebinds_to_new_server():
