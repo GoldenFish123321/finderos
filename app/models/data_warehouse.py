@@ -272,6 +272,113 @@ class DataWarehouseRepository:
             return []
 
     @staticmethod
+    def get_source_distribution(limit: int = 10) -> list:
+        """获取数据仓库来源分布。"""
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT source_name, COUNT(*) as cnt FROM data_warehouse "
+                "WHERE source_name != '' GROUP BY source_name ORDER BY cnt DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [{"name": r["source_name"], "value": r["cnt"]} for r in rows]
+
+    @staticmethod
+    def get_trend_data(days: int = 14) -> dict:
+        """获取采集趋势数据。"""
+        from datetime import datetime, timedelta
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT DATE(created_at) as dt, COUNT(*) as cnt "
+                "FROM data_warehouse "
+                f"WHERE created_at >= DATE('now', '-{days - 1} days') "
+                "GROUP BY dt ORDER BY dt"
+            ).fetchall()
+            date_map = {r["dt"]: r["cnt"] for r in rows}
+            today = datetime.now().date()
+            all_dates = [(today - timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]
+            return {
+                "dates": [d[-5:] for d in all_dates],
+                "counts": [date_map.get(d, 0) for d in all_dates],
+            }
+
+    @staticmethod
+    def get_keyword_frequency(limit: int = 50) -> list:
+        """从数据仓库标题中提取关键词词频（用于词云）。
+
+        使用简单分词策略：去除常见停用词后统计词频。
+        """
+        import re
+        with get_db() as conn:
+            titles = conn.execute(
+                "SELECT title FROM data_warehouse WHERE title != '' AND title IS NOT NULL"
+            ).fetchall()
+
+        # 常见停用词
+        stop_words = {
+            "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一", "一个",
+            "上", "也", "很", "到", "说", "要", "去", "你", "会", "着", "没有", "看", "好",
+            "自己", "这", "他", "她", "它", "们", "与", "及", "或", "从", "被", "把", "对",
+            "等", "能", "已", "将", "为", "以", "之", "其", "中", "而", "所", "如", "更",
+            "又", "但", "而", "还", "可", "让", "用", "做", "并", "且", "如果", "因为",
+            "所以", "关于", "虽然", "但是", "不仅", "而且", "或者", "还是", "通过", "进行",
+            "可以", "应该", "需要", "没有", "已经", "其中", "以及", "以及", "目前", "日前",
+            "今日", "今年", "昨日", "去年", "本月", "今天", "近日", "原标题", "来源", "作者",
+        }
+
+        freq = {}
+        for row in titles:
+            title = row["title"]
+            if not title:
+                continue
+            # 按标点和空格分割（连字符用单独处理避免转义问题）
+            sep_re = re.compile(r'[\s,，。、；：！？""''()【】/_—+]+')
+            words = sep_re.split(title)
+            words = [w.replace('[', '').replace(']', '').replace('-', '') for w in words]
+            for word in words:
+                word = word.strip()
+                # 只保留 2-6 个字符的中文词
+                if len(word) < 2 or len(word) > 6:
+                    continue
+                if not all('\u4e00' <= c <= '\u9fff' for c in word):
+                    continue
+                if word in stop_words:
+                    continue
+                freq[word] = freq.get(word, 0) + 1
+
+        # 排序取 Top
+        sorted_words = sorted(freq.items(), key=lambda x: -x[1])
+        return [{"name": w, "value": c} for w, c in sorted_words[:limit]]
+
+    @staticmethod
+    def get_dashboard_stats() -> dict:
+        """获取大屏概览统计数据。"""
+        with get_db() as conn:
+            total = conn.execute("SELECT COUNT(*) as cnt FROM data_warehouse").fetchone()["cnt"]
+            deep = conn.execute(
+                "SELECT COUNT(*) as cnt FROM data_warehouse WHERE is_deep_collected = 1"
+            ).fetchone()["cnt"]
+            today_count = conn.execute(
+                "SELECT COUNT(*) as cnt FROM data_warehouse "
+                "WHERE DATE(created_at) = DATE('now')"
+            ).fetchone()["cnt"]
+            source_count = conn.execute(
+                "SELECT COUNT(DISTINCT source_name) as cnt FROM data_warehouse "
+                "WHERE source_name != ''"
+            ).fetchone()["cnt"]
+            top_source = conn.execute(
+                "SELECT source_name, COUNT(*) as cnt FROM data_warehouse "
+                "WHERE source_name != '' GROUP BY source_name ORDER BY cnt DESC LIMIT 1"
+            ).fetchone()
+            return {
+                "total": total,
+                "deep_collected": deep,
+                "today_count": today_count,
+                "source_count": source_count,
+                "top_source": top_source["source_name"] if top_source else "无",
+                "top_source_count": top_source["cnt"] if top_source else 0,
+            }
+
+    @staticmethod
     def get_stats() -> dict:
         """获取数据仓库统计信息。"""
         with get_db() as conn:

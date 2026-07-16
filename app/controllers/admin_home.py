@@ -87,3 +87,45 @@ class AdminIndexHandler(AdminBaseHandler):
                 "dates": all_dates,
                 "counts": [date_map.get(d, 0) for d in all_dates],
             }
+
+
+class AdminDashboardHandler(AdminBaseHandler):
+    """管理侧数智大屏 — 3D 地球 + 词云 + 数据可视化"""
+
+    @tornado.web.authenticated
+    def get(self):
+        stats = DataWarehouseRepository.get_dashboard_stats()
+        source_dist = DataWarehouseRepository.get_source_distribution(8)
+        trend = DataWarehouseRepository.get_trend_data(14)
+        keywords = DataWarehouseRepository.get_keyword_frequency(50)
+
+        self.render(
+            "admin/dashboard.html",
+            title="数智大屏 — 瞭望与问数系统",
+            username=self.current_user,
+            stats=stats,
+            source_distribution=source_dist,
+            trend=trend,
+            keywords=keywords,
+        )
+
+
+class AdminDashboardApiHandler(AdminBaseHandler):
+    """大屏数据 JSON API — 供前端异步刷新"""
+
+    @tornado.web.authenticated
+    def get(self):
+        stats = DataWarehouseRepository.get_dashboard_stats()
+        source_dist = DataWarehouseRepository.get_source_distribution(8)
+        trend = DataWarehouseRepository.get_trend_data(14)
+        keywords = DataWarehouseRepository.get_keyword_frequency(50)
+
+        self.write({
+            "code": 0,
+            "data": {
+                "stats": stats,
+                "source_distribution": source_dist,
+                "trend": trend,
+                "keywords": keywords,
+            }
+        })

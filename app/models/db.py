@@ -514,6 +514,8 @@ def seed_default_data():
                 (16, "接口管理", "layui-icon-link", "/admin/interface", None, 12, 1),
                 # 常规设置 (v0.11 新增，归属系统设置父节点)
                 (20, "常规设置", "layui-icon-set-fill", "/admin/config", 3, 2, 1),
+                # 数智大屏 (v1.2.0 新增)
+                (21, "数智大屏", "layui-icon-screen-full", "/admin/dashboard", None, 3, 1),
             ]
             conn.executemany(
                 "INSERT INTO functions (id, name, icon, route_path, parent_id, sort_order, is_enabled) "
@@ -531,6 +533,7 @@ def seed_default_data():
             ("会话管理", "layui-icon-dialogue", "/admin/conversation", None, 8),
             ("模型 API 配置", "layui-icon-set", "/admin/model/config", None, 8),
             ("常规设置", "layui-icon-set-fill", "/admin/config", 3, 2),
+            ("数智大屏", "layui-icon-screen-full", "/admin/dashboard", None, 3),
         ):
             func = conn.execute(
                 "SELECT id FROM functions WHERE route_path = ?", (route_path,)

@@ -18,7 +18,7 @@ from app.utils.security import _ensure_secret_key
 logger = logging.getLogger(__name__)
 from app.controllers.auth import LoginHandler, LogoutHandler, RegisterHandler
 from app.controllers.home import IndexHandler
-from app.controllers.admin_home import AdminIndexHandler
+from app.controllers.admin_home import AdminIndexHandler, AdminDashboardHandler, AdminDashboardApiHandler
 from app.controllers.admin_user import (
     UserListHandler, UserFormHandler, UserDeleteHandler, UserToggleHandler,
     UserBatchDeleteHandler, UserBatchToggleHandler, ChangePasswordHandler,
@@ -194,6 +194,10 @@ def make_app() -> tornado.web.Application:
 
             # ========== v0.11 系统设置 ==========
             (r"/admin/config", SystemConfigHandler),
+
+            # ========== v1.2.0 数智大屏 ==========
+            (r"/admin/dashboard", AdminDashboardHandler),
+            (r"/admin/api/dashboard", AdminDashboardApiHandler),
 
             # ========== v0.10 MCP 工具管理 ==========
             (r"/admin/mcp/tool", MCPToolListHandler),

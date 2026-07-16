@@ -1,0 +1,625 @@
+{% extends "base_layout.html" %}
+
+{% block title %}{{ title }}{% end %}
+
+{% block admin_content %}
+<style>
+/* ====== 大屏全局 ====== */
+body.dark-theme {
+    background: #05071a !important;
+    overflow: hidden !important;
+}
+.dashboard-wrap {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background:
+        radial-gradient(ellipse at 20% 50%, rgba(30,60,180,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 30%, rgba(100,30,180,0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(0,150,255,0.04) 0%, transparent 50%);
+    z-index: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* ====== 顶部标题栏 ====== */
+.dashboard-header {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 24px;
+    background: rgba(5,7,26,0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(94,163,255,0.12);
+}
+.dashboard-header h1 {
+    font-size: 18px; font-weight: 700; margin: 0;
+    background: linear-gradient(90deg, #5ea3ff, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.dashboard-header .header-actions {
+    display: flex; gap: 12px; align-items: center;
+}
+.dashboard-header .header-actions span {
+    font-size: 12px; color: rgba(255,255,255,0.4);
+}
+.btn-dash-refresh {
+    padding: 6px 16px;
+    border: 1px solid rgba(94,163,255,0.25);
+    border-radius: 20px;
+    background: rgba(94,163,255,0.08);
+    color: #8dc3ff;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.btn-dash-refresh:hover {
+    background: rgba(94,163,255,0.18);
+    border-color: rgba(94,163,255,0.4);
+}
+.btn-dash-close {
+    padding: 6px 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s;
+}
+.btn-dash-close:hover {
+    color: var(--text-primary);
+    border-color: var(--border-active);
+}
+
+/* ====== 网格布局 ====== */
+.dash-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 14px;
+    padding: 16px 20px 10px;
+    position: relative; z-index: 1;
+}
+.dash-grid-2 {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 14px;
+    padding: 0 20px 14px;
+    position: relative; z-index: 1;
+}
+.dash-grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+    padding: 0 20px 14px;
+    position: relative; z-index: 1;
+}
+
+/* ====== 统计卡片 ====== */
+.dash-stat {
+    padding: 16px 18px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s;
+}
+.dash-stat:hover {
+    border-color: rgba(94,163,255,0.2);
+    background: rgba(255,255,255,0.05);
+    transform: translateY(-1px);
+}
+.dash-stat .stat-label {
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+}
+.dash-stat .stat-number {
+    font-size: 32px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #5ea3ff, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.2;
+}
+.dash-stat .stat-sub {
+    font-size: 11px;
+    color: rgba(255,255,255,0.3);
+    margin-top: 4px;
+}
+
+/* ====== 图表面板 ====== */
+.dash-panel {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 14px 16px;
+    backdrop-filter: blur(10px);
+}
+.dash-panel.full {
+    grid-column: 1 / -1;
+}
+.dash-panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.7);
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.dash-panel-title .badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(94,163,255,0.12);
+    color: #5ea3ff;
+}
+
+/* ====== 词云容器 ====== */
+#chart-wordcloud {
+    height: 280px;
+}
+
+/* ====== 3D地球容器 ====== */
+#chart-globe {
+    height: 480px;
+    width: 100%;
+}
+
+/* ====== 排行榜 ====== */
+.keyword-list {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+.keyword-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 13px;
+}
+.keyword-item:last-child { border-bottom: none; }
+.keyword-item .rank {
+    width: 22px; height: 22px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    font-size: 10px; font-weight: 700;
+    margin-right: 10px;
+    flex-shrink: 0;
+}
+.keyword-item .rank-1 { background: rgba(255,215,0,0.2); color: #ffd700; }
+.keyword-item .rank-2 { background: rgba(192,192,192,0.2); color: #c0c0c0; }
+.keyword-item .rank-3 { background: rgba(205,127,50,0.2); color: #cd7f32; }
+.keyword-item .rank-n { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.3); }
+.keyword-item .kw-name { flex: 1; color: rgba(255,255,255,0.8); }
+.keyword-item .kw-count {
+    font-size: 11px;
+    color: rgba(255,255,255,0.3);
+}
+</style>
+
+<div class="dashboard-wrap">
+    <!-- 顶部栏 -->
+    <div class="dashboard-header">
+        <h1>📊 数智大屏</h1>
+        <div class="header-actions">
+            <span id="dash-update-time">更新中...</span>
+            <button class="btn-dash-refresh" onclick="refreshDashboard()">⟳ 刷新数据</button>
+            <a href="/admin" class="btn-dash-close">✕ 返回后台</a>
+        </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="dash-grid">
+        <div class="dash-stat">
+            <div class="stat-label">📦 数据总量</div>
+            <div class="stat-number">{{ stats['total'] }}</div>
+            <div class="stat-sub">累计采集记录</div>
+        </div>
+        <div class="dash-stat">
+            <div class="stat-label">📥 今日新增</div>
+            <div class="stat-number" style="background:linear-gradient(135deg,#22c55e,#5ea3ff);-webkit-background-clip:text;background-clip:text;">{{ stats['today_count'] }}</div>
+            <div class="stat-sub">24小时采集数据</div>
+        </div>
+        <div class="dash-stat">
+            <div class="stat-label">🔍 已深度采集</div>
+            <div class="stat-number" style="background:linear-gradient(135deg,#a78bfa,#f472b6);-webkit-background-clip:text;background-clip:text;">{{ stats['deep_collected'] }}</div>
+            <div class="stat-sub">占总量 {{ f'{stats["deep_collected"]/max(stats["total"],1)*100:.1f}' if stats['total'] > 0 else '0' }}%</div>
+        </div>
+        <div class="dash-stat">
+            <div class="stat-label">📡 数据来源</div>
+            <div class="stat-number" style="background:linear-gradient(135deg,#f97316,#fbbf24);-webkit-background-clip:text;background-clip:text;">{{ stats['source_count'] }}</div>
+            <div class="stat-sub">最多: {{ stats['top_source'] }}</div>
+        </div>
+    </div>
+
+    <!-- 3D 地球 + 词云 -->
+    <div class="dash-grid-2">
+        <div class="dash-panel">
+            <div class="dash-panel-title">🌍 全球数据采集分布 <span class="badge">3D 地球</span></div>
+            <div id="chart-globe"></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <div class="dash-panel" style="flex:1;">
+                <div class="dash-panel-title">☁️ 关键词词云 <span class="badge">词频分析</span></div>
+                <div id="chart-wordcloud"></div>
+            </div>
+            <div class="dash-panel" style="flex:1;">
+                <div class="dash-panel-title">🏆 热门关键词 Top 10 <span class="badge">实时</span></div>
+                <ul class="keyword-list" id="keyword-list">
+                    {% for kw in keywords[:10] %}
+                    <li class="keyword-item">
+                        <span class="rank {{ 'rank-' + loop.index|string if loop.index <= 3 else 'rank-n' }}">{{ loop.index }}</span>
+                        <span class="kw-name">{{ kw['name'] }}</span>
+                        <span class="kw-count">{{ kw['value'] }} 次</span>
+                    </li>
+                    {% end %}
+                    {% if not keywords %}
+                    <li class="keyword-item" style="justify-content:center;color:rgba(255,255,255,0.2);padding:30px 0;">
+                        暂无数据
+                    </li>
+                    {% end %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- 趋势 + 来源 -->
+    <div class="dash-grid-3">
+        <div class="dash-panel">
+            <div class="dash-panel-title">📈 近14天采集趋势</div>
+            <div id="chart-trend" style="height:200px;"></div>
+        </div>
+        <div class="dash-panel">
+            <div class="dash-panel-title">🍩 数据来源分布</div>
+            <div id="chart-source" style="height:200px;"></div>
+        </div>
+        <div class="dash-panel">
+            <div class="dash-panel-title">🔬 深度采集占比</div>
+            <div id="chart-deep" style="height:200px;"></div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/dist/echarts-gl.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
+<script>
+(function() {
+    var isDark = true;
+    var charts = {};
+
+    function initCharts() {
+        // 获取后端数据
+        var statsData = {% raw json_encode(stats) %};
+        var sourceData = {% raw json_encode(source_distribution) %};
+        var trendData = {% raw json_encode(trend) %};
+        var keywordData = {% raw json_encode(keywords) %};
+
+        // 更新时间
+        document.getElementById('dash-update-time').textContent =
+            '🕐 ' + new Date().toLocaleString('zh-CN');
+
+        // 1. 3D 地球（ECharts-GL）
+        initGlobe('chart-globe', sourceData, keywordData);
+
+        // 2. 词云
+        initWordCloud('chart-wordcloud', keywordData);
+
+        // 3. 采集趋势
+        initTrendChart('chart-trend', trendData);
+
+        // 4. 来源分布
+        initSourcePie('chart-source', sourceData);
+
+        // 5. 深度采集占比
+        initDeepPie('chart-deep', statsData);
+    }
+
+    // ── 3D 地球 ──
+    function initGlobe(domId, sourceData, keywordData) {
+        var dom = document.getElementById(domId);
+        if (!dom) return;
+        var chart = echarts.init(dom, 'dark');
+        charts[domId] = chart;
+
+        // 生成模拟全球坐标点（基于来源分布随机分布）
+        var cities = [
+            {name: '北京', coord: [116.4, 39.9]}, {name: '上海', coord: [121.5, 31.2]},
+            {name: '广州', coord: [113.3, 23.1]}, {name: '深圳', coord: [114.1, 22.5]},
+            {name: '成都', coord: [104.1, 30.6]}, {name: '杭州', coord: [120.2, 30.3]},
+            {name: '武汉', coord: [114.3, 30.6]}, {name: '南京', coord: [118.8, 32.1]},
+            {name: '重庆', coord: [106.5, 29.6]}, {name: '西安', coord: [108.9, 34.3]},
+            {name: 'Tokyo', coord: [139.7, 35.7]}, {name: 'Seoul', coord: [127.0, 37.6]},
+            {name: 'Singapore', coord: [103.8, 1.4]}, {name: 'London', coord: [-0.1, 51.5]},
+            {name: 'New York', coord: [-74.0, 40.7]}, {name: 'San Francisco', coord: [-122.4, 37.8]},
+            {name: 'Sydney', coord: [151.2, -33.9]}, {name: 'Berlin', coord: [13.4, 52.5]},
+            {name: 'Paris', coord: [2.3, 48.9]}, {name: 'Moscow', coord: [37.6, 55.8]},
+        ];
+
+        // 根据关键词词频生成数据点密度
+        var totalFreq = keywordData.reduce(function(s, k) { return s + k.value; }, 0) || 100;
+        var scatterData = [];
+        cities.forEach(function(c, idx) {
+            var count = Math.max(1, Math.round((keywordData.length - idx) / keywordData.length * 20));
+            for (var i = 0; i < count; i++) {
+                scatterData.push({
+                    name: c.name,
+                    value: [
+                        c.coord[0] + (Math.random() - 0.5) * 8,
+                        c.coord[1] + (Math.random() - 0.5) * 5,
+                        Math.round(Math.random() * 100)
+                    ],
+                });
+            }
+        });
+
+        chart.setOption({
+            backgroundColor: 'transparent',
+            globe: {
+                baseTexture: 'https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/asset/earth/world.topo.bathy.200401.jpg',
+                heightTexture: 'https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/asset/earth/bathymetry_bw_composite_4k.jpg',
+                shading: 'realistic',
+                realisticMaterial: {
+                    roughness: 0.5,
+                    metalness: 0.1,
+                },
+                postEffect: {
+                    enable: true,
+                    bloom: { enable: true, intensity: 0.2 },
+                },
+                light: {
+                    main: { intensity: 2, shadow: true },
+                    ambient: { intensity: 0.5 },
+                    ambientCubemap: {
+                        texture: 'https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/asset/cube/SwedishRoyalCastle/',
+                        exposure: 0.8,
+                        diffuseIntensity: 0.5,
+                        specularIntensity: 0.3,
+                    }
+                },
+                viewControl: {
+                    autoRotate: true,
+                    autoRotateSpeed: 5,
+                    distance: 250,
+                    minDistance: 100,
+                    maxDistance: 400,
+                },
+            },
+            series: [{
+                type: 'scatter3D',
+                coordinateSystem: 'globe',
+                data: scatterData,
+                symbolSize: function(val) { return Math.max(3, val[2] / 8); },
+                blendMode: 'lighter',
+                itemStyle: {
+                    color: '#5ea3ff',
+                    opacity: 0.7,
+                },
+            }]
+        });
+
+        new ResizeObserver(function() { chart.resize(); }).observe(dom);
+    }
+
+    // ── 词云 ──
+    function initWordCloud(domId, keywordData) {
+        var dom = document.getElementById(domId);
+        if (!dom) return;
+        var chart = echarts.init(dom, 'dark');
+        charts[domId] = chart;
+
+        var data = keywordData.slice(0, 40);
+        if (data.length === 0) {
+            data = [{name: '暂无数据', value: 1}];
+        }
+
+        chart.setOption({
+            backgroundColor: 'transparent',
+            series: [{
+                type: 'wordCloud',
+                gridSize: 8,
+                sizeRange: [12, 40],
+                rotationRange: [-30, 30],
+                rotationStep: 15,
+                shape: 'circle',
+                maskImage: undefined,
+                left: 'center',
+                top: 'center',
+                width: '100%',
+                height: '100%',
+                drawOutOfBound: false,
+                textStyle: {
+                    fontFamily: 'Microsoft YaHei, sans-serif',
+                    color: function() {
+                        var colors = ['#5ea3ff', '#a78bfa', '#22c55e', '#f97316', '#f472b6', '#fbbf24', '#34d399'];
+                        return colors[Math.floor(Math.random() * colors.length)];
+                    }
+                },
+                data: data,
+            }]
+        });
+
+        new ResizeObserver(function() { chart.resize(); }).observe(dom);
+    }
+
+    // ── 采集趋势 ──
+    function initTrendChart(domId, trendData) {
+        var dom = document.getElementById(domId);
+        if (!dom) return;
+        var chart = echarts.init(dom, 'dark');
+        charts[domId] = chart;
+
+        chart.setOption({
+            tooltip: { trigger: 'axis', textStyle: { fontSize: 11 } },
+            grid: { left: '2%', right: '2%', bottom: '2%', top: '5%', containLabel: true },
+            xAxis: {
+                type: 'category', data: trendData.dates,
+                axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
+                axisLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 10 },
+            },
+            yAxis: {
+                type: 'value', minInterval: 1,
+                splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
+                axisLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 10 },
+            },
+            series: [{
+                data: trendData.counts,
+                type: 'line',
+                smooth: true,
+                symbol: 'circle',
+                symbolSize: 4,
+                lineStyle: { width: 2, color: '#5ea3ff' },
+                areaStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        {offset: 0, color: 'rgba(94,163,255,0.3)'},
+                        {offset: 1, color: 'rgba(94,163,255,0.02)'}
+                    ])
+                },
+                itemStyle: { color: '#5ea3ff' },
+            }]
+        });
+
+        new ResizeObserver(function() { chart.resize(); }).observe(dom);
+    }
+
+    // ── 来源分布 ──
+    function initSourcePie(domId, sourceData) {
+        var dom = document.getElementById(domId);
+        if (!dom) return;
+        var chart = echarts.init(dom, 'dark');
+        charts[domId] = chart;
+
+        var data = sourceData.length > 0 ? sourceData : [{name: '暂无数据', value: 1}];
+        var colors = ['#5ea3ff', '#a78bfa', '#22c55e', '#f97316', '#f472b6', '#fbbf24', '#34d399', '#6ee7b7'];
+
+        chart.setOption({
+            tooltip: { trigger: 'item', formatter: '{b}: {c}', textStyle: { fontSize: 11 } },
+            legend: {
+                orient: 'vertical', right: 5, top: 'center',
+                textStyle: { color: 'rgba(255,255,255,0.5)', fontSize: 10 },
+                itemWidth: 10, itemHeight: 10,
+            },
+            series: [{
+                type: 'pie',
+                radius: ['40%', '65%'],
+                center: ['40%', '50%'],
+                label: { show: false },
+                emphasis: {
+                    label: { show: true, fontSize: 12, fontWeight: 'bold' },
+                    itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)' },
+                },
+                data: data.map(function(d, i) {
+                    return { ...d, itemStyle: { color: colors[i % colors.length] } };
+                }),
+            }]
+        });
+
+        new ResizeObserver(function() { chart.resize(); }).observe(dom);
+    }
+
+    // ── 深度采集占比 ──
+    function initDeepPie(domId, statsData) {
+        var dom = document.getElementById(domId);
+        if (!dom) return;
+        var chart = echarts.init(dom, 'dark');
+        charts[domId] = chart;
+
+        var total = statsData.total || 1;
+        var deep = statsData.deep_collected || 0;
+        var normal = total - deep;
+
+        chart.setOption({
+            tooltip: {
+                trigger: 'item',
+                formatter: function(p) {
+                    return p.name + ': ' + p.value + ' 条 (' + p.percent.toFixed(1) + '%)';
+                },
+                textStyle: { fontSize: 11 },
+            },
+            series: [{
+                type: 'pie',
+                radius: ['50%', '75%'],
+                center: ['50%', '50%'],
+                label: {
+                    show: true,
+                    color: 'rgba(255,255,255,0.5)',
+                    fontSize: 10,
+                    formatter: function(p) { return p.percent.toFixed(0) + '%'; },
+                },
+                data: [
+                    { name: '已深度采集', value: deep, itemStyle: { color: '#a78bfa' } },
+                    { name: '待采集', value: normal, itemStyle: { color: 'rgba(255,255,255,0.1)' } },
+                ],
+            }]
+        });
+
+        new ResizeObserver(function() { chart.resize(); }).observe(dom);
+    }
+
+    // ── 刷新 ──
+    window.refreshDashboard = function() {
+        document.getElementById('dash-update-time').textContent = '⟳ 刷新中...';
+        fetch('/admin/api/dashboard?_xsrf={{ xsrf_token }}')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.code === 0) {
+                    var data = d.data;
+                    document.getElementById('dash-update-time').textContent =
+                        '🕐 ' + new Date().toLocaleString('zh-CN');
+                    // 更新统计卡片
+                    var stats = data.stats;
+                    // 各图表重新初始化
+                    if (charts['chart-globe']) {
+                        charts['chart-globe'].dispose();
+                        delete charts['chart-globe'];
+                    }
+                    if (charts['chart-wordcloud']) {
+                        charts['chart-wordcloud'].dispose();
+                        delete charts['chart-wordcloud'];
+                    }
+                    if (charts['chart-trend']) charts['chart-trend'].dispose();
+                    if (charts['chart-source']) charts['chart-source'].dispose();
+                    if (charts['chart-deep']) charts['chart-deep'].dispose();
+
+                    initGlobe('chart-globe', data.source_distribution, data.keywords);
+                    initWordCloud('chart-wordcloud', data.keywords);
+                    initTrendChart('chart-trend', data.trend);
+                    initSourcePie('chart-source', data.source_distribution);
+                    initDeepPie('chart-deep', stats);
+
+                    // 更新关键词列表
+                    var kl = document.getElementById('keyword-list');
+                    if (data.keywords.length > 0) {
+                        kl.innerHTML = data.keywords.slice(0, 10).map(function(kw, i) {
+                            var rankClass = i < 3 ? 'rank-' + (i + 1) : 'rank-n';
+                            return '<li class="keyword-item">' +
+                                '<span class="rank ' + rankClass + '">' + (i + 1) + '</span>' +
+                                '<span class="kw-name">' + escapeHtml(kw.name) + '</span>' +
+                                '<span class="kw-count">' + kw.value + ' 次</span></li>';
+                        }).join('');
+                    }
+                }
+            })
+            .catch(function(err) {
+                document.getElementById('dash-update-time').textContent = '❌ 刷新失败';
+                console.error('Dashboard refresh error:', err);
+            });
+    };
+
+    // 初始化
+    var checkInterval = setInterval(function() {
+        if (typeof echarts !== 'undefined') {
+            clearInterval(checkInterval);
+            initCharts();
+        }
+    }, 200);
+})();
+</script>
+{% end %}

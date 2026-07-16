@@ -71,7 +71,7 @@ class Settings:
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "img-src 'self' data: https: blob:; "
             "font-src 'self' https://cdn.jsdelivr.net; "
-            "connect-src 'self' https://cdn.jsdelivr.net blob:; "
+            "connect-src 'self' https://cdn.jsdelivr.net blob: https://*.jsdelivr.net; "
             "worker-src 'self' blob:; "
             "frame-ancestors 'none'; "
             "base-uri 'self'; "
