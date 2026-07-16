@@ -1,4 +1,6 @@
 import os
+import ast
+import logging
 import sqlite3
 import zipfile
 from types import SimpleNamespace
@@ -183,6 +185,39 @@ def test_async_chat_paths_and_card_logging():
     assert "_read_binary_file(cache_file)" in source
     assert "Failed to render music tool card" in source
     assert "Failed to render follow-up tool card" in source
+
+
+def test_mcp_tools_has_no_bom_and_parses_as_utf8():
+    source = read("app/mcp/tools.py")
+    assert not source.startswith("\ufeff")
+    ast.parse(source)
+
+
+@pytest.mark.parametrize("module_name", ["collector", "deep_collector"])
+@pytest.mark.parametrize(
+    ("encoding", "expected_messages"),
+    [
+        ("gzip", ("gzip 响应解压失败",)),
+        ("deflate", ("zlib deflate 解压失败", "raw deflate 解压失败")),
+    ],
+)
+def test_collector_decompression_fallbacks_are_logged(
+    caplog, module_name, encoding, expected_messages
+):
+    from app.services import collector, deep_collector
+
+    module = {"collector": collector, "deep_collector": deep_collector}[module_name]
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger=module.__name__):
+        assert module._decompress(b"invalid-compressed-data", encoding) == b"invalid-compressed-data"
+
+    messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == module.__name__
+    ]
+    for expected in expected_messages:
+        assert any(expected in message for message in messages)
 
 
 def test_docx_audit_deliverables_are_valid():

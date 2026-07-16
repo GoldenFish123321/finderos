@@ -1599,7 +1599,7 @@ python make_admin.py --reset --username admin --password newpassword
 | **接口管理** | 10 | 接口模板 CRUD、安全校验、敏感 Header 脱敏、安全 HTTP 调用、接口测试、API 型数字员工联动创建 |
 | **MCP 重构** | 6 | 工具表查询、CRUD、注册表加载、员工权限、技能关联、测试日志 |
 | **MCP 与默认权限** | 11 | MCP 页面使用说明、普通用户默认模型 API 配置权限、后台路由级权限匹配、禁用子路由隔离、模型快速配置入口、Chat 页配置入口、API 测试入口、登录默认 Chat、Registry 重绑定 |
-| **安全测试** | 5 | XSS 注入（采集内容）、SQL 注入（参数化查询验证）、CSRF Token 校验、密码哈希强度、安全响应头存在性 |
+| **安全测试** | 7 | XSS 注入、SQL 注入、CSRF Token、密码哈希、安全响应头、MCP 源文件无 BOM、采集降级异常日志 |
 
 ### 运行测试
 
@@ -1621,6 +1621,9 @@ python -m pytest test/test_issue17_admin_conversation.py -v
 
 # 运行 MCP 使用说明与普通用户默认权限测试
 python -m pytest test/test_mcp_user_default_permissions.py -v
+
+# 运行 Issues #77-#126 与采集容错回归
+python -m pytest test/test_issues_77_126.py -v
 
 # 运行单个测试方法
 python -m pytest test/test_login_rate_limiter.py::TestLoginRateLimiter::test_rate_limit -v

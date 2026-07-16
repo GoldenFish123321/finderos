@@ -80,8 +80,8 @@ def _decompress(data: bytes, encoding: str) -> bytes:
             if len(result) > 30 * 1024 * 1024 or obj.unconsumed_tail:
                 raise ValueError("解压后响应超过大小限制")
             return result
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("gzip 响应解压失败，保留原始数据: %s", exc)
     if "deflate" in enc:
         try:
             obj = zlib.decompressobj()
@@ -89,15 +89,16 @@ def _decompress(data: bytes, encoding: str) -> bytes:
             if len(result) > 30 * 1024 * 1024 or obj.unconsumed_tail:
                 raise ValueError("解压后响应超过大小限制")
             return result
-        except Exception:
+        except Exception as exc:
+            logger.warning("zlib deflate 解压失败，尝试 raw deflate: %s", exc)
             try:
                 obj = zlib.decompressobj(-15)
                 result = obj.decompress(data, 30 * 1024 * 1024 + 1)
                 if len(result) > 30 * 1024 * 1024 or obj.unconsumed_tail:
                     raise ValueError("解压后响应超过大小限制")
                 return result
-            except Exception:
-                pass
+            except Exception as raw_exc:
+                logger.warning("raw deflate 解压失败，保留原始数据: %s", raw_exc)
     if "br" in enc:
         try:
             import brotli
@@ -407,10 +408,7 @@ def fetch_and_parse(
     data = _decompress(raw, encoding)
     if len(data) > 30 * 1024 * 1024:
         return 0, len(raw), "采集失败：解压后响应超过大小限制", []
-    try:
-        text = data.decode("utf-8", errors="replace")
-    except Exception:
-        text = data.decode("gbk", errors="replace")
+    text = data.decode("utf-8", errors="replace")
 
     size = len(raw)  # 使用原始字节数作为响应大小（而非字符数）
     # 清洗 HTML（移除 script/style 等潜在危险标签）

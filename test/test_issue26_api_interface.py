@@ -219,7 +219,7 @@ def test_api_employee_admin_treats_http_error_as_failure(monkeypatch):
         "api_params_template": "",
         "api_secret": "",
     }
-    asyncio.run(admin_employee.EmployeeInvokeHandler._invoke_api_employee(dummy, emp, "hello"))
+    asyncio.run(admin_employee.EmployeeInvokeHandler._invoke_api_employee_legacy(dummy, emp, "hello"))
     assert dummy.writes
     assert dummy.writes[-1]["code"] == 1
     assert "HTTP 500" in dummy.writes[-1]["msg"]
@@ -275,7 +275,7 @@ def test_api_employee_user_sse_treats_http_error_as_fallback(monkeypatch):
         "api_secret": "",
         "response_render_template": "",
     }
-    asyncio.run(user_chat.UserEmployeeInvokeHandler._invoke_api_employee(dummy, emp, "hello"))
+    asyncio.run(user_chat.UserEmployeeInvokeHandler._invoke_api_employee_legacy(dummy, emp, "hello"))
     output = "".join(dummy.chunks)
     assert "fallback:HTTP 502" in output
 

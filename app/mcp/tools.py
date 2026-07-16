@@ -1,4 +1,4 @@
-﻿"""
+"""
 app/mcp/tools.py — MCP 工具注册入口
 
 提供 register_all_tools() 和 get_tool_names() 两个核心函数。
