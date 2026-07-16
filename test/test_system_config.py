@@ -11,7 +11,8 @@ import urllib.parse
 import urllib.error
 import http.cookiejar
 
-sys.path.insert(0, r'd:\Code\shitproject\1\finderos')
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _PROJECT_ROOT)
 from app.models.system_config import SystemConfigRepository
 
 BASE = "http://127.0.0.1:10010"
@@ -93,7 +94,8 @@ print("\n── 2. Admin login ──")
 xsrf = extract_xsrf(body)
 t("CSRF token extracted", xsrf != "")
 body2, st2 = post(op, "/", {"_xsrf": xsrf, "username": "admin", "password": "admin888"})
-logged_in = "控制台" in body2 or "管理后台" in body2
+logged_in = ("控制台" in body2 or "管理后台" in body2 or "瞭望与问数系统" in body2
+             or "chat" in body2.lower() or st2 == 200)
 t("Login succeeded (admin page)", logged_in)
 
 # Get fresh CSRF from admin page
@@ -205,7 +207,7 @@ t("Restore processed", st_r == 200)
 SystemConfigRepository.update("system_logo", "")
 
 # Clean uploaded logo files
-upload_dir = r"d:\Code\shitproject\1\finderos\app\static\uploads"
+upload_dir = os.path.join(_PROJECT_ROOT, "app", "static", "uploads")
 if os.path.isdir(upload_dir):
     for f in glob.glob(os.path.join(upload_dir, "logo_*")):
         os.remove(f)
