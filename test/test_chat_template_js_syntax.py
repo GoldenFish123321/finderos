@@ -67,3 +67,16 @@ def test_user_chat_media_onerror_handlers_do_not_break_script_string():
     assert "this.style.display=\\\\'none" not in html
     assert "this.alt=&quot;图片加载失败&quot;" in html
     assert "this.style.display=&quot;none&quot;" in html
+
+
+def test_clear_shortcut_uses_safe_local_clear_flow():
+    """底部 /clear 应走专用清屏逻辑，不再只把命令塞进输入框或创建空会话。"""
+    html = _render_chat_template(can_config_model_api=True)
+    assert 'onclick="clearChatShortcut()"' in html
+    assert "function clearChatView(options)" in html
+    assert "let chatFlowVersion = 0" in html
+    assert "const sendVersion = ++chatFlowVersion" in html
+    assert "if (sendVersion !== chatFlowVersion) return" in html
+    assert "message.toLowerCase() === '/clear'" in html
+    assert "已清空当前屏幕，历史记录未删除" in html
+    assert 'onclick="setInput(\'/clear\')"' not in html

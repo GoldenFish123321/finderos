@@ -789,7 +789,7 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
                 </button>
             </div>
             <div class="input-hints">
-                <span onclick="setInput('/clear')">/clear 清屏</span>
+                <span onclick="clearChatShortcut()" title="清空当前屏幕并开始新对话，历史记录不会删除">/clear 清屏</span>
                 <span onclick="setInput('/summary')">/summary 摘要</span>
                 <span onclick="toggleAtMenu()">@ 数字员工</span>
             </div>
@@ -813,6 +813,7 @@ let currentConversationId = null;
 let isStreaming = false;
 let employees = [];
 let chartResizeObservers = [];
+let chatFlowVersion = 0;
 
 function renderMarkdownSafe(value) {
     var source = String(value || '');
@@ -889,6 +890,61 @@ function resetChatToWelcome() {
         container.insertBefore(welcome, container.firstChild);
     }
     welcome.style.display = 'flex';
+}
+
+function showChatNotice(message, options) {
+    options = options || {};
+    if (typeof layui !== 'undefined') {
+        layui.use(['layer'], function(l){
+            l.layer.msg(message, {time: options.time || 1500});
+        });
+    } else {
+        console.info(message);
+    }
+}
+
+function disconnectChartObservers() {
+    chartResizeObservers.forEach(function(observer) {
+        try { observer.disconnect(); } catch(e) {}
+    });
+    chartResizeObservers = [];
+}
+
+function clearChatView(options) {
+    options = options || {};
+    if (isStreaming && !options.force) {
+        showChatNotice('请等待当前回复完成后再清屏');
+        return false;
+    }
+
+    if (!options.preserveFlowVersion) {
+        chatFlowVersion += 1;
+    }
+    currentConversationId = null;
+    document.querySelectorAll('.task-item').forEach(function(el) { el.classList.remove('active'); });
+    disconnectChartObservers();
+    hideAtMenu();
+    resetChatToWelcome();
+
+    var input = document.getElementById('chat-input');
+    var sendBtn = document.getElementById('btn-send');
+    if (input) {
+        input.value = '';
+        input.style.height = '52px';
+        if (!options.preserveStreaming) input.disabled = false;
+        if (options.focus !== false) input.focus();
+    }
+    if (sendBtn && !options.preserveStreaming) sendBtn.disabled = false;
+    refreshTaskList();
+
+    if (options.showToast !== false) {
+        showChatNotice('已清空当前屏幕，历史记录未删除');
+    }
+    return true;
+}
+
+function clearChatShortcut() {
+    clearChatView({showToast: true});
 }
 
 function newConversation() {
@@ -1003,6 +1059,10 @@ function sendMessage() {
     const input = document.getElementById('chat-input');
     const message = input.value.trim();
     if (!message) return;
+    if (message.toLowerCase() === '/clear') {
+        clearChatView({showToast: true});
+        return;
+    }
 
     // 检测 @数字员工 调用（支持 @name 或 @name 消息内容 两种格式）
     const empMatch = message.match(/^@(\S+)(?:\s+(.*))?$/);
@@ -1030,6 +1090,7 @@ function sendMessage() {
     // 隐藏欢迎页
     var welcomeEl = document.getElementById('chat-welcome');
     if (welcomeEl) welcomeEl.style.display = 'none';
+    const sendVersion = ++chatFlowVersion;
 
     // 添加用户消息
     appendMessage('user', message, 0, 0);
@@ -1052,6 +1113,7 @@ function sendMessage() {
         })
         .then(r => r.json())
         .then(d => {
+            if (sendVersion !== chatFlowVersion) return;
             if (d.code === 0) {
                 currentConversationId = d.id;
                 refreshTaskList();
@@ -1176,9 +1238,12 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
                         try {
                             const act = JSON.parse(dataStr);
                             if (act.action === 'clear') {
-                                currentConversationId = null;
-                                document.querySelectorAll('.task-item').forEach(function(el) { el.classList.remove('active'); });
-                                resetChatToWelcome();
+                                clearChatView({
+                                    force: true,
+                                    preserveStreaming: true,
+                                    focus: false,
+                                    showToast: false
+                                });
                             }
                         } catch(e) {}
                         currentEvent = '';
@@ -1550,21 +1615,14 @@ function handleInputKey(event) {
 // ============================================================
 function setInput(text) {
     const input = document.getElementById('chat-input');
+    if (text === '/clear') {
+        clearChatShortcut();
+        return;
+    }
     input.value = text;
     input.focus();
     input.style.height = '52px';
     input.style.height = Math.min(input.scrollHeight, 120) + 'px';
-    // 如果是快捷指令，直接处理
-    if (text.startsWith('/')) {
-        if (text === '/clear') {
-            currentConversationId = null;
-            // 取消所有任务高亮
-            document.querySelectorAll('.task-item').forEach(function(el) { el.classList.remove('active'); });
-            resetChatToWelcome();
-            input.value = '';
-            return;
-        }
-    }
 }
 
 // ============================================================
@@ -1826,8 +1884,7 @@ window.addEventListener('beforeunload', function() {
         gestureDetector.destroy();
         gestureDetector = null;
     }
-    chartResizeObservers.forEach(function(observer) { observer.disconnect(); });
-    chartResizeObservers = [];
+    disconnectChartObservers();
 });
 
 // 点击空白关闭 @ 菜单
