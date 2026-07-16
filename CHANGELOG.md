@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.8.1-beta (2026-07-16) — @随机音乐 空消息挂起 Bug 修复
+
+- 🐛 **Bug 修复**：仅发送 `@随机音乐`（无附带消息）时页面挂起，显示 "⏱ 0.0s · 🔤 ~1 tokens" 后无响应
+  - **根因**：`UserEmployeeInvokeHandler` 在员工加载前就拒绝空消息，返回 JSON 错误而非 SSE，前端 `streamFetch` 无法解析 JSON 导致挂起
+  - **修复**：空消息检查移到员工加载之后；API 型员工若绑定的 MCP 工具无 `required` 参数（如 `get_random_music`），允许空消息通过
+  - 管理员面板 `EmployeeInvokeHandler` 同步修复
+  - 错误消息使用 `input_schema.properties[field].description` 友好显示（如「请输入城市名称」而非「请输入 message」）
+- 🖥 **前端修复**：`streamFetch` 新增 `Content-Type` 检测，非 SSE 响应（JSON/HTML）解析错误消息并显示，避免 UI 挂起
+- 🧪 **测试**：新增 `test_empty_message_allowed_for_no_arg_api_employee` 验证无参工具的空消息逻辑
+
 ## v1.8.0-beta (2026-07-16) — 随机音乐员工 LLM→API 型重构
 
 - ✨ **功能变更**：「随机音乐」数字员工从 LLM 型改为 API 型
