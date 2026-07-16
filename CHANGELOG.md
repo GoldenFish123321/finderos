@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.7.1-beta (2026-07-16) — 员工编辑页类型切换 UI Bug 修复
+
+- 🐛 **Bug 修复**：编辑员工页在 LLM 型/API 型之间切换时底部配置 UI 不更新
+  - **根因**：Layui `form.render()` 后原生 radio `change` 事件失效
+  - **修复**：使用 Layui `form.on('radio(employeeType)')` 替代原生事件，抽取 `toggleEmployeeFields()` 统一切换逻辑
+
 ## v1.7.0-beta (2026-07-16) — API 型员工 MCP 统一调度架构
 
 - ✨ **架构重构**：API 型员工底层从「直接 HTTP 调用」改为「MCP 工具委托」
