@@ -1,4 +1,4 @@
-"""本地接口注册表 — 18个系统内置接口的元数据同步到 api_interfaces 表。"""
+"""本地接口注册表 — 将系统内置接口元数据同步到 api_interfaces 表。"""
 
 import logging
 from app.models.db import get_db
@@ -57,7 +57,7 @@ EXTERNAL_API_SEEDS = [
 
 
 def sync_local_api_interfaces():
-    """同步 18 个系统内置本地接口 + 外部接口种子到 api_interfaces 表（幂等，不重复插入）。"""
+    """将本地和外部接口种子幂等同步到 api_interfaces 表。"""
     with get_db() as conn:
         # ── 本地接口 ──
         for seed in LOCAL_API_SEEDS:
