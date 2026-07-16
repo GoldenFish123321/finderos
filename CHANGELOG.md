@@ -12,6 +12,18 @@
 
 ---
 
+## v1.1.0-beta (2026-07-16) — 系统设置模块
+
+- ⚙️ **新模块 #13**：管理侧系统设置页面（`/admin/config`），支持配置系统名称/副标题/Logo/备案号/AI 默认参数 (@GoldenFish123321)
+- 🗄️ **新增表**：`system_config` key-value 配置表，8 条默认种子数据（常规设置 + AI 参数）
+- 🖼️ **Logo 上传**：支持 PNG/JPG/GIF/WebP/SVG 上传，含类型/大小校验、预览、移除、旧文件清理
+- 🔄 **动态标题**：系统名称从 DB 加载，页面标题和头部导航栏实时反映配置变更（保存后即时刷新生效）
+- 📝 **审计日志**：配置保存、Logo 上传/移除均写入 `SYSCONFIG_UPDATE` / `SYSCONFIG_LOGO_UPLOAD` / `SYSCONFIG_LOGO_REMOVE` 审计记录
+- 🧪 **测试新增**：31 项端到端功能测试（登录/配置页访问/文本保存/Logo 上传/权限控制/Dashboard 传播/恢复默认）
+- 🐛 **安全修复**：消除 `self.write()` 中直接拼接异常消息的 XSS 风险，改用 redirect + query 参数传递错误
+
+---
+
 ## v1.0.2-beta (2026-07-15) — 安全加固与种子数据完善
 
 - 🔒 **安全修复 #1 [CRITICAL]**：数据仓库内容拼入 system prompt 前进行 Prompt Injection 脱敏（XML 标签包裹 + 高危模式过滤 + 长度截断）(@GoldenFish123321)

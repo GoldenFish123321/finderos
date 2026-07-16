@@ -9,6 +9,7 @@ from html import escape
 
 import tornado.web
 from app.controllers.base import BaseHandler
+from app.config.settings import settings
 from app.models.function import FunctionRepository
 from app.models.user import UserRepository
 from app.utils.security import write_audit_log
@@ -35,9 +36,10 @@ class AdminBaseHandler(BaseHandler):
     """
 
     def get_template_namespace(self):
-        """Inject admin permission helpers into templates."""
+        """Inject admin permission helpers and settings into templates."""
         namespace = super().get_template_namespace()
         namespace["admin_can"] = self.has_admin_route_permission
+        namespace["settings"] = settings
         return namespace
 
     def prepare(self):

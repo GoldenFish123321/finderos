@@ -1,6 +1,8 @@
-# 🔭 瞭望与问数系统 (DataFinderAgentOS) v1.0.3-beta
+# 🔭 瞭望与问数系统 (DataFinderAgentOS) v1.1.0-beta
 
 > 基于 Tornado 异步 Web 框架构建的轻量级智能数据采集与 AI 问数一体化平台。
+> **v1.1 新增**：系统设置模块（系统名称/Logo/备案号/AI 默认参数）、动态标题。
+> **v1.0.3 新增**：安全加固（Prompt Injection 防御、XSS 防御增强、审计日志完善）。
 > **v0.10 完成**：MCP 重构剩余阶段全部完成 — 18 个工具种子数据迁移、三色徽章系统（蓝/绿/橙黄）、crawl4ai 废弃、Skill 绑定 MCP 工具、旧 TAG → Skill ID 迁移、测试验证通过。
 > **v0.9 新增**：Edge TTS 语音合成播报（🔊 AI 回复一键朗读）、管理侧接口管理模块（接口模板 CRUD/测试、安全 HTTP 调用、API 型数字员工联动）。
 > **v0.4 新增**：MCP 协议工具调用、LLM Function Calling 智能意图识别、/tools 指令。

@@ -11,8 +11,11 @@ document.body.classList.add('dark-theme');
     <!-- 顶部导航栏 - 深色科技风 -->
     <div class="admin-header-dark">
         <div>
-            <span class="logo-text">🔭 瞭望与问数系统</span>
-            <span class="logo-sub">DataFinderAgentOS v{{ app_version }}</span>
+            {% if settings.SYSTEM_LOGO %}
+            <img src="{{ settings.SYSTEM_LOGO }}" alt="Logo" class="header-logo" style="height:28px;vertical-align:middle;margin-right:8px;">
+            {% end %}
+            <span class="logo-text">{{ settings.SYSTEM_NAME }}</span>
+            <span class="logo-sub">{{ settings.SYSTEM_SUBTITLE }} v{{ app_version }}</span>
         </div>
         <div class="user-area">
             <span class="username">👤 {{ username }}</span>
@@ -125,6 +128,14 @@ document.body.classList.add('dark-theme');
                     <span class="nav-icon">🔧</span> <span>MCP 工具</span>
                 </a>
                 {% end %}
+            </div>
+            {% end %}
+            {% if admin_can('/admin/config') %}
+            <div class="nav-group-title">系统设置</div>
+            <div class="nav-group">
+                <a href="/admin/config" class="{{ 'active' if '/admin/config' in handler.request.path else '' }}">
+                    <span class="nav-icon">⚙️</span> <span>常规设置</span>
+                </a>
             </div>
             {% end %}
             <div class="nav-group-title">快速入口</div>

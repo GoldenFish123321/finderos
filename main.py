@@ -60,6 +60,7 @@ from app.controllers.admin_conversation import (
 from app.controllers.admin_skill import (
     SkillListHandler, SkillFormHandler, SkillDeleteHandler, SkillToggleHandler,
 )
+from app.controllers.admin_config import SystemConfigHandler
 from app.controllers.admin_mcp import (
     MCPToolListHandler, MCPToolFormHandler, MCPToolDeleteHandler,
     MCPToolToggleHandler, MCPToolTestHandler, MCPToolReloadHandler,
@@ -191,6 +192,9 @@ def make_app() -> tornado.web.Application:
             (r"/admin/skill/delete", SkillDeleteHandler),
             (r"/admin/skill/toggle", SkillToggleHandler),
 
+            # ========== v0.11 系统设置 ==========
+            (r"/admin/config", SystemConfigHandler),
+
             # ========== v0.10 MCP 工具管理 ==========
             (r"/admin/mcp/tool", MCPToolListHandler),
             (r"/admin/mcp/tool/add", MCPToolFormHandler),
@@ -239,6 +243,9 @@ if __name__ == "__main__":
 
     # 插入种子数据（默认角色、管理员、功能）
     seed_default_data()
+
+    # v0.11: 从数据库加载可配置的系统设置，覆盖默认值
+    settings.load_from_db()
 
     # v0.10: 显式注册 MCP 工具（确保数据库驱动工具在启动时加载）
     from app.mcp.tools import register_all_tools

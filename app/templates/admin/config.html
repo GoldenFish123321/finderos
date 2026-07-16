@@ -1,0 +1,263 @@
+{% extends "base_layout.html" %}
+
+{% block title %}{{ title }}{% end %}
+
+{% block admin_content %}
+<div class="layui-card">
+    <div class="layui-card-header">
+        <span><i class="layui-icon layui-icon-set-fill"></i> 常规设置</span>
+    </div>
+    <div class="layui-card-body">
+        <form class="layui-form" method="post" action="/admin/config" enctype="multipart/form-data">
+            {% module xsrf_form_html() %}
+
+            <!-- ========== 常规设置区 ========== -->
+            <fieldset class="layui-elem-field layui-field-title" style="margin-top: 20px;">
+                <legend>常规设置</legend>
+            </fieldset>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">系统名称</label>
+                <div class="layui-input-block">
+                    <input type="text" name="system_name" lay-verify="required" placeholder="瞭望与问数系统"
+                           value="{{ config_dict.get('system_name', {}).get('value', '瞭望与问数系统') }}"
+                           class="layui-input">
+                    {% if config_dict.get('system_name', {}).get('description') %}
+                    <div class="layui-form-mid layui-word-aux">{{ config_dict['system_name']['description'] }}</div>
+                    {% end %}
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">副标题</label>
+                <div class="layui-input-block">
+                    <input type="text" name="system_subtitle" placeholder="DataFinderAgentOS"
+                           value="{{ config_dict.get('system_subtitle', {}).get('value', 'DataFinderAgentOS') }}"
+                           class="layui-input">
+                    <div class="layui-form-mid layui-word-aux">显示在头部导航栏版本号旁</div>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">系统 Logo</label>
+                <div class="layui-input-block">
+                    <div class="logo-upload-area">
+                        <!-- 当前 Logo 预览 -->
+                        <div class="logo-preview" id="logoPreview">
+                            {% set logo_src = config_dict.get('system_logo', {}).get('value', '') %}
+                            {% if logo_src %}
+                            <img src="{{ logo_src }}" alt="系统 Logo" style="max-height: 64px; max-width: 200px;">
+                            {% else %}
+                            <span class="logo-placeholder">🔭</span>
+                            <span class="logo-hint">未设置 Logo，将显示文字标题</span>
+                            {% end %}
+                        </div>
+                        <!-- 上传按钮 -->
+                        <button type="button" class="layui-btn layui-btn-primary layui-btn-sm" id="uploadBtn">
+                            <i class="layui-icon layui-icon-upload"></i> 选择图片
+                        </button>
+                        <input type="file" name="logo_file" id="logoFileInput"
+                               accept=".png,.jpg,.jpeg,.gif,.webp,.svg"
+                               style="display: none;">
+                        <button type="button" class="layui-btn layui-btn-danger layui-btn-sm" id="removeLogoBtn"
+                                style="margin-left: 8px; {% if not logo_src %}display:none;{% end %}">
+                            <i class="layui-icon layui-icon-delete"></i> 移除
+                        </button>
+                        <input type="hidden" name="remove_logo" id="removeLogoFlag" value="0">
+                        <div class="layui-form-mid layui-word-aux">支持 PNG / JPG / GIF / WebP / SVG，最大 2MB</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">ICP 备案号</label>
+                <div class="layui-input-block">
+                    <input type="text" name="icp_number" placeholder="例如：蜀ICP备2024000000号-1"
+                           value="{{ config_dict.get('icp_number', {}).get('value', '') }}"
+                           class="layui-input">
+                    <div class="layui-form-mid layui-word-aux">显示在页面底部</div>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">默认端口</label>
+                <div class="layui-input-block">
+                    <input type="number" name="default_port" lay-verify="port" placeholder="10010"
+                           value="{{ config_dict.get('default_port', {}).get('value', '10010') }}"
+                           class="layui-input" style="max-width: 200px;">
+                    <div class="layui-form-mid layui-word-aux">仅供参考，实际端口由环境变量 PORT 控制，修改后需重启服务</div>
+                </div>
+            </div>
+
+            <!-- ========== AI 默认参数区 ========== -->
+            <fieldset class="layui-elem-field layui-field-title" style="margin-top: 30px;">
+                <legend>AI 默认参数</legend>
+            </fieldset>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">默认模型</label>
+                <div class="layui-input-block">
+                    <select name="ai_default_model" lay-search>
+                        <option value="">自动选择（is_default=1）</option>
+                        {% for model in enabled_models %}
+                        <option value="{{ model['id'] }}"
+                            {% if config_dict.get('ai_default_model', {}).get('value', '') == str(model['id']) %}selected{% end %}>
+                            {{ model['name'] }} ({{ model['model_name'] }})
+                        </option>
+                        {% end %}
+                    </select>
+                    <div class="layui-form-mid layui-word-aux">AI 对话的默认模型，留空则使用标记为"默认"的模型</div>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">默认温度</label>
+                <div class="layui-input-block">
+                    <div class="layui-input-inline" style="width: 200px;">
+                        <input type="range" name="ai_default_temperature" min="0" max="2" step="0.1"
+                               value="{{ config_dict.get('ai_default_temperature', {}).get('value', '0.7') }}"
+                               id="tempRange" oninput="document.getElementById('tempValue').textContent = this.value">
+                    </div>
+                    <span class="layui-form-mid" style="display: inline-block; min-width: 40px;">
+                        <strong id="tempValue">{{ config_dict.get('ai_default_temperature', {}).get('value', '0.7') }}</strong>
+                    </span>
+                    <div class="layui-form-mid layui-word-aux">控制回复随机性（0=确定性，2=最随机）</div>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">最大 Token</label>
+                <div class="layui-input-block">
+                    <input type="number" name="ai_default_max_tokens" lay-verify="number" placeholder="4096"
+                           value="{{ config_dict.get('ai_default_max_tokens', {}).get('value', '4096') }}"
+                           class="layui-input" style="max-width: 200px;">
+                    <div class="layui-form-mid layui-word-aux">单次回复最大输出 Token 数</div>
+                </div>
+            </div>
+
+            <!-- ========== 操作按钮 ========== -->
+            <div class="layui-form-item" style="margin-top: 30px;">
+                <div class="layui-input-block">
+                    <button type="submit" class="layui-btn" lay-submit lay-filter="saveConfig">
+                        <i class="layui-icon layui-icon-ok"></i> 保存设置
+                    </button>
+                    <button type="reset" class="layui-btn layui-btn-primary">
+                        <i class="layui-icon layui-icon-refresh"></i> 重置
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% end %}
+
+{% block admin_scripts %}
+<script>
+// 操作反馈消息
+{% if feedback_msg %}
+layer.msg('{{ feedback_msg }}', {icon: 1, time: 2000});
+{% end %}
+{% if feedback_error %}
+layer.msg('{{ feedback_error }}', {icon: 2, time: 3000});
+{% end %}
+
+layui.use(['form', 'upload'], function() {
+    var form = layui.form;
+    var $ = layui.$;
+
+    // 自定义表单验证
+    form.verify({
+        port: function(value) {
+            if (value) {
+                var port = parseInt(value);
+                if (isNaN(port) || port < 1 || port > 65535) {
+                    return '端口号必须在 1-65535 之间';
+                }
+            }
+        }
+    });
+
+    // Logo 上传：点击按钮触发文件选择
+    $('#uploadBtn').on('click', function() {
+        $('#logoFileInput').click();
+    });
+
+    // Logo 文件选择后预览
+    $('#logoFileInput').on('change', function(e) {
+        var file = e.target.files[0];
+        if (!file) return;
+
+        // 校验文件大小
+        if (file.size > 2 * 1024 * 1024) {
+            layer.msg('图片大小不能超过 2MB', {icon: 2});
+            return;
+        }
+
+        // 校验文件类型
+        var allowedExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
+        var ext = '.' + file.name.split('.').pop().toLowerCase();
+        if (allowedExts.indexOf(ext) === -1) {
+            layer.msg('不支持的图片格式，仅允许：png/jpg/jpeg/gif/webp/svg', {icon: 2});
+            return;
+        }
+
+        // 预览
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+            $('#logoPreview').html('<img src="' + ev.target.result + '" style="max-height:64px;max-width:200px;">');
+            $('#removeLogoBtn').show();
+            $('#removeLogoFlag').val('0');
+        };
+        reader.readAsDataURL(file);
+    });
+
+    // 移除 Logo
+    $('#removeLogoBtn').on('click', function() {
+        $('#logoPreview').html('<span class="logo-placeholder">🔭</span><span class="logo-hint">未设置 Logo，将显示文字标题</span>');
+        $('#logoFileInput').val('');
+        $('#removeLogoBtn').hide();
+        $('#removeLogoFlag').val('1');
+    });
+
+    // 表单提交监听
+    form.on('submit(saveConfig)', function(data) {
+        // 如果标记了移除 Logo，清空文件输入
+        if ($('#removeLogoFlag').val() === '1') {
+            $('#logoFileInput').val('');
+        }
+        return true; // 正常提交
+    });
+
+    // 温度滑块实时显示
+    $('#tempRange').on('input', function() {
+        $('#tempValue').text(this.value);
+    });
+});
+</script>
+
+<style>
+.logo-upload-area {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.logo-preview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 64px;
+    padding: 8px 12px;
+    border: 1px dashed var(--border-subtle, #ccc);
+    border-radius: var(--radius-md, 6px);
+    background: var(--bg-card, #f5f5f5);
+}
+.logo-placeholder {
+    font-size: 32px;
+}
+.logo-hint {
+    color: var(--text-muted, #999);
+    font-size: 13px;
+}
+</style>
+{% end %}
