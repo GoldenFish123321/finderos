@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.1-beta (2026-07-16) — 模板路径修复
+
+- 🐛 **修复**：`template_path` 和 `static_path` 从相对路径改为基于 `__file__` 的绝对路径，解决因工作目录不同导致 `FileNotFoundError: login.html` 的问题
+
 ## v1.0.3-beta (2026-07-16) - Security issue hardening
 
 - Fixed Issues #57-#76 covering Mock runtime errors, URL/FTS injection, DOM XSS,
