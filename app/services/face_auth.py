@@ -71,23 +71,91 @@ _recognizer = cv2.face.LBPHFaceRecognizer_create()
 _model_loaded = False
 
 
+def _temp_ascii_path(filename: str) -> str:
+    """Return an ASCII temp path for OpenCV APIs that dislike Unicode paths."""
+    safe_name = "".join(ch if ch.isascii() and (ch.isalnum() or ch in "._-") else "_" for ch in filename)
+    return os.path.join(tempfile.gettempdir(), f"finderos_{os.getpid()}_{safe_name}")
+
+
+def _read_image_file(path: str, flags):
+    """Unicode-safe image read for Windows paths containing non-ASCII chars."""
+    try:
+        data = np.fromfile(path, dtype=np.uint8)
+        if data.size == 0:
+            return None
+        return cv2.imdecode(data, flags)
+    except Exception as e:
+        logger.warning("Failed to read image from %s: %s", path, e)
+        return None
+
+
+def _write_image_file(path: str, image) -> bool:
+    """Unicode-safe image write; unlike cv2.imwrite, works under Chinese paths."""
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        ext = os.path.splitext(path)[1] or ".jpg"
+        ok, encoded = cv2.imencode(ext, image)
+        if not ok:
+            logger.error("Failed to encode face image for %s", path)
+            return False
+        encoded.tofile(path)
+        return os.path.exists(path) and os.path.getsize(path) > 0
+    except Exception as e:
+        logger.error("Failed to write face image to %s: %s", path, e)
+        return False
+
+
+def _write_recognizer_model(path: str) -> bool:
+    """Unicode-safe LBPH model write via an ASCII temporary path."""
+    tmp_path = _temp_ascii_path("face_model.yml")
+    try:
+        _recognizer.write(tmp_path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        shutil.copyfile(tmp_path, path)
+        return os.path.exists(path) and os.path.getsize(path) > 0
+    except Exception as e:
+        logger.error("Failed to write face model to %s: %s", path, e)
+        return False
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
+
+
+def _read_recognizer_model(path: str) -> bool:
+    """Unicode-safe LBPH model read via an ASCII temporary path."""
+    tmp_path = _temp_ascii_path("face_model_read.yml")
+    try:
+        shutil.copyfile(path, tmp_path)
+        _recognizer.read(tmp_path)
+        return True
+    except Exception as e:
+        logger.warning("Failed to read face model from %s: %s", path, e)
+        return False
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
+
+
 def _ensure_model():
     """确保 LBPH 模型已加载。"""
     global _model_loaded
     if not _model_loaded and os.path.exists(_MODEL_PATH):
-        try:
-            _recognizer.read(_MODEL_PATH)
+        if _read_recognizer_model(_MODEL_PATH):
             _model_loaded = True
             logger.info("Face recognition model loaded from %s", _MODEL_PATH)
-        except Exception as e:
-            logger.warning("Failed to load face model: %s", e)
 
 
 def _save_model():
     """将所有已注册的人脸图像重新训练并保存模型。"""
     global _model_loaded
     if not os.path.exists(_LABELS_PATH):
-        return
+        return False
 
     with open(_LABELS_PATH, "r", encoding="utf-8") as f:
         label_map = json.load(f)
@@ -98,7 +166,7 @@ def _save_model():
     new_map = {}
     for username in label_map:
         face_path = os.path.join(UPLOAD_DIR, f"{username}.jpg")
-        img = cv2.imread(face_path, cv2.IMREAD_GRAYSCALE)
+        img = _read_image_file(face_path, cv2.IMREAD_GRAYSCALE)
         if img is not None:
             faces.append(img)
             labels.append(lid)
@@ -107,11 +175,14 @@ def _save_model():
 
     if faces:
         _recognizer.train(faces, np.array(labels, dtype=np.int32))
-        _recognizer.write(_MODEL_PATH)
+        if not _write_recognizer_model(_MODEL_PATH):
+            _model_loaded = False
+            return False
         with open(_LABELS_PATH, "w", encoding="utf-8") as f:
             json.dump(new_map, f)
         _model_loaded = True
         logger.info("Face model retrained with %d samples", len(faces))
+        return True
     else:
         # 没有人脸数据时删除模型文件
         if os.path.exists(_MODEL_PATH):
@@ -119,6 +190,7 @@ def _save_model():
         _model_loaded = False
         with open(_LABELS_PATH, "w", encoding="utf-8") as f:
             json.dump({}, f)
+        return False
 
 
 def detect_face(image_bytes: bytes):
@@ -166,7 +238,8 @@ def register_face(username: str, image_bytes: bytes) -> bool:
 
     # 保存人脸图像
     face_path = os.path.join(UPLOAD_DIR, f"{username}.jpg")
-    cv2.imwrite(face_path, face)
+    if not _write_image_file(face_path, face):
+        return False
 
     # 更新标签映射
     label_map = {}
@@ -180,7 +253,17 @@ def register_face(username: str, image_bytes: bytes) -> bool:
         json.dump(label_map, f)
 
     # 重新训练模型
-    _save_model()
+    if not _save_model():
+        logger.error("Face model training failed after registering %s", username)
+        try:
+            if os.path.exists(face_path):
+                os.remove(face_path)
+            label_map.pop(username, None)
+            with open(_LABELS_PATH, "w", encoding="utf-8") as f:
+                json.dump(label_map, f)
+        except Exception as e:
+            logger.warning("Failed to rollback face registration for %s: %s", username, e)
+        return False
     return True
 
 
