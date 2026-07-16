@@ -115,8 +115,21 @@
 <script>
 var faceStream = null;
 
+// 初始化：从 localStorage 读取开关状态
+(function() {
+    var saved = localStorage.getItem('face_login_enabled');
+    var checkbox = document.getElementById('face-toggle');
+    var status = document.getElementById('face-toggle-status');
+    if (checkbox && !checkbox.disabled) {
+        if (saved === null) saved = 'true';  // 首次默认启用
+        checkbox.checked = (saved === 'true');
+        status.textContent = checkbox.checked ? '✅ 人脸登录已启用' : '⏸ 人脸登录已暂停';
+    }
+})();
+
 function toggleFaceLogin(checked) {
     var status = document.getElementById('face-toggle-status');
+    localStorage.setItem('face_login_enabled', checked ? 'true' : 'false');
     if (checked) {
         status.textContent = '✅ 人脸登录已启用';
     } else {
