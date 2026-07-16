@@ -7,58 +7,20 @@ app/mcp/registry.py — MCP 工具注册中心 (v0.10 新增)
 - 启动时从 mcp_tools 表加载所有 enabled 工具
 - 动态注册/注销工具到 MCPServer
 - 支持热重载 (通过管理后台触发)
-- 根据 handler_module 动态加载处理函数
 
 设计理念:
-- builtin 型工具: handler_module 指向 builtin_tools 包中的函数
-- api 型工具: 封装 HTTP 请求为 MCP 工具
+- script 型工具: 本地接口数据源 + 纯数据转换脚本
 - 工具元数据 (name/description/input_schema) 完全由数据库驱动
 """
 
-import importlib
-import inspect
 import json
 import logging
-import pkgutil
 import types
-from typing import Any, Callable, Dict, List, Optional, Union, get_args, get_origin, get_type_hints
+from typing import Any, Dict, List, Optional, Union, get_args, get_origin
 
 from app.mcp.server import MCPServer, MCPTool
 
 logger = logging.getLogger(__name__)
-
-# 内置工具处理函数映射表（快速查找，避免每次 importlib）
-_BUILTIN_HANDLERS: Dict[str, Callable] = {}
-_BUILTIN_SCAN_COMPLETE = False
-
-
-def _load_builtin_handlers():
-    """预加载所有 builtin_tools 模块中的处理函数。"""
-    global _BUILTIN_HANDLERS, _BUILTIN_SCAN_COMPLETE
-    if _BUILTIN_SCAN_COMPLETE:
-        return
-
-    import app.mcp.builtin_tools as builtin_package
-    modules = [
-        info.name for info in pkgutil.iter_modules(
-            builtin_package.__path__, builtin_package.__name__ + "."
-        ) if not info.name.rsplit(".", 1)[-1].startswith("_")
-    ]
-
-    for module_name in modules:
-        try:
-            module = importlib.import_module(module_name)
-            for attr_name in dir(module):
-                if not attr_name.startswith("_") or attr_name.startswith("__"):
-                    continue
-                attr = getattr(module, attr_name)
-                if callable(attr) and getattr(attr, "__module__", "") == module_name:
-                    _BUILTIN_HANDLERS[f"{module_name}.{attr_name}"] = attr
-        except Exception as e:
-            logger.warning(f"加载内置工具模块失败: {module_name} — {e}")
-
-    logger.info(f"预加载了 {len(_BUILTIN_HANDLERS)} 个内置工具处理函数")
-    _BUILTIN_SCAN_COMPLETE = True
 
 
 def _annotation_schema(annotation) -> Dict[str, Any]:
@@ -80,71 +42,6 @@ def _annotation_schema(annotation) -> Dict[str, Any]:
     if annotation is dict:
         return {"type": "object"}
     return {"type": "string"}
-
-
-def discover_builtin_tool_definitions() -> List[Dict[str, Any]]:
-    """Build fallback MCP definitions from every discovered builtin handler."""
-    _load_builtin_handlers()
-    definitions = []
-    for full_path, handler in sorted(_BUILTIN_HANDLERS.items()):
-        try:
-            hints = get_type_hints(handler)
-        except Exception:
-            hints = {}
-        properties = {}
-        required = []
-        for name, parameter in inspect.signature(handler).parameters.items():
-            annotation = hints.get(name, parameter.annotation)
-            properties[name] = {**_annotation_schema(annotation), "description": name}
-            if parameter.default is inspect.Parameter.empty:
-                required.append(name)
-            else:
-                properties[name]["default"] = parameter.default
-        schema = {"type": "object", "properties": properties}
-        if required:
-            schema["required"] = required
-        definitions.append({
-            "name": handler.__name__.lstrip("_"),
-            "description": inspect.getdoc(handler) or handler.__name__.lstrip("_"),
-            "input_schema": schema,
-            "handler": handler,
-            "handler_module": full_path,
-        })
-    return definitions
-
-
-def _resolve_handler(handler_module: str) -> Optional[Callable]:
-    """解析 handler_module 路径为实际可调用函数。
-
-    支持两种格式:
-    1. 完整路径: app.mcp.builtin_tools.warehouse_tools._search_warehouse
-    2. 短路径: warehouse_tools._search_warehouse (自动补全前缀)
-    """
-    if not handler_module:
-        return None
-
-    # 先尝试内置映射表
-    if handler_module in _BUILTIN_HANDLERS:
-        return _BUILTIN_HANDLERS[handler_module]
-
-    # 尝试短路径自动补全
-    if not handler_module.startswith("app."):
-        for prefix in ["app.mcp.builtin_tools.", "app.mcp."]:
-            full_path = prefix + handler_module
-            if full_path in _BUILTIN_HANDLERS:
-                return _BUILTIN_HANDLERS[full_path]
-
-    # 尝试动态 import
-    try:
-        parts = handler_module.rsplit(".", 1)
-        if len(parts) == 2:
-            module_name, func_name = parts
-            module = importlib.import_module(module_name)
-            return getattr(module, func_name, None)
-    except Exception as e:
-        logger.warning(f"动态加载处理函数失败: {handler_module} — {e}")
-
-    return None
 
 
 def _build_script_tool(row: Dict[str, Any]) -> Optional[MCPTool]:
@@ -247,98 +144,6 @@ def _build_tool_from_db_row(row: Dict[str, Any]) -> Optional[MCPTool]:
     if tool_type == "script":
         return _build_script_tool(row)
 
-    if tool_type == "builtin":
-        handler = _resolve_handler(row.get("handler_module", ""))
-        if not handler:
-            logger.warning(f"工具 {row['name']} 的处理函数未找到: {row.get('handler_module')}")
-            return None
-
-        try:
-            input_schema = json.loads(row.get("input_schema", "{}"))
-        except (json.JSONDecodeError, TypeError):
-            input_schema = {}
-
-        return MCPTool(
-            name=row["name"],
-            description=row.get("description", ""),
-            input_schema=input_schema,
-            handler=handler,
-        )
-
-    elif tool_type == "api":
-        # API 型工具：封装 HTTP 调用
-        api_url = row.get("api_url", "")
-        api_method = row.get("api_method", "GET")
-        api_headers_str = row.get("api_headers", "{}")
-
-        try:
-            api_headers = json.loads(api_headers_str)
-        except (json.JSONDecodeError, TypeError):
-            api_headers = {}
-
-        try:
-            input_schema = json.loads(row.get("input_schema", "{}"))
-        except (json.JSONDecodeError, TypeError):
-            input_schema = {}
-
-        async def api_handler(**kwargs) -> Any:
-            import urllib.parse
-            import asyncio
-            from app.utils.safe_http import SafeHttpError, safe_http_request
-            # 构建 URL（替换路径参数）
-            final_url = api_url
-            for key, value in kwargs.items():
-                final_url = final_url.replace(
-                    f"{{{key}}}", urllib.parse.quote(str(value), safe="")
-                )
-
-            # 规范化 HTTP 方法（兼容小写输入）
-            normalized_method = api_method.upper()
-
-            # 剩余参数：GET/DELETE 等追加到 URL；POST/PUT/PATCH 编码为 body
-            query_params = {k: v for k, v in kwargs.items() if f"{{{k}}}" not in api_url}
-            body_params_methods = {"POST", "PUT", "PATCH"}
-            if query_params:
-                if normalized_method in body_params_methods:
-                    data = json.dumps(query_params).encode("utf-8")
-                    api_headers["Content-Type"] = "application/json"
-                else:
-                    # GET / DELETE / HEAD / OPTIONS：追加到 URL
-                    qs = urllib.parse.urlencode(query_params)
-                    final_url += ("&" if "?" in final_url else "?") + qs
-                    data = None
-            else:
-                data = None
-
-            def _sync_call():
-                try:
-                    response = safe_http_request(
-                        final_url, method=normalized_method, headers=api_headers,
-                        body=data, timeout=30, max_bytes=1024 * 1024,
-                    )
-                    if 300 <= response.status < 400:
-                        return {"error": "MCP API 工具不允许重定向"}
-                    body = response.body.decode("utf-8", errors="replace")
-                    try:
-                        return json.loads(body)
-                    except json.JSONDecodeError:
-                        return {"raw": body[:5000]}
-                except SafeHttpError:
-                    return {"error": "MCP API 目标地址或响应不符合安全策略"}
-                except Exception as e:
-                    logger.warning("MCP API 工具调用失败: %s", e)
-                    return {"error": "MCP API 工具调用失败"}
-
-            loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(None, _sync_call)
-
-        return MCPTool(
-            name=row["name"],
-            description=row.get("description", ""),
-            input_schema=input_schema,
-            handler=api_handler,
-        )
-
     return None
 
 
@@ -376,9 +181,6 @@ class MCPToolRegistry:
         """
         from app.models.mcp_tool import MCPToolRepository
 
-        # 预加载内置处理函数
-        _load_builtin_handlers()
-
         tools = MCPToolRepository.get_enabled()
         count = 0
 
@@ -410,7 +212,6 @@ class MCPToolRegistry:
         """从数据库加载单个工具并注册。"""
         from app.models.mcp_tool import MCPToolRepository
 
-        _load_builtin_handlers()
         row = MCPToolRepository.get_by_name(tool_name)
         if not row:
             logger.warning(f"工具不存在于数据库: {tool_name}")

@@ -16,6 +16,8 @@ import sys
 import tempfile
 import unittest
 
+_skip_dead_code = unittest.skip("已移除: builtin 工具自动发现系统（discover_builtin_tool_definitions）")
+
 # 将项目根目录加入路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -238,6 +240,7 @@ class TestSkillMCPRegistration(unittest.TestCase):
         names = get_tool_names()
         self.assertIn("load_skill", names)
 
+    @_skip_dead_code
     def test_load_skill_schema(self):
         """验证 load_skill 的 JSON Schema 包含 skill_name 参数。"""
         from app.mcp.registry import discover_builtin_tool_definitions
@@ -251,6 +254,7 @@ class TestSkillMCPRegistration(unittest.TestCase):
         self.assertEqual(load_skill_def["input_schema"]["required"], ["skill_name"])
 
 
+@_skip_dead_code
 class TestAllToolDefinitions(unittest.TestCase):
     """验证 discover_builtin_tool_definitions() 自动发现所有 builtin 工具（替代旧 ALL_TOOL_DEFINITIONS）。"""
 

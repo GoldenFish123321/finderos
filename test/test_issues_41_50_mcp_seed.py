@@ -6,9 +6,10 @@ import unittest
 
 from app.config.settings import settings
 import app.models.db as db_module
-from app.mcp.registry import discover_builtin_tool_definitions
-from app.mcp.catalog import canonical_tool_names, upsert_builtin_tools
 from migrate_db import _check_crawl4ai_permissions_migrated, _migrate_crawl4ai_permissions
+
+
+_skip_dead_code = unittest.skip("已移除: builtin 工具自动发现系统（catalog.py / discover_builtin_tool_definitions）")
 
 
 class MCPSeedConsistencyTests(unittest.TestCase):
@@ -62,6 +63,7 @@ class MCPSeedConsistencyTests(unittest.TestCase):
         self.assertEqual(by_name["深度采集"], "deep_collect_url")
         self.assertEqual(by_name["随机音乐"], "get_random_music")
 
+    @_skip_dead_code
     def test_fresh_tool_descriptions_use_canonical_catalog(self):
         with db_module.get_db() as conn:
             row = conn.execute(
@@ -163,6 +165,7 @@ class MCPSeedConsistencyTests(unittest.TestCase):
             ).fetchone()["mcp_tool_ids"]
         self.assertEqual(before, after)
 
+    @_skip_dead_code
     def test_fallback_auto_discovers_all_builtin_handlers(self):
         definitions = discover_builtin_tool_definitions()
         names = {item["name"] for item in definitions}
@@ -178,6 +181,7 @@ class MCPSeedConsistencyTests(unittest.TestCase):
         self.assertEqual(collect["input_schema"]["properties"]["urls"]["type"], "array")
         self.assertEqual(collect["input_schema"]["properties"]["urls"]["items"]["type"], "string")
 
+    @_skip_dead_code
     def test_partial_catalog_is_repaired_by_name(self):
         with db_module.get_db() as conn:
             conn.execute("DELETE FROM mcp_tools WHERE name = ?", ("get_system_stats",))

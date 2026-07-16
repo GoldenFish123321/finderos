@@ -19,7 +19,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import app.models.db as db_module
-from app.models.db import get_db, init_db, _seed_default_skills, _seed_default_mcp_tools, _seed_default_employees
+from app.models.db import get_db, init_db, _seed_default_skills, _seed_script_tools, _seed_default_employees
 
 
 def test_seed_data(monkeypatch):
@@ -45,6 +45,9 @@ def test_seed_data(monkeypatch):
             api_params_template TEXT DEFAULT '',
             input_schema TEXT DEFAULT '{}',
             output_schema TEXT DEFAULT '{}',
+            data_sources TEXT DEFAULT '[]',
+            transform_script TEXT DEFAULT '',
+            script_enabled INTEGER DEFAULT 0,
             is_enabled INTEGER DEFAULT 1,
             is_system INTEGER DEFAULT 0,
             sort_order INTEGER DEFAULT 0,
@@ -83,18 +86,30 @@ def test_seed_data(monkeypatch):
 
         CREATE TABLE IF NOT EXISTS api_interfaces (
             id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE
+            name TEXT NOT NULL UNIQUE,
+            description TEXT DEFAULT '',
+            api_url TEXT DEFAULT '',
+            api_method TEXT DEFAULT 'GET',
+            api_headers TEXT DEFAULT '{}',
+            api_params_template TEXT DEFAULT '',
+            api_secret TEXT DEFAULT '',
+            response_content_type TEXT DEFAULT 'json',
+            interface_type TEXT NOT NULL DEFAULT 'external',
+            local_handler TEXT DEFAULT '',
+            is_system INTEGER DEFAULT 0,
+            is_enabled INTEGER DEFAULT 1,
+            sort_order INTEGER DEFAULT 0
         );
     """)
 
     # 先插入 API 接口（天气员工需要）
     conn.execute(
-        "INSERT INTO api_interfaces (id, name) VALUES (1, '天气查询接口')"
+        "INSERT INTO api_interfaces (id, name, interface_type) VALUES (1, '天气查询接口', 'external')"
     )
 
     # 1. 种子 MCP 工具（先于 skills/employees）
     monkeypatch.setattr(db_module, "get_db", lambda: conn)
-    _seed_default_mcp_tools()
+    _seed_script_tools()
 
     # 验证工具已种子
     tool_count = conn.execute("SELECT COUNT(*) as cnt FROM mcp_tools").fetchone()["cnt"]

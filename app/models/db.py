@@ -798,7 +798,6 @@ def seed_default_data():
 
     _seed_default_sources()
     _seed_default_models()
-    _seed_default_mcp_tools()
     skills_created = _seed_default_skills()
     _seed_default_interfaces()
     _seed_script_tools()
@@ -1372,116 +1371,6 @@ def _seed_default_skills():
         return created
 
 
-def _seed_default_mcp_tools():
-    """种子：MCP 工具注册表（20+ 工具）。"""
-    import json
-    with get_db() as conn:
-        from app.mcp.catalog import upsert_builtin_tools
-        inserted = upsert_builtin_tools(conn)
-        conn.commit()
-        print(f"[种子] MCP 工具目录已同步（{inserted}个内置工具）")
-        return
-
-        tools_data = [
-            # ── 数据仓库类 (warehouse) ──
-            (1, "search_warehouse", "数据仓库搜索", "在瞭望与问数系统的数据仓库中搜索关键词相关的内容。当用户询问「有没有关于XX的数据」「搜索XX」「查找XX」「帮我找XX」等问题时使用此工具。不要用于获取最新数据或统计信息（请使用其他专用工具）。", "warehouse", "builtin",
-             "app.mcp.builtin_tools.warehouse_tools._search_warehouse", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"keyword":{"type":"string","description":"搜索关键词"},"limit":{"type":"integer","description":"返回结果数量上限，默认10","default":10}},"required":["keyword"]}, ensure_ascii=False),
-             "{}", 1, 1, 1, "{}"),
-            (2, "get_recent_warehouse_data", "最新数据查询", "获取数据仓库中最新入库的数据记录。当用户询问「最新数据」「最近有什么」「看看数据仓库」「浏览数据」时使用此工具。也适用于用户没有明确关键词但想了解数据仓库内容时。", "warehouse", "builtin",
-             "app.mcp.builtin_tools.warehouse_tools._get_recent_warehouse_data", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"limit":{"type":"integer","description":"返回记录数，默认10","default":10}}}, ensure_ascii=False),
-             "{}", 1, 1, 2, "{}"),
-            (3, "get_warehouse_stats", "数据统计", "获取数据仓库的统计概况，包括总记录数、已深度采集数、来源分布等。当用户询问「有多少数据」「数据统计」「数据概况」「数据分布」时使用此工具。", "warehouse", "builtin",
-             "app.mcp.builtin_tools.warehouse_tools._get_warehouse_stats", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
-             "{}", 1, 1, 3, "{}"),
-            (4, "search_warehouse_fulltext", "全文检索(FTS5)", "使用 FTS5 全文搜索引擎在数据仓库中进行高级全文检索。比普通关键词搜索更精确，支持布尔表达式和短语匹配。当用户需要精确查找某段文字或使用高级搜索语法时使用此工具。", "warehouse", "builtin",
-             "app.mcp.builtin_tools.warehouse_tools._search_warehouse_fulltext", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"query":{"type":"string","description":"全文检索关键词"},"limit":{"type":"integer","description":"返回数量","default":10}},"required":["query"]}, ensure_ascii=False),
-             "{}", 1, 1, 4, "{}"),
-
-            # ── 数据采集类 (collect) ──
-            (5, "collect_web_data", "全网采集", "执行全网瞭望数据采集任务，从配置的瞭望源（如百度新闻、搜狗新闻等）搜索指定关键词。当用户要求「采集关于XX的新闻」「帮我在网上搜索XX」「瞭望一下XX」时使用此工具。注意：这是一个批量采集工具，不是搜索数据仓库已有内容。", "collect", "builtin",
-             "app.mcp.builtin_tools.collect_tools._collect_web_data", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"keyword":{"type":"string","description":"采集关键词"},"source_ids":{"type":"array","items":{"type":"integer"},"description":"瞭望源ID列表"}},"required":["keyword"]}, ensure_ascii=False),
-             "{}", 1, 1, 1, "{}"),
-            (6, "deep_collect_url", "深度采集URL", "对指定网页 URL 进行深度内容采集，提取文章正文、标题等结构化内容。当用户提供具体URL并要求「深度采集」「抓取这个网页」「提取文章内容」「帮我看看这个链接」时使用。仅用于采集单个 URL 的详细内容，不是搜索引擎。", "collect", "builtin",
-             "app.mcp.builtin_tools.collect_tools._deep_collect_url", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"url":{"type":"string","description":"目标网页URL"}},"required":["url"]}, ensure_ascii=False),
-             "{}", 1, 1, 2, "{}"),
-            (7, "list_watch_sources", "瞭望源列表", "列出系统中所有已启用的瞭望源（数据采集源）。当用户询问「有哪些采集源」「瞭望源列表」「从哪些网站采集数据」时使用此工具。", "collect", "builtin",
-             "app.mcp.builtin_tools.collect_tools._list_watch_sources", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
-             "{}", 1, 1, 3, "{}"),
-
-            # ── 数字员工类 (employee) ──
-            (8, "list_digital_employees", "数字员工列表", "列出系统中所有可用的数字员工。当用户询问「有哪些数字员工」「可以用哪些助手」「@谁」或不确定该调用哪个员工时使用。", "employee", "builtin",
-             "app.mcp.builtin_tools.employee_tools._list_digital_employees", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
-             "{}", 1, 1, 1, "{}"),
-            (9, "invoke_digital_employee", "调用数字员工", "调用指定的数字员工执行任务。支持按名称或 ID 查找员工，将用户消息转发给该员工并返回执行结果。当用户想委托特定员工完成某项工作时使用此工具。", "employee", "builtin",
-             "app.mcp.builtin_tools.employee_tools._invoke_digital_employee", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"employee_name":{"type":"string","description":"员工名称或ID"},"message":{"type":"string","description":"发送给员工的消息"}},"required":["employee_name","message"]}, ensure_ascii=False),
-             "{}", 1, 1, 2, "{}"),
-
-            # ── AI模型类 (model) ──
-            (10, "list_ai_models", "AI模型列表", "列出系统中所有已启用的 AI 模型，包括模型名称、提供商、分类和默认状态。当用户询问「有哪些AI模型」「当前可用模型」「切换模型」时使用此工具。", "model", "builtin",
-             "app.mcp.builtin_tools.model_tools._list_ai_models", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
-             "{}", 1, 1, 1, "{}"),
-            (11, "get_default_model", "获取默认模型", "获取当前系统默认的 AI 模型信息。当用户询问「当前用的是什么模型」「默认模型是什么」时使用此工具。", "model", "builtin",
-             "app.mcp.builtin_tools.model_tools._get_default_model", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
-             "{}", 1, 1, 2, "{}"),
-
-            # ── 对话管理类 (chat) ──
-            (12, "list_conversations", "对话历史", "列出用户的历史对话记录。当用户询问「之前的对话」「对话历史」「我之前的提问」时使用此工具。", "chat", "builtin",
-             "app.mcp.builtin_tools.chat_tools._list_conversations", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"username":{"type":"string","description":"用户名"},"limit":{"type":"integer","description":"返回数量上限","default":20}}}, ensure_ascii=False),
-             "{}", 1, 1, 1, "{}"),
-            (13, "get_conversation_messages", "对话消息", "获取指定对话的完整消息历史。当用户指定对话ID要求「查看那个对话」「回顾之前的聊天」时使用。", "chat", "builtin",
-             "app.mcp.builtin_tools.chat_tools._get_conversation_messages", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"conversation_id":{"type":"integer","description":"对话ID"},"limit":{"type":"integer","description":"消息数量上限","default":20},"username":{"type":"string","description":"当前用户名"}},"required":["conversation_id"]}, ensure_ascii=False),
-             "{}", 1, 1, 2, "{}"),
-
-            # ── 娱乐类 (entertainment) ──
-            (14, "get_random_music", "随机音乐", "随机推荐一首歌曲。从网易云音乐热歌榜中随机选取一首，返回歌曲名、歌手、封面图和试听链接。当用户说「来首歌」「随机音乐」「推荐一首歌」「放首歌」「来点音乐」时使用此工具。注意：此工具直接返回歌曲数据，调用后应基于数据向用户展示歌曲信息。", "entertainment", "builtin",
-             "app.mcp.builtin_tools.entertainment_tools._get_random_music", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
-             "{}", 1, 1, 1, "{}"),
-
-            # ── 爬虫增强类 (crawl4ai) ──
-            (15, "collect_with_crawl4ai", "Crawl4ai智能采集", "使用 Crawl4ai 智能爬虫引擎对指定 URL 进行深度网页内容采集。替代旧的 crawl4ai_enabled 复选框功能，支持自动检测页面结构并提取正文。优先使用 crawl4ai 引擎，不可用时回退到标准采集。当用户提供 URL 并要求「用 crawl4ai 采集」「智能爬取这个网页」时使用。", "crawl4ai", "builtin",
-             "app.mcp.builtin_tools.crawl4ai_tools._collect_with_crawl4ai", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"url":{"type":"string","description":"目标URL"},"extract_mode":{"type":"string","enum":["auto","article","full"],"default":"auto"}},"required":["url"]}, ensure_ascii=False),
-             "{}", 1, 1, 1, "{}"),
-            (16, "batch_deep_collect", "批量深度采集", "批量对多个 URL 进行深度内容采集。一次性提交多个链接，系统逐一采集并汇总结果。当用户需要「批量抓取这些网页」「同时采集这几个链接」时使用此工具。", "crawl4ai", "builtin",
-             "app.mcp.builtin_tools.crawl4ai_tools._batch_deep_collect", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"urls":{"type":"array","items":{"type":"string"},"description":"目标URL列表"},"extract_mode":{"type":"string","enum":["auto","article","full"],"default":"auto"}},"required":["urls"]}, ensure_ascii=False),
-             "{}", 1, 1, 2, "{}"),
-
-            # ── 系统管理类 (system) ──
-            (17, "load_skill", "加载技能", "加载指定技能的完整执行指令。当系统提示中的「可用技能」列表里存在你需要的技能时，调用此工具获取该技能的详细 prompt 模板或 function 映射。不要猜测技能内容，始终通过此工具按需加载。", "system", "builtin",
-             "app.mcp.builtin_tools.system_tools._load_skill", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{"skill_name":{"type":"string","description":"技能名称"}},"required":["skill_name"]}, ensure_ascii=False),
-             "{}", 1, 1, 1, "{}"),
-            (18, "get_system_stats", "系统统计", "获取系统整体统计概览，包括用户数、数据仓库记录数、数字员工数、AI模型数、瞭望源数和对话数。当用户询问「系统概况」「系统有多少数据」「整体统计」时使用此工具。", "system", "builtin",
-             "app.mcp.builtin_tools.system_tools._get_system_stats", "", "GET", "{}", "",
-             json.dumps({"type":"object","properties":{}}, ensure_ascii=False),
-             "{}", 1, 1, 2, "{}"),
-        ]
-
-        conn.executemany(
-            "INSERT INTO mcp_tools (id, name, display_name, description, category, tool_type, "
-            "handler_module, api_url, api_method, api_headers, api_params_template, "
-            "input_schema, output_schema, is_enabled, is_system, sort_order, config) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            tools_data,
-        )
-        print("[种子] 默认 MCP 工具已创建（18个工具，覆盖7个分类）")
-
-
 def _seed_script_tools():
     """v2.0 种子: script 型 MCP 工具。按名称动态查询 api_interfaces 获取 interface_id。
     如果接口不存在则自动创建（幂等），不依赖外部调用顺序。"""
@@ -1821,6 +1710,18 @@ def _seed_script_tools():
                 tools[0]["transform_script"],
             ),
         )
+        conn.execute(
+            "INSERT OR IGNORE INTO mcp_tools "
+            "(name, display_name, description, category, tool_type, "
+            "api_url, api_method, api_headers, input_schema, "
+            "data_sources, transform_script, script_enabled, "
+            "is_enabled, is_system, sort_order) "
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 1, 0, ?)",
+            (tools[0]["name"], tools[0]["display_name"], tools[0]["description"],
+             tools[0]["category"], tools[0]["input_schema"],
+             tools[0]["data_sources"], tools[0]["transform_script"],
+             tools[0]["sort_order"]),
+        )
         # get_random_music → script 型
         conn.execute(
             "UPDATE mcp_tools SET "
@@ -1837,6 +1738,18 @@ def _seed_script_tools():
                 tools[1]["data_sources"],
                 tools[1]["transform_script"],
             ),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO mcp_tools "
+            "(name, display_name, description, category, tool_type, "
+            "api_url, api_method, api_headers, input_schema, "
+            "data_sources, transform_script, script_enabled, "
+            "is_enabled, is_system, sort_order) "
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 1, 0, ?)",
+            (tools[1]["name"], tools[1]["display_name"], tools[1]["description"],
+             tools[1]["category"], tools[1]["input_schema"],
+             tools[1]["data_sources"], tools[1]["transform_script"],
+             tools[1]["sort_order"]),
         )
 
         # collect_web_data → script 型
@@ -2137,22 +2050,36 @@ def _seed_script_tools():
         print(f"[种子] script 型 MCP 工具已更新（weather_query + get_random_music + collect_web_data + deep_collect_url + batch_deep_collect + collect_with_crawl4ai + generate_image + generate_video + invoke_digital_employee → script 型）")
 
         # ── 第3批：13个纯DB操作工具迁移为 script 型 ──
-        # 动态查询所有需要的接口ID
-        _batch3_lh_list = [
-            'conversation/messages', 'conversation/list', 'collect/sources',
-            'employee/list', 'model/default', 'model/list',
-            'system/stats', 'skill/load',
-            'warehouse/recent', 'warehouse/by_id', 'warehouse/stats',
-            'warehouse/search', 'warehouse/fulltext',
-        ]
+        # 自动创建缺失的 api_interfaces（幂等）
+        _batch3_lh_descs = {
+            'conversation/messages': '获取会话消息列表',
+            'conversation/list': '列出所有会话',
+            'collect/sources': '列出所有瞭源',
+            'employee/list': '列出所有数字员工',
+            'model/default': '获取默认模型',
+            'model/list': '列出所有AI模型',
+            'system/stats': '系统统计信息',
+            'skill/load': '加载技能',
+            'warehouse/recent': '获取最近数据仓库条目',
+            'warehouse/by_id': '按ID获取数据仓库条目',
+            'warehouse/stats': '数据仓库统计',
+            'warehouse/search': '关键词搜索数据仓库',
+            'warehouse/fulltext': 'FTS5全文检索数据仓库',
+        }
         _batch3_ifaces = {}
-        for _lh in _batch3_lh_list:
+        for _lh, _desc in _batch3_lh_descs.items():
             _row = conn.execute(
                 "SELECT id FROM api_interfaces WHERE local_handler=? AND interface_type='local'",
                 (_lh,)
             ).fetchone()
             if _row:
                 _batch3_ifaces[_lh] = _row['id']
+            else:
+                cur = conn.execute(
+                    "INSERT INTO api_interfaces (name, description, api_url, api_method, api_headers, api_params_template, interface_type, is_system, local_handler, is_enabled, sort_order) VALUES (?, ?, 'local://', 'GET', '{}', '{}', 'local', 1, ?, 1, 0)",
+                    (_lh, _desc, _lh),
+                )
+                _batch3_ifaces[_lh] = cur.lastrowid
 
         # 统一透传 transform_script
         _batch3_transform = (
@@ -2165,30 +2092,56 @@ def _seed_script_tools():
             '        return json.dumps({"error": str(e)}, ensure_ascii=False)'
         )
 
+        _batch3_categories = {
+            'get_conversation_messages': 'conversation',
+            'list_conversations': 'conversation',
+            'list_watch_sources': 'data_warehouse',
+            'list_digital_employees': 'employee',
+            'get_default_model': 'model',
+            'list_ai_models': 'model',
+            'get_system_stats': 'system',
+            'load_skill': 'skill',
+            'get_recent_warehouse_data': 'data_warehouse',
+            'get_warehouse_by_id': 'data_warehouse',
+            'get_warehouse_stats': 'data_warehouse',
+            'search_warehouse': 'data_warehouse',
+            'search_warehouse_fulltext': 'data_warehouse',
+        }
+
         _batch3_tools = [
-            # (tool_name, local_handler, param_mapping)
-            ('get_conversation_messages', 'conversation/messages',
+            # (tool_name, display_name, description, local_handler, param_mapping)
+            ('get_conversation_messages', '获取会话消息', '列出指定会话的所有消息。当用户询问「查看聊天记录」「这个会话说了什么」等时使用此工具。',
+             'conversation/messages',
              {"conversation_id": "conversation_id", "limit": "limit", "username": "username"}),
-            ('list_conversations', 'conversation/list',
+            ('list_conversations', '列出会话', '列出当前用户的所有会话列表。',
+             'conversation/list',
              {"username": "username", "limit": "limit"}),
-            ('list_watch_sources', 'collect/sources', {}),
-            ('list_digital_employees', 'employee/list', {}),
-            ('get_default_model', 'model/default', {}),
-            ('list_ai_models', 'model/list', {}),
-            ('get_system_stats', 'system/stats', {}),
-            ('load_skill', 'skill/load', {"skill_name": "skill_name"}),
-            ('get_recent_warehouse_data', 'warehouse/recent', {"limit": "limit"}),
-            ('get_warehouse_by_id', 'warehouse/by_id', {"dw_id": "dw_id"}),
-            ('get_warehouse_stats', 'warehouse/stats', {}),
-            ('search_warehouse', 'warehouse/search', {"keyword": "keyword", "limit": "limit"}),
-            ('search_warehouse_fulltext', 'warehouse/fulltext', {"query": "query", "limit": "limit"}),
+            ('list_watch_sources', '列出瞭源', '列出所有已配置的瞭望源。',
+             'collect/sources', {}),
+            ('list_digital_employees', '列出数字员工', '列出系统中所有可用的数字员工及其信息。',
+             'employee/list', {}),
+            ('get_default_model', '获取默认模型', '获取系统当前默认的 AI 模型信息。',
+             'model/default', {}),
+            ('list_ai_models', '列出AI模型', '列出所有已配置的 AI 模型。当用户询问「有哪些模型」「可用的AI模型」等时使用此工具。',
+             'model/list', {}),
+            ('get_system_stats', '系统统计', '获取系统运行统计数据（如采集数量、仓库条目数等）。',
+             'system/stats', {}),
+            ('load_skill', '加载技能', '加载指定的技能模板。当需要获取技能的详细 prompt 指令时使用此工具。不要猜测技能的 prompt 内容，应使用此工具获取准确指令。',
+             'skill/load', {"skill_name": "skill_name"}),
+            ('get_recent_warehouse_data', '获取最新数据', '获取数据仓库中最新入库的数据条目。当用户询问「最新数据」「最近有什么新内容」等时使用此工具。',
+             'warehouse/recent', {"limit": "limit"}),
+            ('get_warehouse_by_id', '按ID获取数据', '根据数据仓库条目 ID 获取单条数据的详细信息。',
+             'warehouse/by_id', {"dw_id": "dw_id"}),
+            ('get_warehouse_stats', '数据仓库统计', '获取数据仓库的统计信息，包括总条目数、分类分布等。当用户询问「仓库有多少数据」「数据统计情况」等时使用此工具。',
+             'warehouse/stats', {}),
+            ('search_warehouse', '数据仓库搜索', '在数据仓库中按关键词搜索相关内容，支持模糊匹配。当用户询问「搜索某某」「查找关于...的数据」等时使用此工具。',
+             'warehouse/search', {"keyword": "keyword", "limit": "limit"}),
+            ('search_warehouse_fulltext', '全文检索', '使用 FTS5 全文检索引擎在数据仓库中搜索，支持更精准的关键词匹配。当用户需要精确搜索特定关键词时使用此工具。',
+             'warehouse/fulltext', {"query": "query", "limit": "limit"}),
         ]
 
-        for _name, _lh, _mapping in _batch3_tools:
+        for _name, _display_name, _description, _lh, _mapping in _batch3_tools:
             _iface_id = _batch3_ifaces.get(_lh)
-            if not _iface_id:
-                print(f"[种子] 警告: 接口 {_lh} 不存在，跳过 {_name}")
-                continue
             _ds = json.dumps([{
                 "interface_id": _iface_id,
                 "param_mapping": _mapping,
@@ -2204,6 +2157,15 @@ def _seed_script_tools():
                 "is_enabled=1 "
                 "WHERE name=?",
                 (_ds, _batch3_transform, _name),
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO mcp_tools "
+                "(name, display_name, description, category, tool_type, "
+                "api_url, api_method, api_headers, input_schema, "
+                "data_sources, transform_script, script_enabled, "
+                "is_enabled, is_system, sort_order) "
+                "VALUES (?, ?, ?, ?, 'script', '', '', '{}', '{}', ?, ?, 1, 1, 0, 0)",
+                (_name, _display_name, _description, _batch3_categories.get(_name, 'general'), _ds, _batch3_transform),
             )
 
         conn.commit()

@@ -112,7 +112,6 @@ def test_mcp_tool_crud():
         description="测试用工具",
         category="system",
         tool_type="builtin",
-        handler_module="app.mcp.builtin_tools.system_tools._get_system_stats",
     )
     assert new_id > 0, f"创建失败，new_id={new_id}"
     print(f"  创建工具 ID={new_id}")

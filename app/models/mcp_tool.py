@@ -28,9 +28,6 @@ MCP_TOOL_CATEGORIES = [
 ]
 
 TOOL_TYPES = [
-    {"value": "builtin", "name": "内置函数"},
-    {"value": "api", "name": "HTTP API"},
-    {"value": "crawl4ai", "name": "Crawl4ai"},
     {"value": "script", "name": "脚本工具"},
 ]
 
@@ -171,10 +168,7 @@ class MCPToolRepository:
 
     @staticmethod
     def create(name: str, display_name: str, description: str = "",
-               category: str = "general", tool_type: str = "builtin",
-               handler_module: str = "", api_url: str = "",
-               api_method: str = "GET", api_headers: str = "{}",
-               api_params_template: str = "",
+               category: str = "general", tool_type: str = "script",
                input_schema: str = "{}", output_schema: str = "{}",
                is_enabled: int = 1, is_system: int = 0,
                sort_order: int = 0, config: str = "{}",
@@ -186,7 +180,6 @@ class MCPToolRepository:
             for field_name, field_val in [
                 ("input_schema", input_schema),
                 ("output_schema", output_schema),
-                ("api_headers", api_headers),
                 ("config", config),
                 ("data_sources", data_sources),
             ]:
@@ -198,14 +191,13 @@ class MCPToolRepository:
             with get_db() as conn:
                 cur = conn.execute(
                     "INSERT INTO mcp_tools (name, display_name, description, "
-                    "category, tool_type, handler_module, api_url, api_method, "
-                    "api_headers, api_params_template, input_schema, output_schema, "
+                    "category, tool_type, "
+                    "input_schema, output_schema, "
                     "is_enabled, is_system, sort_order, config, "
                     "data_sources, transform_script, script_enabled) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (name.strip(), display_name.strip(), description.strip(),
-                     category, tool_type, handler_module.strip(), api_url.strip(),
-                     api_method, api_headers, api_params_template,
+                     category, tool_type,
                      input_schema, output_schema,
                      is_enabled, is_system, sort_order, config,
                      data_sources, transform_script, script_enabled),
@@ -220,8 +212,7 @@ class MCPToolRepository:
     def update(tool_id: int, **kwargs) -> bool:
         """更新 MCP 工具字段。"""
         allowed = ["name", "display_name", "description", "category", "tool_type",
-                    "handler_module", "api_url", "api_method", "api_headers",
-                    "api_params_template", "input_schema", "output_schema",
+                    "input_schema", "output_schema",
                     "is_enabled", "is_system", "sort_order", "config",
                     "data_sources", "transform_script", "script_enabled"]
         updates = {k: v for k, v in kwargs.items() if k in allowed}

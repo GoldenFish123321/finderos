@@ -110,12 +110,7 @@ class MCPToolFormHandler(AdminBaseHandler):
         display_name = self.get_body_argument("display_name", "").strip()
         description = self.get_body_argument("description", "").strip()
         category = self.get_body_argument("category", "general").strip()
-        tool_type = self.get_body_argument("tool_type", "builtin").strip()
-        handler_module = self.get_body_argument("handler_module", "").strip()
-        api_url = self.get_body_argument("api_url", "").strip()
-        api_method = self.get_body_argument("api_method", "GET").strip()
-        api_headers = self.get_body_argument("api_headers", "{}").strip()
-        api_params_template = self.get_body_argument("api_params_template", "").strip()
+        tool_type = self.get_body_argument("tool_type", "script").strip()
         input_schema = self.get_body_argument("input_schema", "{}").strip()
         output_schema = self.get_body_argument("output_schema", "{}").strip()
         try:
@@ -135,8 +130,7 @@ class MCPToolFormHandler(AdminBaseHandler):
             return
 
         # 校验 JSON 格式
-        for field_name, field_val in [("input_schema", input_schema), ("output_schema", output_schema),
-                                        ("api_headers", api_headers)]:
+        for field_name, field_val in [("input_schema", input_schema), ("output_schema", output_schema)]:
             try:
                 json.loads(field_val)
             except (json.JSONDecodeError, TypeError):
@@ -159,8 +153,6 @@ class MCPToolFormHandler(AdminBaseHandler):
             success = MCPToolRepository.update(
                 tool_id_int, name=name, display_name=display_name,
                 description=description, category=category, tool_type=tool_type,
-                handler_module=handler_module, api_url=api_url, api_method=api_method,
-                api_headers=api_headers, api_params_template=api_params_template,
                 input_schema=input_schema, output_schema=output_schema,
                 is_enabled=is_enabled, sort_order=sort_order,
                 data_sources=data_sources, transform_script=transform_script,
@@ -175,9 +167,7 @@ class MCPToolFormHandler(AdminBaseHandler):
         else:
             new_id = MCPToolRepository.create(
                 name=name, display_name=display_name, description=description,
-                category=category, tool_type=tool_type, handler_module=handler_module,
-                api_url=api_url, api_method=api_method, api_headers=api_headers,
-                api_params_template=api_params_template,
+                category=category, tool_type=tool_type,
                 input_schema=input_schema, output_schema=output_schema,
                 is_enabled=is_enabled, sort_order=sort_order,
                 data_sources=data_sources, transform_script=transform_script,
@@ -271,7 +261,7 @@ class MCPToolTestHandler(AdminBaseHandler):
         from app.mcp.registry import _build_tool_from_db_row
         tool = _build_tool_from_db_row(tool_row)
         if not tool:
-            self.write({"code": 1, "msg": "工具构建失败，请检查 handler_module"})
+            self.write({"code": 1, "msg": "工具构建失败，请检查工具配置"})
             return
 
         start_time = time.time()
