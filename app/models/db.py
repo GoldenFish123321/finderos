@@ -2171,6 +2171,19 @@ def _seed_script_tools():
         conn.commit()
         print(f"[种子] 第3批 script 型 MCP 工具已更新（13个纯DB工具 → script 型）")
 
+        # ── 修复 search_warehouse_fulltext 的 input_schema（需显式声明参数）──
+        conn.execute(
+            "UPDATE mcp_tools SET input_schema = ? WHERE name = ?",
+            (json.dumps({
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "FTS5全文检索关键词"},
+                    "limit": {"type": "integer", "description": "返回上限", "default": 10}
+                },
+                "required": ["query"]
+            }, ensure_ascii=False), "search_warehouse_fulltext")
+        )
+
 
 def _synchronize_default_capabilities(skills_created: bool, employees_created: bool):
     """Resolve default Skill and employee tool grants by stable names."""

@@ -268,6 +268,11 @@ class MCPClient:
             kw = self._clean_query_for_keyword(message)
             args["keyword"] = kw
 
+        elif tool_name == "search_warehouse_fulltext":
+            kw = self._clean_query_for_keyword(message)
+            args["query"] = kw
+            args["limit"] = 10
+
         elif tool_name == "get_conversation_messages":
             id_match = re.search(r'(\d+)', message)
             if id_match:

@@ -73,9 +73,13 @@ def _build_script_tool(row: Dict[str, Any]) -> Optional[MCPTool]:
 
             # 映射参数: tool参数名 → 接口参数名
             mapped_params = {}
+            props = input_schema.get("properties", {})
             for tool_param, iface_param in param_mapping.items():
                 if tool_param in kwargs:
                     mapped_params[iface_param] = kwargs[tool_param]
+                else:
+                    default = props.get(tool_param, {}).get("default")
+                    mapped_params[iface_param] = default if default is not None else ""
             # 注入上下文变量 ($ctx.*)
             mapped_params = _inject_context_params(mapped_params)
 
