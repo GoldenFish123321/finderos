@@ -35,7 +35,7 @@ class MCPSeedConsistencyTests(unittest.TestCase):
                 "SELECT id, name FROM mcp_tools"
             ).fetchall()}
             employees = conn.execute(
-                "SELECT name, employee_type, mcp_tool_ids FROM digital_employees"
+                "SELECT name, employee_type, mcp_tool_ids, mcp_tool_id FROM digital_employees"
             ).fetchall()
         for employee in employees:
             if employee["employee_type"] != "llm":
@@ -44,10 +44,11 @@ class MCPSeedConsistencyTests(unittest.TestCase):
             self.assertTrue(assigned, employee["name"])
             self.assertTrue(all(tool_id in tools for tool_id in assigned), employee["name"])
         music = next(e for e in employees if e["name"] == "随机音乐")
-        self.assertEqual(
-            [tools[tool_id] for tool_id in json.loads(music["mcp_tool_ids"])],
-            ["get_random_music"],
-        )
+        # API 型员工通过 mcp_tool_id（单工具绑定）而非 mcp_tool_ids（数组）
+        self.assertEqual(music["employee_type"], "api", "随机音乐应为 API 型员工")
+        music_tool_id = music["mcp_tool_id"]
+        self.assertIsNotNone(music_tool_id, "随机音乐应通过 mcp_tool_id 绑定工具")
+        self.assertEqual(tools[music_tool_id], "get_random_music")
 
     def test_fresh_install_seeds_full_skill_catalog_and_links_tools(self):
         with db_module.get_db() as conn:

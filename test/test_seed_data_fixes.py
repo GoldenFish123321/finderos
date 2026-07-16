@@ -71,6 +71,7 @@ def test_seed_data(monkeypatch):
             skills TEXT DEFAULT '[]',
             crawl4ai_enabled INTEGER DEFAULT 0,
             mcp_tool_ids TEXT DEFAULT '[]',
+            mcp_tool_id INTEGER DEFAULT NULL,
             is_enabled INTEGER DEFAULT 1,
             api_url TEXT,
             api_method TEXT DEFAULT 'GET',
@@ -221,15 +222,14 @@ def test_seed_data(monkeypatch):
     assert crawl4ai_id in collector_ids, "采集专员缺少 collect_with_crawl4ai"
     assert batch_id in collector_ids, "采集专员缺少 batch_deep_collect"
 
-    # 额外验证：随机音乐有 get_random_music
+    # 额外验证：随机音乐（API 型）通过 mcp_tool_id 绑定 get_random_music
     music_emp = conn.execute(
-        "SELECT mcp_tool_ids FROM digital_employees WHERE name='随机音乐'"
+        "SELECT mcp_tool_id FROM digital_employees WHERE name='随机音乐'"
     ).fetchone()
-    music_ids = json.loads(music_emp["mcp_tool_ids"])
     music_tool_id = conn.execute(
         "SELECT id FROM mcp_tools WHERE name='get_random_music'"
     ).fetchone()["id"]
-    assert music_tool_id in music_ids, "随机音乐缺少 get_random_music"
+    assert music_emp["mcp_tool_id"] == music_tool_id, f"随机音乐（API型）mcp_tool_id 应绑定 get_random_music，实际: {music_emp['mcp_tool_id']}"
 
     conn.close()
     print("\n✅ 所有 5 个种子数据 bug 已修复并通过验证！")

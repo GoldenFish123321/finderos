@@ -2266,7 +2266,9 @@ class UserEmployeeInvokeHandler(BaseHandler):
         try:
             input_schema = json.loads(tool_row.get("input_schema", "{}"))
             props = input_schema.get("properties", {})
-            if "query" in props:
+            if not props:
+                arguments = {}
+            elif "query" in props:
                 arguments = {"query": message}
             elif "keyword" in props:
                 arguments = {"keyword": message}

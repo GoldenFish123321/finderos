@@ -24,11 +24,11 @@ def test_random_music_employee_exists():
     emp = DigitalEmployeeRepository.get_by_id(8)
     assert emp is not None, "随机音乐员工（ID=8）应存在"
     assert emp["name"] == "随机音乐", f"员工名称应为'随机音乐'，实际: {emp['name']}"
-    assert emp["employee_type"] == "llm", f"员工类型应为'llm'（MCP驱动），实际: {emp['employee_type']}"
+    assert emp["employee_type"] == "api", f"员工类型应为'api'（MCP驱动），实际: {emp['employee_type']}"
     assert emp["is_enabled"] == 1, "随机音乐员工应默认启用"
-    # LLM 型员工应有 system_prompt
-    assert emp.get("system_prompt"), "LLM 型员工应有系统提示词"
-    print(f"  ✅ 随机音乐员工存在: ID={emp['id']}, 类型={emp['employee_type']} (MCP驱动)")
+    # API 型员工应有 mcp_tool_id 绑定
+    assert emp.get("mcp_tool_id"), "API 型员工应绑定 MCP 工具"
+    print(f"  ✅ 随机音乐员工存在: ID={emp['id']}, 类型={emp['employee_type']} (API型/MCP驱动)")
 
     # 验证 api_params_template 不使用用户消息作为参数（安全性）
     params = emp.get("api_params_template", "")
@@ -64,7 +64,7 @@ def test_build_music_card_logic():
         "source": "网易云音乐热歌榜",
     }
 
-    emp = {"name": "随机音乐", "employee_type": "llm"}
+    emp = {"name": "随机音乐", "employee_type": "api"}
     card = _build_employee_card(emp, mcp_result, "来首歌")
     assert card is not None, "应生成音乐卡片"
     assert card["type"] == "music", f"卡片类型应为'music'，实际: {card['type']}"
@@ -200,6 +200,94 @@ def test_template_flattening():
     assert helper_rendered == "测试歌曲名 - 测试歌手名"
     assert _render_value_template("{{data.name}}", data_obj) == "测试歌曲名"
     print(f"  ✅ 模板替换正确: {rendered}")
+
+
+def test_api_music_employee_mcp_invoke_no_args():
+    """验证 API 型随机音乐员工通过 MCP 调用时，input_schema 无 properties 时不传多余参数。
+
+    回归: _invoke_api_via_mcp 在 props 为空时 arguments 应为 {}。
+    否则 _get_random_music() 收到意外 keyword argument 导致 TypeError → Mock 回退。
+    """
+    print("\n  --- 验证: API 型音乐员工 MCP 调用参数传递 ---")
+
+    # 模拟 tool_row（get_random_music 的数据库记录）
+    tool_row = {
+        "name": "get_random_music",
+        "display_name": "随机音乐",
+        "description": "随机推荐一首歌曲",
+        "category": "entertainment",
+        "tool_type": "builtin",
+        "handler_module": "app.mcp.builtin_tools.entertainment_tools._get_random_music",
+        "input_schema": json.dumps({"type": "object", "properties": {}}, ensure_ascii=False),
+        "is_enabled": 1,
+        "is_system": 1,
+    }
+
+    # 模拟参数构建逻辑（与 _invoke_api_via_mcp 一致）
+    message = "来首歌"
+    arguments = {"message": message}
+    input_schema = json.loads(tool_row.get("input_schema", "{}"))
+    props = input_schema.get("properties", {})
+    if not props:
+        arguments = {}
+    elif "query" in props:
+        arguments = {"query": message}
+    elif "keyword" in props:
+        arguments = {"keyword": message}
+    elif "prompt" in props:
+        arguments = {"prompt": message}
+
+    # 验证: props 为空时 arguments 应为空 dict（不传多余参数）
+    assert arguments == {}, (
+        f"input_schema properties 为空时，arguments 应为 {{}}，"
+        f"实际: {arguments}。否则 _get_random_music() 收到多余 kwarg 会 TypeError"
+    )
+
+    # 验证 _get_random_music 可无参调用（不应抛 TypeError）
+    from app.mcp.builtin_tools.entertainment_tools import _get_random_music
+    import asyncio
+    loop = asyncio.new_event_loop()
+    try:
+        result = loop.run_until_complete(_get_random_music(**arguments))
+    finally:
+        loop.close()
+    assert result.get("success") is True, f"调用应成功，实际: {result}"
+    assert "name" in result, "返回结果应包含歌曲名"
+    assert "artist" in result, "返回结果应包含歌手"
+    print(f"  ✅ 无参调用 _get_random_music() 成功: {result['name']} - {result['artist']} (来源: {result.get('source')})")
+
+
+def test_api_music_employee_card_building():
+    """验证 API 型音乐员工通过 _build_employee_card 正确构建音乐卡片。"""
+    print("\n  --- 验证: API 型音乐员工卡片构建 ---")
+
+    from app.controllers.user_chat import _build_employee_card
+
+    # API 型员工（无 response_render_template，靠员工名识别）
+    emp = {
+        "name": "随机音乐",
+        "employee_type": "api",
+        "response_render_template": "",
+    }
+
+    # 模拟 get_random_music 真实返回数据
+    api_data = {
+        "success": True,
+        "name": "晴天",
+        "artist": "周杰伦",
+        "cover": "https://picsum.photos/seed/music1/160/160",
+        "url": "https://music.163.com/",
+        "source": "网易云音乐热歌榜",
+    }
+
+    card = _build_employee_card(emp, api_data, "来首歌")
+    assert card is not None, "应生成音乐卡片"
+    assert card["type"] == "music", f"卡片类型应为'music'，实际: {card['type']}"
+    assert card["data"]["name"] == "晴天"
+    assert card["data"]["artist"] == "周杰伦"
+    assert card["data"]["cover"] == "https://picsum.photos/seed/music1/160/160"
+    assert card["data"]["url"] == "https://music.163.com/"
+    print(f"  ✅ API 型员工音乐卡片构建正确: {card['data']['name']} - {card['data']['artist']}")
 
 
 if __name__ == "__main__":

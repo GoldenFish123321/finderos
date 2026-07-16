@@ -1150,26 +1150,23 @@ def _seed_default_employees():
                     1,
                 ),
             )
-            # 随机音乐 — LLM 型数字员工（MCP 工具驱动，调用 get_random_music）
+            # 随机音乐 — API 型数字员工（MCP 工具驱动，调用 get_random_music）
+            music_tool_id = tool_name_to_id.get("get_random_music")
             conn.execute(
                 "INSERT INTO digital_employees (id, name, employee_type, description, "
-                "model_id, system_prompt, skills, crawl4ai_enabled, mcp_tool_ids, is_enabled) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "api_url, api_method, api_headers, api_params_template, response_render_template, "
+                "api_interface_id, mcp_tool_id, is_enabled) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    8, "随机音乐", "llm",
+                    8, "随机音乐", "api",
                     "随机推荐一首来自网易云音乐热歌榜的歌曲，展示歌曲名、歌手、封面图和试听链接",
-                    None,
-                    "你是随机音乐助手，专门为用户推荐歌曲。你的核心能力：\n"
-                    "1. 调用 get_random_music 工具获取随机歌曲\n"
-                    "2. 基于工具返回的真实数据向用户展示歌曲信息\n"
-                    "3. 用轻松愉快的语气介绍歌曲\n\n"
-                    "重要规则：\n"
-                    "- 必须使用 get_random_music 工具获取歌曲数据，不要编造歌曲名\n"
-                    "- 如果工具返回了歌曲数据，直接向用户展示，不要问「要不要来一首」之类的废话\n"
-                    "- 展示格式：先介绍歌曲名和歌手，再引导用户点击试听",
-                    json.dumps(["随机音乐", "歌曲推荐", "音乐点播"], ensure_ascii=False),
-                    0,
-                    json.dumps(resolve_tools(["get_random_music"]), ensure_ascii=False),
+                    "",  # api_url — 由 MCP 工具 get_random_music 内部处理，无需外部 URL
+                    "GET",
+                    json.dumps({"Accept": "application/json"}, ensure_ascii=False),
+                    "",  # api_params_template — 工具无需额外参数
+                    "",  # response_render_template — 由 _build_employee_card 自动识别音乐数据构建卡片
+                    None,  # api_interface_id
+                    music_tool_id,  # 绑定 MCP 工具 get_random_music
                     1,
                 ),
             )
@@ -1515,7 +1512,7 @@ def _synchronize_default_capabilities(skills_created: bool, employees_created: b
         skill_rows = conn.execute("SELECT id, name FROM skills").fetchall()
         skill_ids = {row["name"]: row["id"] for row in skill_rows}
         employees = conn.execute(
-            "SELECT id, name, skills, mcp_tool_ids FROM digital_employees"
+            "SELECT id, name, employee_type, skills, mcp_tool_ids FROM digital_employees"
         ).fetchall()
         for employee in employees:
             try:
@@ -1532,6 +1529,10 @@ def _synchronize_default_capabilities(skills_created: bool, employees_created: b
                     "UPDATE digital_employees SET skills = ? WHERE id = ?",
                     (json.dumps(resolved, ensure_ascii=False), employee["id"]),
                 )
+
+            # API 型员工使用 mcp_tool_id（单工具绑定），不参与 mcp_tool_ids 数组同步
+            if employee.get("employee_type") == "api":
+                continue
 
             names = employee_tools.get(employee["name"])
             current_tools = employee.get("mcp_tool_ids") or "[]"
