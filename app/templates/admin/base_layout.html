@@ -35,6 +35,21 @@ document.body.classList.add('dark-theme');
                 </a>
             </div>
             {% end %}
+            {% if admin_can('/admin/dashboard') or admin_can('/admin/sentiment') %}
+            <div class="nav-group-title">数据大屏</div>
+            <div class="nav-group">
+                {% if admin_can('/admin/dashboard') %}
+                <a href="/admin/dashboard" class="{{ 'active' if '/admin/dashboard' in handler.request.path else '' }}">
+                    <span class="nav-icon">📊</span> <span>数智大屏</span>
+                </a>
+                {% end %}
+                {% if admin_can('/admin/sentiment') %}
+                <a href="/admin/sentiment" class="{{ 'active' if '/admin/sentiment' in handler.request.path else '' }}">
+                    <span class="nav-icon">🛡️</span> <span>舆情大屏</span>
+                </a>
+                {% end %}
+            </div>
+            {% end %}
             {% if admin_can('/admin/user') or admin_can('/admin/role') or admin_can('/admin/function') or admin_can('/admin/menu') %}
             <div class="nav-group-title">权限管理</div>
             <div class="nav-group">
