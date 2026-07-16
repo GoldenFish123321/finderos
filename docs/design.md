@@ -254,7 +254,58 @@ audit_logs (独立审计)
 | **API Key 加密** | Fernet 对称加密存储 |
 | **Prompt Injection** | System Prompt 内置安全指令约束 + `detect_prompt_injection()` / `sanitize_user_input()` 运行时检测 |
 
-## 5. 端口与配置
+## 5. 统一接口驱动架构 (v2.0)
+
+### 5.1 三层架构
+
+v2.0 引入统一接口驱动架构，将所有数据访问和外部 HTTP 调用统一为三层模型：
+
+```
+数据源层 (api_interfaces) → 本地调用层 (local_api_client) → MCP 工具层 (registry)
+```
+
+| 层 | 职责 |
+|----|------|
+| **数据源层** | `api_interfaces` 表中注册所有数据接口，包括 18 个系统内置函数和外部 API 代理 |
+| **本地调用层** | `local_api_client` 提供统一的 `call_local_api()` 入口，对内屏蔽外部 HTTP 细节；所有外网流量经 `safe_http_request`（DNS Pinning + SSRF + 审计） |
+| **MCP 工具层** | `registry` 将本地接口 + 转换脚本组装为 MCP 工具，对 LLM 暴露 Function Calling 能力 |
+
+### 5.2 tool_type 分类
+
+MCP 工具现支持 4 种类型：
+
+| tool_type | 说明 |
+|-----------|------|
+| `builtin` | 内置 Python 函数，通过 `handler_module` 动态加载 |
+| `api` | HTTP API 封装，通过 `api_url` + 参数占位符组装请求 |
+| `crawl4ai` | Crawl4ai 深度采集（已废弃，保留兼容） |
+| `script` | **v2.0 新增**：引用 `data_sources`（本地接口） + `transform_script`（纯数据转换脚本）生成结果 |
+
+### 5.3 script 型工具工作流程
+
+```
+LLM Function Calling → MCP Server tools/call
+  → 查找工具配置 (data_sources + transform_script)
+  → 遍历 data_sources，每个通过 call_local_api() 调用
+      ├─ 系统内置接口 → 进程内函数直调
+      └─ 外部代理接口 → safe_http_request → 外部 API
+  → 收集所有 data_sources 结果 → 传入 transform_script
+  → 脚本 transform(data_sources) 返回字符串
+  → 字符串直接作为 MCP text content 返回给 LLM
+```
+
+脚本在 AST 白名单沙箱中执行，完全禁止 `import`、`__builtins__`、网络和文件系统访问，仅做纯数据→字符串转换。
+
+### 5.4 架构收益
+
+- **安全出口统一**：所有外部 HTTP 流量经 `safe_http_request`，消除分散 SSRF 风险
+- **透明代理**：external 接口自动包装为虚拟 local handler，上层代码无需感知内外网
+- **热重载即时生效**：接口配置和脚本均在数据库中，修改后重载即可
+- **自定义 MCP 工具灵活自由**：管理员可在后台自由组合数据源 + 编写转换脚本，无需修改代码
+
+---
+
+## 6. 端口与配置
 
 - 默认端口: `10010`
 - 监听地址: `127.0.0.1`（可通过 `BIND_ADDRESS` 环境变量修改）
@@ -262,7 +313,7 @@ audit_logs (独立审计)
 - 环境变量覆盖: `COOKIE_SECRET`, `DB_PATH`, `PORT`, `BIND_ADDRESS`, `DEBUG`, `PBKDF2_ITERATIONS` 等
 - 数据库: `database/finderos.db` (SQLite WAL 模式)
 
-### 5.1 系统设置（Web UI 配置中心） — #99
+### 6.1 系统设置（Web UI 配置中心） — #99
 
 系统配置采用 **DB 持久化 + 内存缓存** 双层架构：
 
@@ -297,7 +348,7 @@ Settings.XXX 属性                     ← 模板/控制器即时读取
 - 类型安全转换：int / float / bool 自动转换，转换失败回退默认值
 - 即时生效：保存后立即调用 `load_from_db()` 刷新内存
 
-## 6. 默认账户
+## 7. 默认账户
 
 | 用户名 | 密码 | 角色 |
 |--------|------|------|

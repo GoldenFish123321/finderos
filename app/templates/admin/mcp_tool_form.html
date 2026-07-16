@@ -123,6 +123,33 @@
                 </div>
             </div>
 
+            <div class="form-section" id="scriptFields" style="display:none;">
+                <h4>📜 脚本工具配置</h4>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">数据源</label>
+                    <div class="layui-input-block">
+                        <textarea name="data_sources" placeholder='[{"interface_id": 1, "param_mapping": {"keyword": "keyword"}}]'
+                                  class="layui-textarea" style="min-height: 80px; font-family: monospace;">{{ data_sources or '[]' }}</textarea>
+                        <div class="layui-form-mid layui-word-aux">JSON 数组，每项指定 interface_id 和 param_mapping</div>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">转换脚本</label>
+                    <div class="layui-input-block">
+                        <textarea name="transform_script" placeholder="def transform(data_sources):&#10;    return str(data_sources)"
+                                  class="layui-textarea" style="min-height: 200px; font-family: monospace;">{{ transform_script or '' }}</textarea>
+                        <div class="layui-form-mid layui-word-aux">Python 转换脚本，函数签名: def transform(data_sources: list[dict]) -> str</div>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">启用脚本</label>
+                    <div class="layui-input-block">
+                        <input type="checkbox" name="script_enabled" value="1" lay-skin="switch" lay-text="ON|OFF"
+                               {{ 'checked' if script_enabled else '' }}>
+                    </div>
+                </div>
+            </div>
+
             <div class="form-section">
                 <h4>📐 Schema 定义</h4>
                 <div class="layui-form-item">
@@ -176,6 +203,7 @@ function toggleTypeFields() {
     var type = document.getElementById('toolType').value;
     document.getElementById('builtinFields').style.display = type === 'builtin' ? '' : 'none';
     document.getElementById('apiFields').style.display = type === 'api' ? '' : 'none';
+    document.getElementById('scriptFields').style.display = type === 'script' ? '' : 'none';
 }
 toggleTypeFields();
 </script>

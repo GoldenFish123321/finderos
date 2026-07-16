@@ -534,6 +534,40 @@ def init_db():
         conn.commit()
         logger.info(f"Database initialized: {DB_PATH}")
 
+        # ── v2.0 统一接口驱动架构: api_interfaces 新增字段 ──
+        try:
+            conn.execute("ALTER TABLE api_interfaces ADD COLUMN interface_type TEXT DEFAULT 'external'")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE api_interfaces ADD COLUMN is_system INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE api_interfaces ADD COLUMN local_handler TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE api_interfaces ADD COLUMN response_content_type TEXT DEFAULT 'json'")
+        except Exception:
+            pass
+        conn.commit()
+
+        # ── v2.0 统一接口驱动架构: mcp_tools 新增字段 ──
+        try:
+            conn.execute("ALTER TABLE mcp_tools ADD COLUMN data_sources TEXT DEFAULT '[]'")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE mcp_tools ADD COLUMN transform_script TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE mcp_tools ADD COLUMN script_enabled INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        conn.commit()
+
 
 def seed_default_data():
     """Seed default roles, admin account, and functions (idempotent)."""

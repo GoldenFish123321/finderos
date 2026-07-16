@@ -285,7 +285,24 @@ if __name__ == "__main__":
     # v0.11: 从数据库加载可配置的系统设置，覆盖默认值
     settings.load_from_db()
 
-    # v0.10: 显式注册 MCP 工具（确保数据库驱动工具在启动时加载）
+    # v2.0: 统一接口驱动架构 — 本地接口注册 + 外部代理 + MCP 工具加载
+    from app.services.local_api_client import (
+        _init_local_handlers, _register_external_proxies,
+        _auto_sync_external_proxies_to_api_interfaces,
+    )
+    from app.services.local_api_registry import sync_local_api_interfaces
+
+    # 1. 注册 18 个系统内置本地接口（进程内函数注册表）
+    _init_local_handlers()
+
+    # 2. 同步本地接口元数据到 api_interfaces 表（幂等）
+    sync_local_api_interfaces()
+
+    # 3. 将 external 接口包装为虚拟本地处理器
+    _auto_sync_external_proxies_to_api_interfaces()
+    _register_external_proxies()
+
+    # 4. 加载 MCP 工具（此时所有接口都已可被 script 型工具引用）
     from app.mcp.tools import register_all_tools
     register_all_tools()
 

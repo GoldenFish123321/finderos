@@ -378,6 +378,43 @@ def run_migrations():
             "sql": "CREATE INDEX IF NOT EXISTS idx_conv_msgs_review ON conversation_messages(review_status)",
             "check": lambda c: _index_exists(c, "idx_conv_msgs_review"),
         },
+        # v2.0 统一接口驱动架构 — api_interfaces 新增字段
+        {
+            "name": "add_api_interfaces_interface_type",
+            "sql": "ALTER TABLE api_interfaces ADD COLUMN interface_type TEXT DEFAULT 'external'",
+            "check": lambda c: _column_exists(c, "api_interfaces", "interface_type"),
+        },
+        {
+            "name": "add_api_interfaces_is_system",
+            "sql": "ALTER TABLE api_interfaces ADD COLUMN is_system INTEGER DEFAULT 0",
+            "check": lambda c: _column_exists(c, "api_interfaces", "is_system"),
+        },
+        {
+            "name": "add_api_interfaces_local_handler",
+            "sql": "ALTER TABLE api_interfaces ADD COLUMN local_handler TEXT DEFAULT ''",
+            "check": lambda c: _column_exists(c, "api_interfaces", "local_handler"),
+        },
+        {
+            "name": "add_api_interfaces_response_content_type",
+            "sql": "ALTER TABLE api_interfaces ADD COLUMN response_content_type TEXT DEFAULT 'json'",
+            "check": lambda c: _column_exists(c, "api_interfaces", "response_content_type"),
+        },
+        # v2.0 统一接口驱动架构 — mcp_tools 新增字段
+        {
+            "name": "add_mcp_tools_data_sources",
+            "sql": "ALTER TABLE mcp_tools ADD COLUMN data_sources TEXT DEFAULT '[]'",
+            "check": lambda c: _column_exists(c, "mcp_tools", "data_sources"),
+        },
+        {
+            "name": "add_mcp_tools_transform_script",
+            "sql": "ALTER TABLE mcp_tools ADD COLUMN transform_script TEXT DEFAULT ''",
+            "check": lambda c: _column_exists(c, "mcp_tools", "transform_script"),
+        },
+        {
+            "name": "add_mcp_tools_script_enabled",
+            "sql": "ALTER TABLE mcp_tools ADD COLUMN script_enabled INTEGER DEFAULT 0",
+            "check": lambda c: _column_exists(c, "mcp_tools", "script_enabled"),
+        },
     ]
 
     applied = 0

@@ -59,6 +59,23 @@ def _get_warehouse_stats() -> Dict[str, Any]:
     return stats if stats else {"total": 0, "deep_collected": 0, "top_sources": []}
 
 
+def _get_warehouse_by_id(dw_id: int) -> Dict[str, Any]:
+    """根据ID获取数据仓库中的单条数据。"""
+    from app.models.data_warehouse import DataWarehouseRepository
+    item = DataWarehouseRepository.get_by_id(dw_id)
+    if item:
+        return {
+            "id": item.get("id"),
+            "title": item.get("title", ""),
+            "summary": (item.get("summary", "") or "")[:500],
+            "source_name": item.get("source_name", ""),
+            "link": item.get("link", ""),
+            "content": item.get("content", ""),
+            "created_at": item.get("created_at", ""),
+        }
+    return {"error": f"未找到 ID={dw_id} 的数据"}
+
+
 def _search_warehouse_fulltext(query: str, limit: int = 10) -> Dict[str, Any]:
     """使用 FTS5 对数据仓库进行全文检索（v0.10 新增）。
     

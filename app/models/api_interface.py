@@ -135,7 +135,7 @@ class ApiInterfaceRepository:
 
     @staticmethod
     def get_all(page: int = 1, page_size: int = 20, keyword: str = "",
-                enabled_only: bool = False) -> tuple[list[dict], int]:
+                enabled_only: bool = False, iface_type: str = "") -> tuple[list[dict], int]:
         """分页查询接口模板。返回 (rows, total)。"""
         with get_db() as conn:
             conditions = []
@@ -146,6 +146,9 @@ class ApiInterfaceRepository:
                 params.extend([like, like, like])
             if enabled_only:
                 conditions.append("is_enabled = 1")
+            if iface_type:
+                conditions.append("interface_type = ?")
+                params.append(iface_type)
             where = "WHERE " + " AND ".join(conditions) if conditions else ""
             total = conn.execute(
                 f"SELECT COUNT(*) as cnt FROM api_interfaces {where}", params
@@ -162,6 +165,16 @@ class ApiInterfaceRepository:
         """获取所有启用接口模板。"""
         rows, _ = ApiInterfaceRepository.get_all(page=1, page_size=1000, enabled_only=True)
         return rows
+
+    @staticmethod
+    def get_enabled_external() -> list[dict]:
+        """获取所有启用的 external 类型接口模板。"""
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT * FROM api_interfaces WHERE is_enabled = 1 AND interface_type = 'external' "
+                "ORDER BY sort_order ASC"
+            ).fetchall()
+        return [_decrypt_interface_secrets(dict(r)) for r in rows]
 
     @staticmethod
     def get_for_employee_form(current_interface_id: int | None = None) -> list[dict]:
@@ -189,7 +202,9 @@ class ApiInterfaceRepository:
     def create(name: str, description: str = "", api_url: str = "",
                api_method: str = "GET", api_headers: str = "{}",
                api_params_template: str = "", response_render_template: str = "",
-               api_secret: str = "", sort_order: int = 0) -> int:
+               api_secret: str = "", sort_order: int = 0,
+               interface_type: str = "external", is_system: int = 0,
+               local_handler: str = "", response_content_type: str = "json") -> int:
         """创建接口模板。返回新 ID，失败返回 -1。"""
         name = (name or "").strip()
         api_url = (api_url or "").strip()
@@ -204,11 +219,13 @@ class ApiInterfaceRepository:
                 cur = conn.execute(
                     "INSERT INTO api_interfaces (name, description, api_url, api_method, "
                     "api_headers, api_params_template, response_render_template, "
-                    "api_secret, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "api_secret, sort_order, interface_type, is_system, local_handler, "
+                    "response_content_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         name, (description or "").strip(), api_url, api_method,
                         api_headers, api_params_template or "",
                         response_render_template or "", encrypted_secret, sort_order,
+                        interface_type, is_system, local_handler, response_content_type,
                     ),
                 )
                 conn.commit()
@@ -221,7 +238,9 @@ class ApiInterfaceRepository:
                api_url: str = "", api_method: str = "GET",
                api_headers: str = "{}", api_params_template: str = "",
                response_render_template: str = "", api_secret: str | None = None,
-               sort_order: int = 0, clear_secret: bool = False) -> bool:
+               sort_order: int = 0, clear_secret: bool = False,
+               interface_type: str = "", is_system: int | None = None,
+               local_handler: str = "", response_content_type: str = "") -> bool:
         """更新接口模板。api_secret 为 None 时保留旧密钥。"""
         name = (name or "").strip()
         api_url = (api_url or "").strip()
@@ -242,12 +261,14 @@ class ApiInterfaceRepository:
                 cursor = conn.execute(
                     "UPDATE api_interfaces SET name=?, description=?, api_url=?, api_method=?, "
                     "api_headers=?, api_params_template=?, response_render_template=?, "
-                    "api_secret=?, sort_order=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                    "api_secret=?, sort_order=?, interface_type=?, is_system=?, "
+                    "local_handler=?, response_content_type=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
                     (
                         name, (description or "").strip(), api_url, api_method,
                         api_headers, api_params_template or "",
                         response_render_template or "", encrypted_secret,
-                        sort_order, interface_id,
+                        sort_order, interface_type, is_system,
+                        local_handler, response_content_type, interface_id,
                     ),
                 )
                 conn.commit()
