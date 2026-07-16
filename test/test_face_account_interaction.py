@@ -92,6 +92,18 @@ def test_face_toggle_requires_server_confirmation_and_persistence():
     assert 'error=self.get_query_argument("error", "")' in auth_py
 
 
+
+def test_face_login_handler_has_no_rate_limit_for_manual_retries():
+    """人脸登录允许人工反复测试，不应触发“操作过于频繁”限制。"""
+    auth_py = _auth_controller()
+    start = auth_py.index("class FaceLoginHandler")
+    end = auth_py.index("class UserAccountHandler")
+    face_login_source = auth_py[start:end]
+
+    assert "login_limiter.check" not in face_login_source
+    assert "login_limiter.record_failure" not in face_login_source
+    assert "操作过于频繁" not in face_login_source
+
 def test_user_account_inline_javascript_has_valid_syntax(tmp_path):
     """账户页人脸交互脚本必须保持可解析。"""
     node = shutil.which("node")
