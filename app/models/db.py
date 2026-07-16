@@ -1584,13 +1584,13 @@ def _seed_script_tools():
                 "input_schema": json.dumps({
                     "type": "object",
                     "properties": {
-                        "city": {"type": "string", "description": "城市名称，如 Beijing、成都、London"}
+                        "message": {"type": "string", "description": "城市名称，如 Beijing、成都、London"}
                     },
-                    "required": ["city"]
+                    "required": ["message"]
                 }, ensure_ascii=False),
                 "data_sources": json.dumps([{
                     "interface_id": weather_id,
-                    "param_mapping": {"city": "message"}
+                    "param_mapping": {"message": "message"}
                 }], ensure_ascii=False),
                 "transform_script": (
                     "def transform(data_sources):\n"
@@ -1663,7 +1663,11 @@ def _seed_script_tools():
                     "type": "object",
                     "properties": {
                         "keyword": {"type": "string", "description": "搜索关键词"},
-                        "source_ids": {"type": "string", "description": "瞭源ID列表，逗号分隔"}
+                        "source_ids": {
+                            "type": "array",
+                            "items": {"type": "integer"},
+                            "description": "瞭源ID列表",
+                        }
                     },
                     "required": ["keyword"]
                 }, ensure_ascii=False),
@@ -1729,8 +1733,17 @@ def _seed_script_tools():
                 "input_schema": json.dumps({
                     "type": "object",
                     "properties": {
-                        "urls": {"type": "string", "description": "目标URL列表，逗号或换行分隔"},
-                        "extract_mode": {"type": "string", "description": "提取模式: markdown/cleaned_html/full"}
+                        "urls": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "目标URL列表",
+                        },
+                        "extract_mode": {
+                            "type": "string",
+                            "enum": ["auto", "article", "full"],
+                            "default": "auto",
+                            "description": "提取模式",
+                        }
                     },
                     "required": ["urls"]
                 }, ensure_ascii=False),
@@ -1766,7 +1779,12 @@ def _seed_script_tools():
                     "type": "object",
                     "properties": {
                         "url": {"type": "string", "description": "目标网页URL"},
-                        "extract_mode": {"type": "string", "description": "提取模式: markdown/cleaned_html/full"}
+                        "extract_mode": {
+                            "type": "string",
+                            "enum": ["auto", "article", "full"],
+                            "default": "auto",
+                            "description": "提取模式",
+                        }
                     },
                     "required": ["url"]
                 }, ensure_ascii=False),
@@ -1799,6 +1817,7 @@ def _seed_script_tools():
         conn.execute(
             "UPDATE mcp_tools SET "
             "tool_type='script', "
+            "input_schema=?, "
             "data_sources=?, "
             "transform_script=?, "
             "script_enabled=1, "
@@ -1807,6 +1826,7 @@ def _seed_script_tools():
             "is_enabled=1 "
             "WHERE name='weather_query'",
             (
+                tools[0]["input_schema"],
                 tools[0]["data_sources"],
                 tools[0]["transform_script"],
             ),
@@ -1815,6 +1835,7 @@ def _seed_script_tools():
         conn.execute(
             "UPDATE mcp_tools SET "
             "tool_type='script', "
+            "input_schema=?, "
             "data_sources=?, "
             "transform_script=?, "
             "script_enabled=1, "
@@ -1822,6 +1843,7 @@ def _seed_script_tools():
             "is_enabled=1 "
             "WHERE name='get_random_music'",
             (
+                tools[1]["input_schema"],
                 tools[1]["data_sources"],
                 tools[1]["transform_script"],
             ),
@@ -1831,6 +1853,7 @@ def _seed_script_tools():
         conn.execute(
             "UPDATE mcp_tools SET "
             "tool_type='script', "
+            "input_schema=?, "
             "data_sources=?, "
             "transform_script=?, "
             "script_enabled=1, "
@@ -1839,6 +1862,7 @@ def _seed_script_tools():
             "is_enabled=1 "
             "WHERE name='collect_web_data'",
             (
+                tools[2]["input_schema"],
                 tools[2]["data_sources"],
                 tools[2]["transform_script"],
             ),
@@ -1849,12 +1873,12 @@ def _seed_script_tools():
             "api_url, api_method, api_headers, input_schema, "
             "data_sources, transform_script, script_enabled, "
             "is_enabled, is_system, sort_order) "
-            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 0, ?)",
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 1, 0, ?)",
             (
                 tools[2]["name"], tools[2]["display_name"], tools[2]["description"],
                 tools[2]["category"], tools[2]["input_schema"],
                 tools[2]["data_sources"], tools[2]["transform_script"],
-                tools[2]["script_enabled"], tools[2]["sort_order"],
+                tools[2]["sort_order"],
             ),
         )
 
@@ -1862,6 +1886,7 @@ def _seed_script_tools():
         conn.execute(
             "UPDATE mcp_tools SET "
             "tool_type='script', "
+            "input_schema=?, "
             "data_sources=?, "
             "transform_script=?, "
             "script_enabled=1, "
@@ -1870,6 +1895,7 @@ def _seed_script_tools():
             "is_enabled=1 "
             "WHERE name='deep_collect_url'",
             (
+                tools[3]["input_schema"],
                 tools[3]["data_sources"],
                 tools[3]["transform_script"],
             ),
@@ -1880,12 +1906,12 @@ def _seed_script_tools():
             "api_url, api_method, api_headers, input_schema, "
             "data_sources, transform_script, script_enabled, "
             "is_enabled, is_system, sort_order) "
-            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 0, ?)",
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 1, 0, ?)",
             (
                 tools[3]["name"], tools[3]["display_name"], tools[3]["description"],
                 tools[3]["category"], tools[3]["input_schema"],
                 tools[3]["data_sources"], tools[3]["transform_script"],
-                tools[3]["script_enabled"], tools[3]["sort_order"],
+                tools[3]["sort_order"],
             ),
         )
 
@@ -1893,6 +1919,7 @@ def _seed_script_tools():
         conn.execute(
             "UPDATE mcp_tools SET "
             "tool_type='script', "
+            "input_schema=?, "
             "data_sources=?, "
             "transform_script=?, "
             "script_enabled=1, "
@@ -1901,6 +1928,7 @@ def _seed_script_tools():
             "is_enabled=1 "
             "WHERE name='batch_deep_collect'",
             (
+                tools[4]["input_schema"],
                 tools[4]["data_sources"],
                 tools[4]["transform_script"],
             ),
@@ -1911,12 +1939,12 @@ def _seed_script_tools():
             "api_url, api_method, api_headers, input_schema, "
             "data_sources, transform_script, script_enabled, "
             "is_enabled, is_system, sort_order) "
-            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 0, ?)",
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 1, 0, ?)",
             (
                 tools[4]["name"], tools[4]["display_name"], tools[4]["description"],
                 tools[4]["category"], tools[4]["input_schema"],
                 tools[4]["data_sources"], tools[4]["transform_script"],
-                tools[4]["script_enabled"], tools[4]["sort_order"],
+                tools[4]["sort_order"],
             ),
         )
 
@@ -1924,6 +1952,7 @@ def _seed_script_tools():
         conn.execute(
             "UPDATE mcp_tools SET "
             "tool_type='script', "
+            "input_schema=?, "
             "data_sources=?, "
             "transform_script=?, "
             "script_enabled=1, "
@@ -1932,6 +1961,7 @@ def _seed_script_tools():
             "is_enabled=1 "
             "WHERE name='collect_with_crawl4ai'",
             (
+                tools[5]["input_schema"],
                 tools[5]["data_sources"],
                 tools[5]["transform_script"],
             ),
@@ -1942,12 +1972,12 @@ def _seed_script_tools():
             "api_url, api_method, api_headers, input_schema, "
             "data_sources, transform_script, script_enabled, "
             "is_enabled, is_system, sort_order) "
-            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 0, ?)",
+            "VALUES (?, ?, ?, ?, 'script', '', '', '{}', ?, ?, ?, 1, 1, 0, ?)",
             (
                 tools[5]["name"], tools[5]["display_name"], tools[5]["description"],
                 tools[5]["category"], tools[5]["input_schema"],
                 tools[5]["data_sources"], tools[5]["transform_script"],
-                tools[5]["script_enabled"], tools[5]["sort_order"],
+                tools[5]["sort_order"],
             ),
         )
 

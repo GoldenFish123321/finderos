@@ -74,6 +74,55 @@ class MCPSeedConsistencyTests(unittest.TestCase):
         )
         self.assertEqual(row["description"], definition["description"])
 
+    def test_collection_script_tools_preserve_array_parameter_contracts(self):
+        with db_module.get_db() as conn:
+            rows = conn.execute(
+                "SELECT name, tool_type, input_schema, script_enabled FROM mcp_tools "
+                "WHERE name IN (?, ?, ?, ?)",
+                (
+                    "collect_web_data", "deep_collect_url",
+                    "batch_deep_collect", "collect_with_crawl4ai",
+                ),
+            ).fetchall()
+
+        tools = {row["name"]: row for row in rows}
+        self.assertEqual(set(tools), {
+            "collect_web_data", "deep_collect_url",
+            "batch_deep_collect", "collect_with_crawl4ai",
+        })
+        self.assertTrue(all(row["tool_type"] == "script" for row in tools.values()))
+        self.assertTrue(all(row["script_enabled"] == 1 for row in tools.values()))
+
+        collect_schema = json.loads(tools["collect_web_data"]["input_schema"])
+        self.assertEqual(collect_schema["properties"]["source_ids"]["type"], "array")
+        self.assertEqual(collect_schema["properties"]["source_ids"]["items"]["type"], "integer")
+
+        batch_schema = json.loads(tools["batch_deep_collect"]["input_schema"])
+        self.assertEqual(batch_schema["properties"]["urls"]["type"], "array")
+        self.assertEqual(batch_schema["properties"]["urls"]["items"]["type"], "string")
+        self.assertEqual(
+            batch_schema["properties"]["extract_mode"]["enum"],
+            ["auto", "article", "full"],
+        )
+
+    def test_script_tool_seed_is_idempotent(self):
+        db_module.seed_default_data()
+        with db_module.get_db() as conn:
+            counts = conn.execute(
+                "SELECT name, COUNT(*) AS count FROM mcp_tools "
+                "WHERE name IN (?, ?, ?, ?) GROUP BY name",
+                (
+                    "collect_web_data", "deep_collect_url",
+                    "batch_deep_collect", "collect_with_crawl4ai",
+                ),
+            ).fetchall()
+        self.assertEqual({row["name"]: row["count"] for row in counts}, {
+            "collect_web_data": 1,
+            "deep_collect_url": 1,
+            "batch_deep_collect": 1,
+            "collect_with_crawl4ai": 1,
+        })
+
     def test_legacy_crawl4ai_flag_migrates_to_named_tool_ids(self):
         with db_module.get_db() as conn:
             conn.execute(

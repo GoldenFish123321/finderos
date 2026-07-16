@@ -219,13 +219,16 @@ def _register_external_proxies():
             """闭包捕获 iface，生成异步代理处理器。"""
             import asyncio
             import json as _json
+            import urllib.parse
 
             def _sync_call(params: dict) -> dict:
                 """同步 HTTP 调用（在线程池中执行）。"""
                 # 1. 构建 URL（替换模板占位符）
                 url = iface["api_url"]
                 for key, value in params.items():
-                    url = url.replace(f"{{{{{key}}}}}", str(value))
+                    encoded = urllib.parse.quote(str(value), safe="")
+                    url = url.replace(f"{{{{{key}}}}}", encoded)
+                    url = url.replace(f"{{{key}}}", encoded)
 
                 # 2. 构建请求头（注入密钥）
                 headers = _json.loads(iface.get("api_headers", "{}") or "{}")
@@ -322,5 +325,7 @@ registry.load_all_from_db()
 > **注意**: Baidu Cookie 获取逻辑（`_ensure_baidu_cookies()`）需要迁移到代理处理器中，或作为采集源的预处理步骤保留在 collector 内。
 
 ---
+
+外部接口 URL 模板兼容种子数据使用的 `{param}` 与管理界面使用的 `{{param}}` 两种格式；参数替换前统一进行 URL 编码。
 
 > 相关文档：[脚本执行引擎](./03-script-engine.md) | [MCP 注册中心改造](./04-mcp-registry-refactor.md) | [关键集成点](./07-integration-points.md)

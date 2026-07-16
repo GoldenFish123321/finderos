@@ -18,11 +18,11 @@ class TestLocalApiClient(unittest.TestCase):
         from app.services.local_api_client import _init_local_handlers
         _init_local_handlers()
 
-    def test_init_registers_21_handlers(self):
-        """_init_local_handlers 应注册21个handler。"""
+    def test_init_registers_all_builtin_handlers(self):
+        """内置 handler 应全部注册，外部代理可在同一注册表中共存。"""
         from app.services.local_api_client import _LOCAL_HANDLER_MAP
         count = len(_LOCAL_HANDLER_MAP)
-        self.assertEqual(count, 21, f"期望21个handler, 实际{count}个")
+        self.assertGreaterEqual(count, 21, f"期望至少21个handler, 实际{count}个")
 
     def test_all_expected_handler_keys(self):
         """所有预期handler key都应注册。"""
@@ -52,6 +52,18 @@ class TestLocalApiClient(unittest.TestCase):
         loop.close()
         self.assertFalse(result["success"])
         self.assertIn("未注册", result["error"])
+
+    def test_external_url_template_supports_seed_and_admin_formats(self):
+        from app.services.local_api_client import _render_url_template
+
+        self.assertEqual(
+            _render_url_template(
+                "https://example.test/{message}?copy={{message}}",
+                {"message": "北京 天气"},
+            ),
+            "https://example.test/%E5%8C%97%E4%BA%AC%20%E5%A4%A9%E6%B0%94"
+            "?copy=%E5%8C%97%E4%BA%AC%20%E5%A4%A9%E6%B0%94",
+        )
 
     def test_register_and_call_custom_handler(self):
         """注册自定义handler后应能调用。"""

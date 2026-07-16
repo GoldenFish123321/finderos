@@ -446,6 +446,10 @@ def test_weather_mcp_tool_exists():
     assert tool["tool_type"] == "script"
     assert tool.get("script_enabled") == 1
     assert tool.get("data_sources")
+    schema = json.loads(tool["input_schema"])
+    sources = json.loads(tool["data_sources"])
+    assert schema["required"] == ["message"]
+    assert sources[0]["param_mapping"] == {"message": "message"}
 
 
 def test_weather_employee_bound_to_mcp():
@@ -491,11 +495,44 @@ def test_weather_mcp_tool_buildable():
     assert mcp_tool.input_schema
 
 
-def test_weather_mcp_tool_http_call():
-    """weather_query MCP 工具应能实际调用 wttr.in API。"""
+def test_weather_mcp_tool_proxy_pipeline(monkeypatch):
+    """weather_query 应经外部代理完成 URL 替换和结构化转换。"""
     from app.models.mcp_tool import MCPToolRepository
     from app.mcp.registry import _build_tool_from_db_row
+    from app.services.local_api_client import (
+        _auto_sync_external_proxies_to_api_interfaces,
+        _register_external_proxies,
+    )
+    from app.utils.safe_http import SafeHttpResponse
     import asyncio
+    import app.utils.safe_http as safe_http_module
+
+    requested = {}
+
+    def fake_safe_http_request(**kwargs):
+        requested.update(kwargs)
+        payload = {
+            "current_condition": [{
+                "weatherDesc": [{"value": "Sunny"}],
+                "temp_C": "28", "humidity": "40",
+                "winddir16Point": "E", "windspeedKmph": "8",
+            }],
+            "nearest_area": [{
+                "areaName": [{"value": "Beijing"}],
+                "country": [{"value": "China"}],
+            }],
+        }
+        return SafeHttpResponse(
+            status=200, reason="OK", headers={},
+            body=json.dumps(payload).encode("utf-8"), resolved_ip="203.0.113.10",
+        )
+
+    monkeypatch.setattr(safe_http_module, "safe_http_request", fake_safe_http_request)
+
+    # 与 main.py 保持相同的外部接口代理启动顺序。该测试直接构建工具，
+    # 不会经过应用入口，因此必须显式完成这两步。
+    _auto_sync_external_proxies_to_api_interfaces()
+    _register_external_proxies()
 
     tool = MCPToolRepository.get_by_name("weather_query")
     if not tool:
@@ -505,16 +542,14 @@ def test_weather_mcp_tool_http_call():
     assert mcp_tool is not None
 
     async def _call():
-        return await mcp_tool.call({"city": "Beijing"})
+        return await mcp_tool.call({"message": "北京"})
 
-    try:
-        result = asyncio.run(_call())
-    except Exception as e:
-        msg = str(e).lower()
-        if any(kw in msg for kw in ("timeout", "refused", "resolve", "connect")):
-            pytest.skip(f"网络不可用，跳过 MCP HTTP 调用测试: {e}")
-        raise
+    result = asyncio.run(_call())
 
-    assert isinstance(result, str)
-    assert "[转换错误]" not in result
-    assert "NameError" not in result
+    assert isinstance(result, dict)
+    assert "error" not in result
+    assert result["city"] == "Beijing"
+    assert result["weather"] == "Sunny"
+    assert result["temperature"] == "28"
+    assert "%E5%8C%97%E4%BA%AC" in requested["url"]
+    assert "{message}" not in requested["url"]

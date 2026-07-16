@@ -2,12 +2,23 @@
 
 import asyncio
 import logging
+import urllib.parse
 from typing import Any, Callable, Dict
 
 logger = logging.getLogger(__name__)
 
 # 函数注册表: local_handler → Callable
 _LOCAL_HANDLER_MAP: Dict[str, Callable] = {}
+
+
+def _render_url_template(url: str, params: Dict[str, Any]) -> str:
+    """Substitute encoded parameters in supported API URL template formats."""
+    rendered = url
+    for key, value in params.items():
+        encoded = urllib.parse.quote(str(value), safe="")
+        rendered = rendered.replace(f"{{{{{key}}}}}", encoded)
+        rendered = rendered.replace(f"{{{key}}}", encoded)
+    return rendered
 
 
 def register_local_handler(handler_key: str, func: Callable):
@@ -105,12 +116,7 @@ def _register_external_proxies():
 
         async def _make_proxy_handler(_iface=iface, **params) -> dict:
             import json as _json
-            import urllib.parse
-
-            url = _iface["api_url"]
-            # 替换 URL 模板参数（带 URL 编码）
-            for key, value in params.items():
-                url = url.replace(f"{{{{{key}}}}}", urllib.parse.quote(str(value), safe=""))
+            url = _render_url_template(_iface["api_url"], params)
 
             headers = _json.loads(_iface.get("api_headers", "{}") or "{}")
             secret = _iface.get("api_secret", "")
