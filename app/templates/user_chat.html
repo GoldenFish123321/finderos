@@ -1595,12 +1595,13 @@ function renderInfoCard(container, card) {
         weather: '🌤', news: '📰', music: '🎵',
         movie: '🎬', science: '🔬', image: '🖼️', video: '🎬', default: '📋'
     };
-    const icon = typeIcons[card.type] || typeIcons.default;
+    var normalizedType = card.type === 'weather_card' ? 'weather' : card.type;
+    const icon = typeIcons[normalizedType] || typeIcons.default;
 
     let cardHtml = '<div class="card-title">' + icon + ' ' + escapeHtml(card.title || '信息卡片') + '</div>';
     cardHtml += '<div class="card-content">';
 
-    if (card.type === 'weather' && card.data) {
+    if (normalizedType === 'weather' && card.data) {
         // 天气卡片特殊渲染
         const d = card.data;
         cardHtml += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
@@ -1608,10 +1609,20 @@ function renderInfoCard(container, card) {
         cardHtml += '<div><div>' + escapeHtml(d.weather || '') + '</div>';
         cardHtml += '<div style="font-size:12px;color:var(--text-muted);">' + escapeHtml(d.city || '') + ' · ' + escapeHtml(d.date || '') + '</div></div>';
         cardHtml += '</div>';
+        if (d.fields && Array.isArray(d.fields) && d.fields.length) {
+            cardHtml += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px;margin-top:10px;">';
+            d.fields.forEach(function(field) {
+                cardHtml += '<div style="padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.05);">';
+                cardHtml += '<div style="font-size:11px;color:var(--text-muted);">' + escapeHtml(field.label || '') + '</div>';
+                cardHtml += '<div style="font-size:13px;">' + escapeHtml(field.value || '') + '</div>';
+                cardHtml += '</div>';
+            });
+            cardHtml += '</div>';
+        }
         if (d.detail) {
             cardHtml += '<div style="margin-top:8px;font-size:12px;color:var(--text-muted);">' + escapeHtml(d.detail) + '</div>';
         }
-    } else if (card.type === 'music' && card.data) {
+    } else if (normalizedType === 'music' && card.data) {
         // 音乐卡片特殊渲染（封面 + 歌曲信息 + 试听链接）
         const m = card.data;
         cardHtml += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
@@ -1640,7 +1651,7 @@ function renderInfoCard(container, card) {
         }
         cardHtml += '</div>';
         cardHtml += '</div>';
-    } else if (card.type === 'image' && card.data && card.data.urls) {
+    } else if (normalizedType === 'image' && card.data && card.data.urls) {
         // 图像生成卡片：渲染 AI 生成的图片
         var urls = card.data.urls;
         for (var i = 0; i < urls.length; i++) {
@@ -1657,7 +1668,7 @@ function renderInfoCard(container, card) {
                 cardHtml += '</div>';
             }
         }
-    } else if (card.type === 'video' && card.data && card.data.url) {
+    } else if (normalizedType === 'video' && card.data && card.data.url) {
         // 视频生成卡片：渲染 <video> 播放器
         var vidUrl = card.data.url;
         var safeVidUrl = (/^https?:\/\//i.test(vidUrl) || vidUrl.indexOf('/static/') === 0) ? vidUrl : '';

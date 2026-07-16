@@ -103,6 +103,55 @@ def test_music_card_security():
     print("  ✅ URL 安全校验逻辑正确（仅允许 http/https 协议）")
 
 
+def test_weather_card_template_uses_path_mapping_not_raw_json():
+    """验证天气 API JSON 模板会转成 weather 卡片，而不是直接回显原始 JSON。"""
+    from app.controllers.user_chat import _build_employee_card, _card_to_plain_text
+
+    wttr_response = {
+        "current_condition": [{
+            "temp_C": "26",
+            "FeelsLikeC": "28",
+            "humidity": "65",
+            "windspeedKmph": "9",
+            "winddir16Point": "NE",
+            "weatherDesc": [{"value": "Partly cloudy"}],
+        }],
+        "nearest_area": [{
+            "areaName": [{"value": "Chengdu"}],
+            "region": [{"value": "Sichuan"}],
+        }],
+        "weather": [{"date": "2026-07-16"}],
+    }
+    template = json.dumps({
+        "type": "weather_card",
+        "title": "{{current_condition.0.weatherDesc.0.value}}",
+        "fields": [
+            {"label": "温度", "value": "{{current_condition.0.temp_C}}°C"},
+            {"label": "湿度", "value": "{{current_condition.0.humidity}}%"},
+            {"label": "风力", "value": "{{current_condition.0.windspeedKmph}} km/h"},
+        ],
+    }, ensure_ascii=False)
+    emp = {
+        "name": "天气",
+        "employee_type": "api",
+        "response_render_template": template,
+    }
+
+    card = _build_employee_card(emp, wttr_response, "成都")
+    assert card["type"] == "weather"
+    assert card["title"] == "Partly cloudy"
+    assert card["data"]["city"] == "Chengdu"
+    assert card["data"]["temp"] == "26"
+    assert card["data"]["weather"] == "Partly cloudy"
+    assert "湿度 65%" in card["data"]["detail"]
+
+    text = _card_to_plain_text(card)
+    assert "天气信息" in text
+    assert "Chengdu" in text
+    assert "current_condition" not in text
+    assert "weather_card" not in text
+
+
 def test_template_flattening():
     """验证 API 响应模板扁平化逻辑"""
     print("\n  --- 验证: 响应模板扁平化逻辑 ---")
@@ -145,6 +194,11 @@ def test_template_flattening():
     for key, value in flat_data.items():
         rendered = rendered.replace("{{" + key + "}}", html.escape(value))
     assert rendered == "测试歌曲名 - 测试歌手名"
+
+    from app.controllers.user_chat import _render_value_template
+    helper_rendered = _render_value_template(template, data_obj)
+    assert helper_rendered == "测试歌曲名 - 测试歌手名"
+    assert _render_value_template("{{data.name}}", data_obj) == "测试歌曲名"
     print(f"  ✅ 模板替换正确: {rendered}")
 
 
@@ -158,6 +212,7 @@ if __name__ == "__main__":
         test_all_8_employees_exist()
         test_build_music_card_logic()
         test_music_card_security()
+        test_weather_card_template_uses_path_mapping_not_raw_json()
         test_template_flattening()
         print("\n" + "=" * 60)
         print("  ✅ 全部测试通过！随机音乐数字员工功能正常。")

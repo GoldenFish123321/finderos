@@ -456,7 +456,7 @@ def init_db():
 
         # ── v1.2.0 舆情大屏（敏感词 + 预警） ──
         from app.models.sensitive_word import SensitiveWordRepository
-        SensitiveWordRepository.init_table()
+        SensitiveWordRepository.init_table(conn)
 
         conn.commit()
         logger.info(f"Database initialized: {DB_PATH}")
