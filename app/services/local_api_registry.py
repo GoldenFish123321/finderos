@@ -123,3 +123,34 @@ def sync_local_api_interfaces():
                 )
         conn.commit()
     logger.info(f"已同步 {len(LOCAL_API_SEEDS)} 个本地接口 + {len(EXTERNAL_API_SEEDS)} 个外部接口到 api_interfaces 表")
+
+
+def sync_watch_sources_to_interfaces():
+    """将启用的瞭望源同步到 api_interfaces 表。is_system=1, 不可编辑。"""
+    from app.models.watch_source import WatchSourceRepository
+
+    sources = WatchSourceRepository.get_enabled()
+    with get_db() as conn:
+        for src in sources:
+            name = f"[瞭望] {src['name']}"
+            existing = conn.execute(
+                "SELECT id FROM api_interfaces WHERE name=? AND interface_type='external' AND is_system=1",
+                (name,)
+            ).fetchone()
+            if existing:
+                # 更新 URL 和 headers（瞭源可能被修改）
+                conn.execute(
+                    "UPDATE api_interfaces SET api_url=?, api_headers=?, response_content_type='html' WHERE id=?",
+                    (src['url_template'], src.get('request_headers', '{}'), existing['id'])
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO api_interfaces "
+                    "(name, description, api_url, api_method, api_headers, "
+                    "interface_type, is_system, local_handler, response_content_type, is_enabled, sort_order) "
+                    "VALUES (?, ?, ?, 'GET', ?, 'external', 1, '', 'html', 1, 0)",
+                    (name, src.get('description', ''), src['url_template'],
+                     src.get('request_headers', '{}'))
+                )
+        conn.commit()
+    logger.info(f"已同步 {len(sources)} 个瞭望源到 api_interfaces 表")

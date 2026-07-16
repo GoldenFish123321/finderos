@@ -302,7 +302,11 @@ if __name__ == "__main__":
     _auto_sync_external_proxies_to_api_interfaces()
     _register_external_proxies()
 
-    # 4. 加载 MCP 工具（此时所有接口都已可被 script 型工具引用）
+    # 4. 瞭源自动同步到接口管理（is_system=1，只读）
+    from app.services.local_api_registry import sync_watch_sources_to_interfaces
+    sync_watch_sources_to_interfaces()
+
+    # 5. 加载 MCP 工具（此时所有接口都已可被 script 型工具引用）
     from app.mcp.tools import register_all_tools
     register_all_tools()
 

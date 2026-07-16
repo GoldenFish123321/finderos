@@ -143,6 +143,9 @@ class InterfaceFormHandler(AdminBaseHandler):
             if not existing:
                 self.write('<script>alert("接口模板不存在");window.history.back();</script>')
                 return
+            if existing.get('is_system'):
+                self.write('<script>alert("系统接口不可修改");window.history.back();</script>')
+                return
             restored_headers = restore_redacted_headers(api_headers_raw, existing.get("api_headers", "{}"))
             if restored_headers is None:
                 self.write('<script>alert("请求头必须是 JSON 对象，且不能包含换行字符");window.history.back();</script>')
@@ -194,6 +197,12 @@ class InterfaceDeleteHandler(AdminBaseHandler):
             self.write('<script>alert("无效的接口ID");window.history.back();</script>')
             return
         interface = ApiInterfaceRepository.get_by_id(interface_id)
+        if not interface:
+            self.write('<script>alert("接口模板不存在");window.history.back();</script>')
+            return
+        if interface.get('is_system'):
+            self.write('<script>alert("系统接口不可删除");window.history.back();</script>')
+            return
         name = interface.get("name", "unknown") if interface else "unknown"
         ApiInterfaceRepository.delete(interface_id)
         write_audit_log(
@@ -215,6 +224,13 @@ class InterfaceToggleHandler(AdminBaseHandler):
             interface_id = int(self.get_body_argument("id", 0))
         except (ValueError, TypeError):
             self.write('<script>alert("无效的接口ID");window.history.back();</script>')
+            return
+        interface = ApiInterfaceRepository.get_by_id(interface_id)
+        if not interface:
+            self.write('<script>alert("接口模板不存在");window.history.back();</script>')
+            return
+        if interface.get('is_system'):
+            self.write('<script>alert("系统接口不可启用/禁用");window.history.back();</script>')
             return
         status = ApiInterfaceRepository.toggle_enabled(interface_id)
         if status == -1:

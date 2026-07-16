@@ -18,7 +18,7 @@
                 <div class="layui-input-block">
                     <input type="text" name="name" class="layui-input" required
                            value="{{ interface['name'] if interface else '' }}"
-                           placeholder="例如：天气查询接口">
+                           placeholder="例如：天气查询接口" {{ 'disabled' if interface and interface.get('is_system') else '' }}>
                 </div>
             </div>
 
@@ -26,7 +26,7 @@
                 <label class="layui-form-label">描述</label>
                 <div class="layui-input-block">
                     <textarea name="description" class="layui-textarea" rows="2"
-                              placeholder="接口用途、参数说明等">{{ interface.get('description','') if interface else '' }}</textarea>
+                              placeholder="接口用途、参数说明等" {{ 'disabled' if interface and interface.get('is_system') else '' }}>{{ interface.get('description','') if interface else '' }}</textarea>
                 </div>
             </div>
 
@@ -59,12 +59,17 @@
             <div class="layui-form-item">
                 <label class="layui-form-label">接口 URL</label>
                 <div class="layui-input-block">
+                    {% if interface and interface.get('interface_type') == 'local' %}
+                    <input type="text" class="layui-input" value="进程内: {{ interface.get('local_handler','') }}" disabled>
+                    <div class="layui-form-mid layui-word-aux">系统内置接口，不可修改</div>
+                    {% else %}
                     <input type="text" name="api_url" class="layui-input" required
                            value="{{ interface.get('api_url','') if interface else '' }}"
                            placeholder="https://api.example.com/search?q={message}">
                     <div class="layui-form-mid layui-word-aux">
                         支持占位符：<code>{message}</code>（URL 编码后替换）、<code>{message_raw}</code>（URL 中同样按 URL 编码替换）。
                     </div>
+                    {% end %}
                 </div>
             </div>
 
@@ -72,7 +77,7 @@
                 <label class="layui-form-label">请求头</label>
                 <div class="layui-input-block">
                     <textarea name="api_headers" class="layui-textarea" rows="5"
-                              placeholder='{"Accept":"application/json"}'>{{ interface.get('api_headers','{}') if interface else '{}' }}</textarea>
+                              placeholder='{"Accept":"application/json"}' {{ 'disabled' if interface and interface.get('is_system') else '' }}>{{ interface.get('api_headers','{}') if interface else '{}' }}</textarea>
                     <div class="layui-form-mid layui-word-aux">必须是 JSON 对象；禁止在 Header 名称或值中包含换行字符。</div>
                 </div>
             </div>
@@ -81,7 +86,7 @@
                 <label class="layui-form-label">参数模板</label>
                 <div class="layui-input-block">
                     <textarea name="api_params_template" class="layui-textarea" rows="3"
-                              placeholder="GET 时会追加到 URL 查询串；POST/PUT/PATCH/DELETE 时作为请求体。支持 {message}/{message_raw}。">{{ interface.get('api_params_template','') if interface else '' }}</textarea>
+                              placeholder="GET 时会追加到 URL 查询串；POST/PUT/PATCH/DELETE 时作为请求体。支持 {message}/{message_raw}。" {{ 'disabled' if interface and interface.get('is_system') else '' }}>{{ interface.get('api_params_template','') if interface else '' }}</textarea>
                 </div>
             </div>
 
@@ -89,7 +94,7 @@
                 <label class="layui-form-label">响应模板</label>
                 <div class="layui-input-block">
                     <textarea name="response_render_template" class="layui-textarea" rows="5"
-                              placeholder='可选。用于数字员工卡片渲染，例如 {"type":"weather_card","fields":[...] }'>{{ interface.get('response_render_template','') if interface else '' }}</textarea>
+                              placeholder='可选。用于数字员工卡片渲染，例如 {"type":"weather_card","fields":[...] }' {{ 'disabled' if interface and interface.get('is_system') else '' }}>{{ interface.get('response_render_template','') if interface else '' }}</textarea>
                 </div>
             </div>
 
@@ -111,7 +116,7 @@
                 <label class="layui-form-label">排序</label>
                 <div class="layui-input-block">
                     <input type="number" name="sort_order" class="layui-input" style="width:120px;"
-                           value="{{ interface.get('sort_order', 0) if interface else '0' }}">
+                           value="{{ interface.get('sort_order', 0) if interface else '0' }}" {{ 'disabled' if interface and interface.get('is_system') else '' }}>
                 </div>
             </div>
 
@@ -131,10 +136,17 @@
 
             <div class="layui-form-item" style="margin-top:20px;">
                 <div class="layui-input-block">
+                    {% if interface and interface.get('is_system') %}
+                    <div class="layui-form-mid layui-word-aux" style="color:var(--text-warning);">
+                        <i class="layui-icon layui-icon-tips"></i> 系统内置接口，不可修改
+                    </div>
+                    <a href="/admin/interface" class="layui-btn layui-btn-primary">返回</a>
+                    {% else %}
                     <button type="submit" class="layui-btn layui-btn-normal">
                         <i class="layui-icon layui-icon-ok"></i> 保存
                     </button>
                     <a href="/admin/interface" class="layui-btn layui-btn-primary">返回</a>
+                    {% end %}
                 </div>
             </div>
         </form>

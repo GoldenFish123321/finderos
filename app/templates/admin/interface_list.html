@@ -61,7 +61,13 @@
                         {% end %}
                     </td>
                     <td><span class="layui-badge layui-bg-blue">{{ iface.get('api_method','GET') }}</span></td>
-                    <td class="iface-url" title="{{ iface.get('api_url','') }}"><code>{{ iface.get('api_url','') }}</code></td>
+                    <td class="iface-url" title="">
+                        {% if iface.get('interface_type') == 'local' %}
+                        <code style="color:var(--text-muted);">进程内: {{ iface.get('local_handler', '') }}</code>
+                        {% else %}
+                        <code>{{ iface.get('api_url', '') }}</code>
+                        {% end %}
+                    </td>
                     <td>
                         {% if iface['is_enabled'] == 1 %}
                         <span class="layui-badge layui-bg-green">启用</span>
@@ -77,6 +83,7 @@
                                     data-id="{{ iface['id'] }}" data-name="{{ iface['name'] }}">
                                 <i class="layui-icon layui-icon-play"></i> 测试
                             </button>
+                            {% if not iface.get('is_system') %}
                             <a href="/admin/interface/edit?id={{ iface['id'] }}" class="layui-btn layui-btn-xs layui-btn-normal">
                                 <i class="layui-icon layui-icon-edit"></i> 编辑
                             </a>
@@ -95,6 +102,9 @@
                                     删除
                                 </button>
                             </form>
+                            {% else %}
+                            <span class="layui-badge layui-bg-gray" style="cursor:default;">系统内置</span>
+                            {% end %}
                         </div>
                     </td>
                 </tr>
