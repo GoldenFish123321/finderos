@@ -494,6 +494,8 @@ python migrate_db.py --status
 | **SQL 注入防护** | 全参数化查询（`?` 占位符），杜绝字符串拼接 | OWASP A03:2021 |
 | **Header 注入防护** | CR/LF 字符检测（`has_crlf()`） | OWASP A03:2021 |
 
+> 人脸登录需要 `opencv-contrib-python` 提供 LBPH 模块。组件不可用时，账户页的密码修改和账号管理仍可正常使用，人脸操作会显示明确提示。
+
 #### 1.3 认证拦截链
 
 ```

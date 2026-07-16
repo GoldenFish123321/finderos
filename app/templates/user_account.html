@@ -79,6 +79,9 @@
         <h3>人脸识别登录</h3>
         <p class="subtitle">注册人脸后可使用摄像头快速登录，无需输入密码。</p>
 
+        {% if not face_available %}
+        <div class="alert error">人脸识别组件当前不可用，请安装 opencv-contrib-python 后重启服务。</div>
+        {% else %}
         <!-- 摄像头预览区 -->
         <div style="text-align:center;margin-bottom:12px;">
             <video id="face-video" autoplay playsinline
@@ -110,6 +113,7 @@
             <p style="font-size:12px;color:var(--text-muted);margin-top:6px;">请先通过摄像头拍照注册人脸</p>
             {% end %}
         </div>
+        {% end %}
     </div>
 
 <script>

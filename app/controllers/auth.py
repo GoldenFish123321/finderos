@@ -317,7 +317,14 @@ class FaceLoginHandler(BaseHandler):
             return
 
         # 检查该用户是否已注册人脸
-        from app.services.face_auth import has_face as face_has_image, recognize_face
+        from app.services.face_auth import (
+            has_face as face_has_image,
+            is_face_recognition_available,
+            recognize_face,
+        )
+        if not is_face_recognition_available():
+            self.write({"code": 1, "msg": "人脸识别组件不可用，请使用密码登录"})
+            return
         if not face_has_image(username):
             self.write({"code": 1, "msg": "该用户未注册人脸，请先用密码登录后在账户设置中注册"})
             return
@@ -370,23 +377,34 @@ class UserAccountHandler(BaseHandler):
 
     @tornado.web.authenticated
     def get(self):
-        from app.services.face_auth import has_face as face_has_image
+        from app.services.face_auth import (
+            has_face as face_has_image,
+            is_face_recognition_available,
+        )
+        face_available = is_face_recognition_available()
         has_face = face_has_image(self.current_user)
         self.render(
             "user_account.html",
             title="账户设置 — 瞭望与问数系统",
             username=self.current_user,
             face_registered=has_face,
-            face_enabled=has_face,
+            face_enabled=has_face and face_available,
+            face_available=face_available,
             message=self.get_query_argument("msg", ""),
-            error="",
+            error=self.get_query_argument("error", ""),
         )
 
     @tornado.web.authenticated
     def post(self):
-        from app.services.face_auth import has_face as face_has_image, register_face, delete_face
+        from app.services.face_auth import (
+            delete_face,
+            has_face as face_has_image,
+            is_face_recognition_available,
+            register_face,
+        )
 
         action = self.get_body_argument("action", "")
+        face_available = is_face_recognition_available()
         has_face = face_has_image(self.current_user)
 
         def render_page(msg="", error=""):
@@ -395,7 +413,8 @@ class UserAccountHandler(BaseHandler):
                 title="账户设置 — 瞭望与问数系统",
                 username=self.current_user,
                 face_registered=has_face,
-                face_enabled=has_face,
+                face_enabled=has_face and face_available,
+                face_available=face_available,
                 message=msg,
                 error=error,
             )
@@ -420,6 +439,8 @@ class UserAccountHandler(BaseHandler):
             return render_page(msg="密码修改成功")
 
         elif action == "face_register":
+            if not face_available:
+                return render_page(error="人脸识别组件不可用，请安装 opencv-contrib-python")
             if "face_image" not in self.request.files:
                 return self.write({"code": 1, "msg": "未上传图片"})
             image_file = self.request.files["face_image"][0]

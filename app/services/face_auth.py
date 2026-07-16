@@ -33,13 +33,33 @@ _CASCADE_PATH = os.path.join(_BASE_DIR, "haarcascades", "haarcascade_frontalface
 
 # ── 全局单例（避免重复加载模型） ──
 _face_cascade = cv2.CascadeClassifier(_CASCADE_PATH)
-_recognizer = cv2.face.LBPHFaceRecognizer_create()
+_cv2_face = getattr(cv2, "face", None)
+_recognizer = None
+if _cv2_face is not None and hasattr(_cv2_face, "LBPHFaceRecognizer_create"):
+    try:
+        _recognizer = _cv2_face.LBPHFaceRecognizer_create()
+    except Exception as exc:
+        logger.warning("OpenCV LBPH recognizer initialization failed: %s", exc)
 _model_loaded = False
+
+
+def is_face_recognition_available() -> bool:
+    """Return whether the installed OpenCV build provides usable LBPH support."""
+    return (
+        _recognizer is not None
+        and _face_cascade is not None
+        and not _face_cascade.empty()
+    )
 
 
 def _ensure_model():
     """确保 LBPH 模型已加载。"""
     global _model_loaded
+    if not is_face_recognition_available():
+        return
+    if not _model_loaded and not os.path.exists(_MODEL_PATH) and os.path.exists(_LABELS_PATH):
+        _save_model()
+        return
     if not _model_loaded and os.path.exists(_MODEL_PATH):
         try:
             _recognizer.read(_MODEL_PATH)
@@ -52,6 +72,9 @@ def _ensure_model():
 def _save_model():
     """将所有已注册的人脸图像重新训练并保存模型。"""
     global _model_loaded
+    if not is_face_recognition_available():
+        logger.warning("OpenCV contrib face module is unavailable; face model was not trained")
+        return
     if not os.path.exists(_LABELS_PATH):
         return
 
@@ -96,6 +119,8 @@ def detect_face(image_bytes: bytes):
     Returns:
         numpy.ndarray | None: 100×100 的灰度人脸图
     """
+    if not is_face_recognition_available():
+        return None
     nparr = np.frombuffer(image_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
@@ -126,6 +151,8 @@ def register_face(username: str, image_bytes: bytes) -> bool:
     Returns:
         bool: 是否注册成功（检测到且只有一张人脸）
     """
+    if not is_face_recognition_available():
+        return False
     face = detect_face(image_bytes)
     if face is None:
         return False
@@ -159,6 +186,8 @@ def recognize_face(image_bytes: bytes):
     Returns:
         tuple[str, float] | None: (用户名, 置信度)，置信度越低越匹配
     """
+    if not is_face_recognition_available():
+        return None
     _ensure_model()
     face = detect_face(image_bytes)
     if face is None:
@@ -209,8 +238,11 @@ def delete_face(username: str):
             with open(_LABELS_PATH, "w", encoding="utf-8") as f:
                 json.dump(label_map, f)
 
-    # 重新训练模型
-    _save_model()
+    # 重新训练模型（组件不可用时仍允许清理已保存的数据）
+    if is_face_recognition_available():
+        _save_model()
+    elif os.path.exists(_MODEL_PATH):
+        os.remove(_MODEL_PATH)
 
 
 def get_face_count() -> int:
