@@ -28,6 +28,9 @@ LOCAL_API_SEEDS = [
     # ── Crawl4ai ──
     {"name": "Crawl4ai采集", "handler": "crawl4ai/collect", "desc": "使用Crawl4ai引擎采集网页内容。"},
     {"name": "Crawl4ai批量", "handler": "crawl4ai/batch", "desc": "使用Crawl4ai引擎批量采集多个URL。"},
+    # ── AI媒体生成 ──
+    {"name": "AI图像生成", "handler": "media/generate_image", "desc": "使用AI模型生成图片。"},
+    {"name": "AI视频生成", "handler": "media/generate_video", "desc": "使用AI模型生成视频。"},
     # ── 系统 ──
     {"name": "系统状态", "handler": "system/stats", "desc": "获取系统的运行状态和资源使用情况。"},
     {"name": "加载技能", "handler": "skill/load", "desc": "加载指定的系统技能模块。"},
