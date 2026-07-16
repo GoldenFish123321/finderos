@@ -1,5 +1,34 @@
 # Changelog
 
+## v1.9.0-beta (2026-07-16) — 统一接口驱动架构 v2.0
+
+> 基于 docs/unified-api-architecture 设计文档实现。PR #143.
+
+### 新增模块
+- **local_api_client.py**: 本地接口进程内调用客户端（18个handler注册 + 外部HTTP代理 + 启动同步）
+- **local_api_registry.py**: 18个系统内置接口元数据同步（幂等）
+- **script_engine.py**: AST白名单Python沙箱（禁import/exec/eval/while/open，支持json/re）
+- **3个测试文件**: 22个单元测试
+
+### 架构变更
+- api_interfaces 表新增4列（interface_type/is_system/local_handler/response_content_type）
+- mcp_tools 表新增3列（data_sources/transform_script/script_enabled）
+- registry.py 新增 script 型工具分支（_build_script_tool + _inject_context_params）
+- main.py 启动流程调整为 注册本地handler→同步接口元数据→代理外部接口→加载MCP工具
+- 4种 tool_type 共存: builtin / api / crawl4ai / script
+
+### Bug 修复（零信任审查发现）
+- CRITICAL: admin_interface 编辑接口时静默覆盖 v2.0 新字段
+- HIGH: local_api_client URL参数缺少URL编码、script_engine type绕过ClassDef检查、补充危险dunder属性
+- MEDIUM: admin_mcp data_sources JSON校验、script_enabled类型转换、registry get_by_id异常处理
+- warehouse_tools: 补全缺失的 _get_warehouse_by_id() 函数
+
+### 文档更新
+- README.md: 新增 v2.0 版本特性行、项目结构扩展
+- docs/design.md: 新增「统一接口驱动架构」设计章节
+- docs/api.md: MCP工具分类扩展
+- docs/unified-api-architecture: 所有 Phase 标注 ✅ 已完成
+
 ## v1.8.2-beta (2026-07-16) — 采集诊断与源码编码修复
 
 - 修复 app/mcp/tools.py 的 UTF-8 BOM，确保严格 UTF-8 读取后可直接通过 ast.parse()。
