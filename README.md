@@ -1,11 +1,12 @@
-# 🔭 瞭望与问数系统 (DataFinderAgentOS) v1.2.0-beta
+# 🔭 瞭望与问数系统 (DataFinderAgentOS) v1.4.0-beta
 
 > 基于 Tornado 异步 Web 框架构建的轻量级智能数据采集与 AI 问数一体化平台。
+> **v1.3.0 新增**：多模态 AI 媒体生成（文生图/图生图/文生视频/图生视频）、20+ MCP 工具。
 > **v1.2.0 新增**：管理侧数智大屏（3D 地球 + 词云 + 数据可视化、ECharts-GL/Wordcloud）、舆情大屏（敏感词预警 + AI 风析、实时扫描）。
-> **v1.1.0 新增**：手势与数字员工交互（✌️ 剪刀手→查天气、✊ 握拳→随机音乐、✋ 手掌→新闻聚合）、MediaPipe Hands 实时手势识别、系统设置管理模块。
 > **v0.10 完成**：MCP 重构剩余阶段全部完成 — 18 个工具种子数据迁移、三色徽章系统（蓝/绿/橙黄）、crawl4ai 废弃、Skill 绑定 MCP 工具、旧 TAG → Skill ID 迁移、测试验证通过。
 > **v0.9 新增**：Edge TTS 语音合成播报（🔊 AI 回复一键朗读）、管理侧接口管理模块（接口模板 CRUD/测试、安全 HTTP 调用、API 型数字员工联动）。
 > **v0.4 新增**：MCP 协议工具调用、LLM Function Calling 智能意图识别、/tools 指令。
+> **v0.5 新增**：多模态模型引擎 — AI 文生图（wan2.6-t2i）、图生图（qwen-image-2.0）、文生视频（wan2.6-t2v）、图生视频（wan2.6-i2v），SSE 卡片实时渲染。
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Tornado](https://img.shields.io/badge/Tornado-6.4+-00ADD8?style=flat)](https://www.tornadoweb.org/)
@@ -67,10 +68,11 @@
 🔗 接口管理 — API 模板复用与测试       — API 型数字员工配置一键联动填充
 📊 报表呈现 — ECharts 交互图表         — 柱状图/折线图/饼图/散点图 + 数据表格
 🔊 语音播报 — Edge TTS 语音合成        — AI 回复一键朗读，6 种中文语音可选
-�🔐 用户认证与 RBAC 权限管理          — 安全的密码存储、登录限速、审计日志
+🖼️ 媒体生成 — AI 图像与视频生成         — 文生图/图生图/文生视频/图生视频
+🔐 用户认证与 RBAC 权限管理          — 安全的密码存储、登录限速、审计日志
 🔭 瞭望采集 — 可配置的 Web 采集引擎    — 百度/搜狗新闻等多源采集 + SSRF 防护
 🗄️ 数据仓库 — 采集结果独立存储与检索   — 独立 data_warehouse 表，支持去重
-🤖 模型引擎 — 多 Provider AI 统一管理  — OpenAI/DeepSeek/智谱/文心 + MCP 工具调用
+🤖 模型引擎 — 多 Provider AI 统一管理  — 6 分类 + MCP 工具调用 + 文生图/视频
 📊 管理后台 — Layui 精美 UI，开箱即用  — 仪表盘统计、树形菜单、批量操作
 🛡️ 安全防护 — OWASP Top 10 全覆盖     — CSP/XSRF/SSRF/SQL注入/XSS/限速/审计
 ```
@@ -366,7 +368,7 @@ python main.py
 
 ```
 ==================================================
-  瞭望与问数系统 (DataFinderAgentOS) v1.2.0-beta
+  瞭望与问数系统 (DataFinderAgentOS) v1.4.0-beta
   Server started: http://localhost:10010/
 ==================================================
 ```
@@ -472,9 +474,8 @@ python migrate_db.py --status
     → 频率限制检查（IP + 用户名维度，5 次/15 分钟）
     → PBKDF2-SHA256 密码验证（60 万轮迭代）
     → 检查 is_enabled 状态
-    → 成功: set_secure_cookie + 按功能权限跳转
-        ├── 有后台功能权限 → 优先 /admin，否则跳第一个授权后台路由
-        └── 无后台功能权限 → /index（前台主页）
+    → 成功: set_secure_cookie + 默认跳转 /chat（前台智能问数）
+        └── 后台/模型 API 配置通过页面链接按权限进入
     → 失败: 记录失败次数 + 返回错误提示
     → 锁定: 超过阈值后返回"账户已锁定"提示
 ```
@@ -804,9 +805,11 @@ HTTP API 型 MCP 工具支持在 URL 中使用 `{参数名}` 占位符；GET 请
 | `context_size` | INTEGER | `8192` | 上下文窗口大小 |
 | `total_tokens` | INTEGER | `0` | Token 消耗累计（自动更新） |
 | `is_enabled` | INTEGER | `1` | 启用状态 |
-| `is_default` | INTEGER | `0` | 是否默认模型（全局唯一） |
+| `is_default` | INTEGER | `0` | 是否默认模型（在各自模型分组内唯一） |
+| `model_scope` | TEXT | `admin` | 模型分组：`admin` 管理员提供、`user` 用户自助配置 |
+| `owner_username` | TEXT | `''` | 用户模型所属用户名；管理员模型为空 |
 
-支持的操作：**新增、编辑、删除、启用/禁用、设为默认**。
+支持的操作：**新增、编辑、删除、启用/禁用、设为默认**。`/admin/model` 仅管理“管理员提供模型”分组；普通用户在 `/admin/model/config` 创建的“我的模型配置”按 `owner_username` 隔离，不会出现在管理员模型列表中。
 
 > **注**：模型流式对话功能已统一迁移至前台 `/chat/stream`（MCP 架构），后台不再提供独立对话页面。
 
@@ -894,7 +897,8 @@ HTTP API 型 MCP 工具支持在 URL 中使用 `{参数名}` 占位符；GET 请
 - **图表注入**：AI 回复中 `[CHART:...]` 标记自动渲染为 ECharts 图表
 - **表格注入**：`[TABLE:...]` 标记自动渲染为 HTML 数据表格
 - **元信息显示**：每条 AI 回复下方显示响应时间(s)和 Token 消耗
-- **模型 API 自助配置**：聊天页侧边栏模型选择区和欢迎页快捷操作会向有 `/admin/model/config` 权限的用户提供配置链接，普通用户可直接配置 API Key、API Base 与模型标识
+- **卡片渲染容错**：天气、音乐、图片、视频等信息卡片使用安全转义与失败兜底，避免前端脚本解析错误影响输入区发送
+- **模型 API 自助配置**：聊天页侧边栏模型选择区和欢迎页快捷操作会向有 `/admin/model/config` 权限的用户提供配置链接；普通用户配置写入自己的“我的模型配置”分组，不覆盖管理员提供模型或其他用户模型
 
 #### 8.4 对话持久化
 
@@ -976,7 +980,7 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 | 类型 | 实现方式 | 适用场景 |
 |------|----------|----------|
 | **LLM 型** | 绑定 AI 模型 + 系统提示词 + 技能列表 + MCP 工具权限（含 Crawl4ai 深度采集） | 复杂推理、数据分析、文案撰写、音乐推荐、深度采集 |
-| **API 型** | HTTP/HTTPS API + 参数模板 + 响应渲染模板 | 天气查询等外部服务调用 |
+| **API 型** | HTTP/HTTPS API + 参数模板 + 响应渲染模板 | 天气查询等外部服务调用；JSON 响应模板渲染为卡片/摘要，不直接回显原始 JSON |
 
 #### 9.2 默认数字员工（8个）
 
@@ -1024,7 +1028,7 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 | GET | `/register` | 注册页面 |
 | POST | `/register` | 提交注册表单 |
 | GET | `/logout` | 登出（清除 Cookie，重定向到登录页） |
-| GET | `/index` | 前台首页（需登录，无后台功能权限用户默认跳转） |
+| GET | `/index` | 前台首页兼容入口（需登录，统一跳转 `/chat`） |
 
 ### 管理后台 (需管理员权限)
 
@@ -1106,8 +1110,9 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 #### 模型引擎
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/model` | 模型列表（`?page=&category=`） |
-| GET/POST | `/admin/model/config` | 模型 API 快速配置（普通用户默认权限，不含删除/启停/设默认） |
+| GET | `/admin/model` | 管理员提供模型列表（`?page=&category=`） |
+| GET/POST | `/admin/model/config` | 我的模型 API 快速配置（普通用户默认权限，按当前用户隔离，API Key 密码框回显且可显示/隐藏） |
+| POST | `/admin/model/config/test` | 测试模型 API 配置连通性（保存前可验证 API Base/API Key/Model Name） |
 | GET | `/admin/model/add` | 新增模型页面 |
 | POST | `/admin/model/add` | 提交新增模型 |
 | GET | `/admin/model/edit` | 编辑模型页面（`?id=`） |
@@ -1117,11 +1122,21 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 | POST | `/admin/model/default` | 设为默认模型 |
 | GET | `/admin/api/model/list` | 模型 JSON API（返回已启用模型列表） |
 
+> 模型 API 快速配置页仅管理当前用户的 `user` 模型分组，会回显已保存 API Key（默认密码框隐藏，可手动显示）。当 Provider、API Base 或 Model Name 改变且仍在使用已保存密钥时，页面会显示醒目的“复用当前密钥”确认区；用户可重新输入新 Key，或勾选确认后继续复用当前密钥。
+
 #### 管理侧会话管理（Issue #17）
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/admin/conversation` | 所有用户会话列表，支持 `?username=&keyword=&page=&id=` 筛选/查看详情 |
 | POST | `/admin/conversation/delete` | 管理员删除任意会话及其消息 |
+
+#### 管理侧消息管理（Issue #18）
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/message` | 跨会话逐条消息管理，支持 `?username=&keyword=&role=&is_sensitive=&review_status=&date_from=&date_to=&page=` 多维筛选 |
+| POST | `/admin/message/delete` | 删除单条消息 |
+| POST | `/admin/message/mark` | 标记消息（敏感标记 `toggle_sensitive` / 审核状态 `set_review`） |
+| POST | `/admin/message/batch` | 批量操作（批量删除/标记敏感/审核通过） |
 
 #### 接口管理（Issue #26）
 | 方法 | 路径 | 说明 |
@@ -1204,6 +1219,8 @@ erDiagram
         int total_tokens
         int is_enabled
         int is_default
+        string model_scope
+        string owner_username
         timestamp created_at
     }
     data_warehouse {
@@ -1402,6 +1419,23 @@ Permissions-Policy: camera=(), microphone=(), geolocation=()
 | `LOGIN_LOCKOUT_SECONDS` | `900` | 登录锁定时间（秒），默认 15 分钟 |
 | `BIND_ADDRESS` | `127.0.0.1` | HTTP 服务监听地址（`0.0.0.0` 监听所有网卡） |
 
+### 系统设置（Web UI 可管理）
+
+以下配置项可通过管理后台 **常规设置** 页面（`/admin/config`）在线修改，**修改后即时生效（部分需重启）**：
+
+| 类别 | 配置项 | 默认值 | 说明 |
+|------|--------|--------|------|
+| **常规** | 系统名称/副标题/Logo/备案号/端口 | — | 页面标题、Logo、底部备案号 |
+| **AI** | 默认模型/温度/最大Token | 自动/0.7/4096 | AI 对话默认参数 |
+| **备份** | 备份路径/间隔天数/保留份数 | backups//7/5 | 数据库自动备份策略 (#99) |
+| **日志** | 日志级别 | INFO | DEBUG/INFO/WARNING/ERROR (#99) |
+| **通知** | SMTP 服务器/Webhook URL | 空 | 邮件与 Webhook 通知地址 (#99) |
+| **采集** | 采集间隔（分钟） | 60 | 全局默认采集调度间隔 (#99) |
+| **安全** | 验证码开关/注册开关/会话过期（时） | 关/开/24 | 安全策略开关 (#99) |
+| **上传** | 上传大小限制（MB） | 10 | 文件上传大小上限 (#99) |
+
+> 系统设置的底层实现见 `app/models/system_config.py`（Repository 层）和 `app/config/settings.py` 的 `load_from_db()` 方法。
+
 ### 生产环境启动示例
 
 ```bash
@@ -1544,7 +1578,7 @@ python make_admin.py --reset --username admin --password newpassword
 | `admin` | `admin888` | 系统管理员 | ✅ 全部功能 | 不可删除/禁用自身 |
 
 > ⚠️ **首次登录后请立即修改默认密码！** 可使用管理后台的用户编辑功能或 `make_admin.py --reset` 命令。
-> 自助注册用户默认绑定“普通用户”角色，可访问 `/admin/model/config` 来配置模型 API；如需使用 MCP 工具管理、用户管理等页面，请由管理员在角色权限中额外授权。
+> 自助注册用户默认绑定“普通用户”角色，登录后默认进入 `/chat`；可从 Chat 页入口访问 `/admin/model/config` 配置并测试模型 API。如需使用 MCP 工具管理、用户管理等页面，请由管理员在角色权限中额外授权。
 > 生产环境必须显式设置至少 12 字符的 `ADMIN_DEFAULT_PASSWORD`。
 > 未设置时，随机初始密码只写入数据库旁权限受限的 `<database>.admin_initial_password`；首次登录并改密后应立即删除该文件。
 
@@ -1552,19 +1586,19 @@ python make_admin.py --reset --username admin --password newpassword
 
 ## 测试用例
 
-系统已覆盖 7 大模块共 30+ 项测试用例，详见 `docs/test_case.md`：
+系统已覆盖 7 大模块共 40+ 项测试用例，详见 `docs/test_case.md`：
 
 | 模块 | 测试项数 | 覆盖要点 |
 |------|---------|---------|
-| **认证模块** | 6 | 正确登录、错误密码、空表单、登录限速触发、未登录拦截、登出 |
+| **认证模块** | 7 | 正确登录、错误密码、空表单、登录限速触发、未登录拦截、登出、登录默认进入 Chat |
 | **用户管理** | 6 | 新增用户、编辑用户、禁用/启用、删除、关键词搜索、admin 账号保护 |
 | **角色管理** | 3 | 新增角色+功能授权、系统角色编辑保护（is_system）、系统角色删除保护 |
 | **瞭望采集** | 9 | 关键词采集、瞭望源选择、保存到数据仓库、SSRF 防护、空关键词、SSE 进度事件、进度条渲染、采集审计日志、日志页检索 |
-| **模型引擎** | 6 | 新增模型、设为默认、Mock 对话（无 API Key）、真实 API 流式对话、Token 统计、审计日志记录 |
+| **模型引擎** | 11 | 新增模型、设为默认、Mock 对话（无 API Key）、真实 API 流式对话、Token 统计、审计日志记录、快速配置 Key 回显、连接测试、模型分组隔离、Chat 分组展示 |
 | **会话管理** | 5 | 跨用户列表、用户筛选、消息详情、管理员删除、用户侧隔离保持 |
 | **接口管理** | 10 | 接口模板 CRUD、安全校验、敏感 Header 脱敏、安全 HTTP 调用、接口测试、API 型数字员工联动创建 |
 | **MCP 重构** | 6 | 工具表查询、CRUD、注册表加载、员工权限、技能关联、测试日志 |
-| **MCP 与默认权限** | 8 | MCP 页面使用说明、普通用户默认模型 API 配置权限、后台路由级权限匹配、禁用子路由隔离、模型快速配置入口、Chat 页配置入口、Registry 重绑定 |
+| **MCP 与默认权限** | 11 | MCP 页面使用说明、普通用户默认模型 API 配置权限、后台路由级权限匹配、禁用子路由隔离、模型快速配置入口、Chat 页配置入口、API 测试入口、登录默认 Chat、Registry 重绑定 |
 | **安全测试** | 5 | XSS 注入（采集内容）、SQL 注入（参数化查询验证）、CSRF Token 校验、密码哈希强度、安全响应头存在性 |
 
 ### 运行测试

@@ -34,6 +34,15 @@ class TestDashboardHandler:
         assert issubclass(AdminDashboardHandler, AdminBaseHandler)
         assert issubclass(AdminDashboardApiHandler, AdminBaseHandler)
 
+    def test_render_passes_xsrf_token(self):
+        """AdminDashboardHandler.get() 的 render 调用包含 xsrf_token"""
+        import inspect
+        from app.controllers.admin_home import AdminDashboardHandler
+        source = inspect.getsource(AdminDashboardHandler.get)
+        assert "xsrf_token" in source, (
+            "AdminDashboardHandler.get() 的 self.render() 缺少 xsrf_token 参数"
+        )
+
 
 class TestDashboardTemplate:
     """验证 Dashboard 模板"""

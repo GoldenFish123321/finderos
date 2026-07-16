@@ -32,8 +32,20 @@ class AiModelRepository:
     """AI model data access class."""
 
     @staticmethod
+    def _row_to_dict(row, include_api_key: bool = False) -> dict:
+        row_dict = dict(row)
+        row_dict.setdefault("model_scope", "admin")
+        row_dict.setdefault("owner_username", "")
+        row_dict["has_api_key"] = bool(row_dict.get("api_key"))
+        row_dict["api_key"] = (
+            decrypt_api_key(row_dict.get("api_key", "")) if include_api_key else ""
+        )
+        return row_dict
+
+    @staticmethod
     def get_all(page: int = 1, page_size: int = 20, category: str = "",
-                enabled_only: bool = False, include_api_key: bool = False) -> tuple:
+                enabled_only: bool = False, include_api_key: bool = False,
+                model_scope: str = "", owner_username: str | None = None) -> tuple:
         """Paginated query of AI models. Returns (rows, total)."""
         with get_db() as conn:
             conditions = []
@@ -43,6 +55,12 @@ class AiModelRepository:
                 params.append(category)
             if enabled_only:
                 conditions.append("is_enabled = 1")
+            if model_scope:
+                conditions.append("COALESCE(model_scope, 'admin') = ?")
+                params.append(model_scope)
+            if owner_username is not None:
+                conditions.append("COALESCE(owner_username, '') = ?")
+                params.append(owner_username)
             where = "WHERE " + " AND ".join(conditions) if conditions else ""
             total = conn.execute(
                 f"SELECT COUNT(*) as cnt FROM ai_models {where}", params
@@ -52,16 +70,7 @@ class AiModelRepository:
                 f"LIMIT ? OFFSET ?",
                 (*params, page_size, (page - 1) * page_size),
             ).fetchall()
-        # 解密每行的 api_key
-        result = []
-        for row in rows:
-            row_dict = dict(row)
-            row_dict["has_api_key"] = bool(row_dict.get("api_key"))
-            row_dict["api_key"] = (
-                decrypt_api_key(row_dict.get("api_key", "")) if include_api_key else ""
-            )
-            result.append(row_dict)
-        return result, total
+        return [AiModelRepository._row_to_dict(row, include_api_key) for row in rows], total
 
     @staticmethod
     def get_by_id(model_id: int, include_api_key: bool = False):
@@ -71,47 +80,105 @@ class AiModelRepository:
                 "SELECT * FROM ai_models WHERE id = ?", (model_id,)
             ).fetchone()
         if row:
-            row_dict = dict(row)
-            row_dict["has_api_key"] = bool(row_dict.get("api_key"))
-            row_dict["api_key"] = (
-                decrypt_api_key(row_dict.get("api_key", "")) if include_api_key else ""
-            )
-            return row_dict
+            return AiModelRepository._row_to_dict(row, include_api_key)
         return None
 
     @staticmethod
-    def get_default(include_api_key: bool = False):
-        """Get the default model."""
+    def get_default(include_api_key: bool = False, model_scope: str = "admin",
+                    owner_username: str = ""):
+        """Get the default model in a model group."""
         with get_db() as conn:
             row = conn.execute(
-                "SELECT * FROM ai_models WHERE is_default = 1 AND is_enabled = 1 LIMIT 1"
+                "SELECT * FROM ai_models "
+                "WHERE is_default = 1 AND is_enabled = 1 "
+                "AND COALESCE(model_scope, 'admin') = ? "
+                "AND COALESCE(owner_username, '') = ? "
+                "LIMIT 1",
+                (model_scope, owner_username),
             ).fetchone()
         if row:
-            row_dict = dict(row)
-            row_dict["has_api_key"] = bool(row_dict.get("api_key"))
-            row_dict["api_key"] = (
-                decrypt_api_key(row_dict.get("api_key", "")) if include_api_key else ""
-            )
-            return row_dict
+            return AiModelRepository._row_to_dict(row, include_api_key)
         return None
+
+    @staticmethod
+    def get_accessible_by_id(model_id: int, username: str = "",
+                             include_api_key: bool = False):
+        """Get an admin model or the current user's private model by ID."""
+        model = AiModelRepository.get_by_id(model_id, include_api_key=include_api_key)
+        if not model:
+            return None
+        if model.get("model_scope", "admin") == "admin":
+            return model
+        if model.get("model_scope") == "user" and model.get("owner_username", "") == username:
+            return model
+        return None
+
+    @staticmethod
+    def get_default_for_user(username: str, include_api_key: bool = False):
+        """Prefer current user's default model, then admin default, then first enabled accessible model."""
+        user_model = AiModelRepository.get_default(
+            include_api_key=include_api_key, model_scope="user", owner_username=username
+        )
+        if user_model:
+            return user_model
+        admin_model = AiModelRepository.get_default(
+            include_api_key=include_api_key, model_scope="admin", owner_username=""
+        )
+        if admin_model:
+            return admin_model
+        models, _ = AiModelRepository.get_available_for_user(
+            username, page=1, page_size=1, include_api_key=include_api_key
+        )
+        return models[0] if models else None
+
+    @staticmethod
+    def get_available_for_user(username: str, page: int = 1, page_size: int = 50,
+                               include_api_key: bool = False) -> tuple:
+        """Return enabled user-private models plus enabled admin-provided models."""
+        offset = (page - 1) * page_size
+        with get_db() as conn:
+            params = (username,)
+            total = conn.execute(
+                "SELECT COUNT(*) as cnt FROM ai_models "
+                "WHERE is_enabled = 1 AND ("
+                "COALESCE(model_scope, 'admin') = 'admin' "
+                "OR (COALESCE(model_scope, 'admin') = 'user' AND COALESCE(owner_username, '') = ?)"
+                ")",
+                params,
+            ).fetchone()["cnt"]
+            rows = conn.execute(
+                "SELECT * FROM ai_models "
+                "WHERE is_enabled = 1 AND ("
+                "COALESCE(model_scope, 'admin') = 'admin' "
+                "OR (COALESCE(model_scope, 'admin') = 'user' AND COALESCE(owner_username, '') = ?)"
+                ") "
+                "ORDER BY CASE COALESCE(model_scope, 'admin') WHEN 'user' THEN 0 ELSE 1 END, "
+                "is_default DESC, id ASC LIMIT ? OFFSET ?",
+                (username, page_size, offset),
+            ).fetchall()
+        return [AiModelRepository._row_to_dict(row, include_api_key) for row in rows], total
 
     @staticmethod
     def create(name: str, provider: str = "deepseek", api_base: str = "",
                api_key: str = "", model_name: str = "", category: str = "text",
                system_prompt: str = "", temperature: float = 0.7,
                top_p: float = 1.0, top_k: int = 50,
-               max_tokens: int = 4096, context_size: int = 8192) -> int:
+               max_tokens: int = 4096, context_size: int = 8192,
+               model_scope: str = "admin", owner_username: str = "") -> int:
         """Create an AI model. Returns new ID. api_key 自动加密存储。"""
         try:
             encrypted_key = encrypt_api_key(api_key.strip()) if api_key else ""
+            model_scope = model_scope if model_scope in ("admin", "user") else "admin"
+            owner_username = owner_username.strip() if model_scope == "user" else ""
             with get_db() as conn:
                 cur = conn.execute(
                     "INSERT INTO ai_models (name, provider, api_base, api_key, model_name, "
-                    "category, system_prompt, temperature, top_p, top_k, max_tokens, context_size) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "category, system_prompt, temperature, top_p, top_k, max_tokens, context_size, "
+                    "model_scope, owner_username) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (name.strip(), provider.strip(), api_base.strip(), encrypted_key,
                      model_name.strip(), category.strip(), system_prompt, temperature,
-                     top_p, top_k, max_tokens, context_size),
+                     top_p, top_k, max_tokens, context_size, model_scope, owner_username),
                 )
                 conn.commit()
             return cur.lastrowid
@@ -174,9 +241,22 @@ class AiModelRepository:
 
     @staticmethod
     def set_default(model_id: int) -> bool:
-        """Set a model as default (unique: clear all then set one)."""
+        """Set a model as default inside its own group (admin or per-user)."""
         with get_db() as conn:
-            conn.execute("UPDATE ai_models SET is_default = 0")
+            row = conn.execute(
+                "SELECT COALESCE(model_scope, 'admin') as model_scope, "
+                "COALESCE(owner_username, '') as owner_username "
+                "FROM ai_models WHERE id = ?",
+                (model_id,),
+            ).fetchone()
+            if not row:
+                return False
+            conn.execute(
+                "UPDATE ai_models SET is_default = 0 "
+                "WHERE COALESCE(model_scope, 'admin') = ? "
+                "AND COALESCE(owner_username, '') = ?",
+                (row["model_scope"], row["owner_username"]),
+            )
             conn.execute(
                 "UPDATE ai_models SET is_default = 1 WHERE id = ?", (model_id,)
             )
@@ -218,20 +298,93 @@ class AiModelRepository:
             return {"total_tokens": total}
 
     @staticmethod
-    def get_count() -> int:
+    def get_count(model_scope: str = "", owner_username: str | None = None) -> int:
         """Get total model count."""
         with get_db() as conn:
-            return conn.execute("SELECT COUNT(*) as cnt FROM ai_models").fetchone()["cnt"]
+            conditions = []
+            params = []
+            if model_scope:
+                conditions.append("COALESCE(model_scope, 'admin') = ?")
+                params.append(model_scope)
+            if owner_username is not None:
+                conditions.append("COALESCE(owner_username, '') = ?")
+                params.append(owner_username)
+            where = "WHERE " + " AND ".join(conditions) if conditions else ""
+            return conn.execute(
+                f"SELECT COUNT(*) as cnt FROM ai_models {where}", params
+            ).fetchone()["cnt"]
 
     @staticmethod
-    def get_stats() -> dict:
+    def get_stats(model_scope: str = "", owner_username: str | None = None) -> dict:
         """Get model engine statistics."""
         with get_db() as conn:
-            total = conn.execute("SELECT COUNT(*) as cnt FROM ai_models").fetchone()["cnt"]
-            enabled = conn.execute(
-                "SELECT COUNT(*) as cnt FROM ai_models WHERE is_enabled = 1"
+            conditions = []
+            params = []
+            if model_scope:
+                conditions.append("COALESCE(model_scope, 'admin') = ?")
+                params.append(model_scope)
+            if owner_username is not None:
+                conditions.append("COALESCE(owner_username, '') = ?")
+                params.append(owner_username)
+            where = "WHERE " + " AND ".join(conditions) if conditions else ""
+            total = conn.execute(
+                f"SELECT COUNT(*) as cnt FROM ai_models {where}", params
             ).fetchone()["cnt"]
+            enabled_conditions = conditions + ["is_enabled = 1"]
+            enabled_where = "WHERE " + " AND ".join(enabled_conditions)
+            enabled = conn.execute(
+                f"SELECT COUNT(*) as cnt FROM ai_models {enabled_where}", params
+            ).fetchone()["cnt"]
+            default_conditions = conditions + ["is_default = 1"]
+            default_where = "WHERE " + " AND ".join(default_conditions)
             has_default = conn.execute(
-                "SELECT COUNT(*) as cnt FROM ai_models WHERE is_default = 1"
+                f"SELECT COUNT(*) as cnt FROM ai_models {default_where}", params
             ).fetchone()["cnt"]
             return {"total": total, "enabled": enabled, "has_default": has_default}
+
+    @staticmethod
+    def get_default_by_category(category: str):
+        """获取指定分类的默认/首个启用模型（含解密的 api_key）。
+
+        Args:
+            category: 模型分类（image / video / text 等）
+
+        Returns:
+            模型字典或 None
+        """
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT * FROM ai_models WHERE category = ? AND is_enabled = 1 "
+                "ORDER BY is_default DESC, id ASC LIMIT 1",
+                (category,),
+            ).fetchone()
+        if row:
+            row_dict = dict(row)
+            row_dict["has_api_key"] = bool(row_dict.get("api_key"))
+            row_dict["api_key"] = decrypt_api_key(row_dict.get("api_key", ""))
+            return row_dict
+        return None
+
+    @staticmethod
+    def get_by_category(category: str):
+        """获取指定分类的所有启用模型（含解密的 api_key）。
+
+        Args:
+            category: 模型分类（image / video / text 等）
+
+        Returns:
+            模型字典列表
+        """
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT * FROM ai_models WHERE category = ? AND is_enabled = 1 "
+                "ORDER BY is_default DESC, id ASC",
+                (category,),
+            ).fetchall()
+        result = []
+        for row in rows:
+            row_dict = dict(row)
+            row_dict["has_api_key"] = bool(row_dict.get("api_key"))
+            row_dict["api_key"] = decrypt_api_key(row_dict.get("api_key", ""))
+            result.append(row_dict)
+        return result

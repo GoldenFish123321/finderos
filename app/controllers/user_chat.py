@@ -97,6 +97,16 @@ _TOOL_USAGE_INSTRUCTION = (
     "- ✅ 涉及数据来源时，只说「数据仓库」「瞭望采集」，不说表名/字段名"
 )
 
+_MEDIA_INSTRUCTION = (
+    "\n\n[多模态生成能力]\n"
+    "你具备 AI 图像和视频生成能力。当用户要求生成图片或视频时，使用以下工具：\n"
+    "1. **generate_image**: 文生图。用户说「画一张」「生成图片」「文生图」时调用。\n"
+    "   参数: prompt(描述词,必填)、size(尺寸,默认1024x1024)、n(数量,默认1)。\n"
+    "2. **generate_video**: 视频生成。用户说「生成视频」「制作视频」「文生视频」时调用。\n"
+    "   参数: prompt(描述词,必填)、image_url(可选,图生视频时传入)。\n"
+    "生成完成后，系统会自动在对话中展示生成的图片或视频。"
+)
+
 
 # ============================================================
 # 辅助函数
@@ -110,6 +120,7 @@ def _build_system_prompt(custom_prompt: str = "") -> str:
     parts.append(_SYSTEM_IDENTITY)
     parts.append(_CHART_INSTRUCTION)
     parts.append(_TOOL_USAGE_INSTRUCTION)
+    parts.append(_MEDIA_INSTRUCTION)
     return "\n\n".join(parts)
 
 
@@ -194,33 +205,235 @@ def _sanitize_warehouse_data(items: list) -> str:
     return ctx
 
 
-def _build_card_from_template(template: str, api_data, employee_name: str) -> dict:
-    """Build a card from the configured JSON mapping, preserving legacy templates."""
+def _extract_path_value(data, path: str):
+    """Extract a value from nested dict/list data using dotted paths.
+
+    Supports legacy template paths such as
+    ``current_condition.0.weatherDesc.0.value``.
+    """
+    current = data
+    for part in str(path or "").split("."):
+        if part == "":
+            continue
+        if isinstance(current, dict):
+            if part not in current:
+                return None
+            current = current[part]
+        elif isinstance(current, list):
+            try:
+                current = current[int(part)]
+            except (ValueError, TypeError, IndexError):
+                return None
+        else:
+            return None
+    return current
+
+
+def _render_value_template(value, data):
+    """Render {{path.to.value}} placeholders inside strings/lists/dicts."""
+    import re as _re
+
+    def resolve(path: str):
+        resolved = _extract_path_value(data, path)
+        if resolved is not None:
+            return resolved
+
+        # Backward compatibility: old API employee text templates used a
+        # one-level flattening pass, so ``{{name}}`` could read
+        # ``{"data": {"name": "..."}}``. Keep that behavior while also
+        # supporting the newer dotted paths above.
+        key = str(path or "").strip()
+        if "." not in key:
+            if isinstance(data, dict):
+                for nested in data.values():
+                    if isinstance(nested, dict) and key in nested:
+                        return nested[key]
+            if isinstance(data, list) and data and isinstance(data[0], dict):
+                return data[0].get(key)
+        return None
+
+    if isinstance(value, str):
+        def repl(match):
+            resolved = resolve(match.group(1).strip())
+            if resolved is None:
+                return ""
+            if isinstance(resolved, (dict, list)):
+                return json.dumps(resolved, ensure_ascii=False)
+            return str(resolved)
+        return _re.sub(r"\{\{\s*([^{}]+?)\s*\}\}", repl, value)
+    if isinstance(value, list):
+        return [_render_value_template(item, data) for item in value]
+    if isinstance(value, dict):
+        return {k: _render_value_template(v, data) for k, v in value.items()}
+    return value
+
+
+def _normalize_card_type(card_type: str) -> str:
+    """Normalize legacy response template types to frontend card types."""
+    card_type = str(card_type or "default").strip()
+    aliases = {
+        "weather_card": "weather",
+        "weather-card": "weather",
+        "news_card": "news",
+        "news-card": "news",
+        "music_card": "music",
+        "music-card": "music",
+    }
+    return aliases.get(card_type, card_type)
+
+
+def _build_weather_card(api_data, employee_name: str, user_message: str = "",
+                        template_config: dict | None = None) -> dict:
+    """Build a normalized weather card from common weather API formats."""
+    template_config = template_config or {}
+    current = {}
+    if isinstance(api_data, dict):
+        current_condition = api_data.get("current_condition")
+        if isinstance(current_condition, list) and current_condition and isinstance(current_condition[0], dict):
+            current = current_condition[0]
+        elif isinstance(current_condition, dict):
+            current = current_condition
+        elif isinstance(api_data.get("current"), dict):
+            current = api_data.get("current", {})
+        else:
+            current = api_data
+
+    def first_path(*paths, default=""):
+        for path in paths:
+            value = _extract_path_value(api_data, path)
+            if value not in (None, ""):
+                return value
+        return default
+
+    weather_text = (
+        first_path("current_condition.0.weatherDesc.0.value",
+                   "current.condition.text", "current.weather.0.description")
+        or current.get("weather") or current.get("condition") or current.get("text") or current.get("status") or ""
+    )
+    temp = (
+        first_path("current_condition.0.temp_C", "current.temp_C",
+                   "current.temp_c", "current.temperature")
+        or current.get("temp") or current.get("temperature") or current.get("temp_C") or current.get("temp_c") or ""
+    )
+    city = (
+        first_path("nearest_area.0.areaName.0.value", "nearest_area.0.region.0.value",
+                   "location.name", "location.region")
+        or (api_data.get("city") if isinstance(api_data, dict) else "")
+        or (api_data.get("location") if isinstance(api_data, dict) else "")
+        or user_message
+    )
+    # Issue #121: date 提取增加 current_condition 格式路径，保留 forecast weather.0.date 作为后备
+    date = first_path("current_condition.0.localObsDateTime",
+                      "current_condition.0.observation_time",
+                      "current.last_updated",
+                      "weather.0.date", "date", "time", "updateTime")
+
+    fields = []
+    configured_fields = template_config.get("fields")
+    if isinstance(configured_fields, list):
+        for field in configured_fields:
+            if not isinstance(field, dict):
+                continue
+            label = _render_value_template(field.get("label", ""), api_data)
+            value = _render_value_template(field.get("value", ""), api_data)
+            if label and value:
+                fields.append({"label": label, "value": value})
+
+    if not fields:
+        default_fields = [
+            ("体感温度", first_path("current_condition.0.FeelsLikeC", "current.feelslike_c")),
+            ("湿度", first_path("current_condition.0.humidity", "current.humidity")),
+            ("风力", first_path("current_condition.0.windspeedKmph", "current.wind_kph")),
+            ("风向", first_path("current_condition.0.winddir16Point", "current.wind_dir")),
+        ]
+        for label, value in default_fields:
+            if value not in (None, ""):
+                suffix = "°C" if label == "体感温度" else ("%" if label == "湿度" else (" km/h" if label == "风力" else ""))
+                fields.append({"label": label, "value": f"{value}{suffix}"})
+
+    detail = "，".join(f"{f['label']} {f['value']}" for f in fields[:5])
+    title_template = template_config.get("title", "")
+    rendered_title = _render_value_template(title_template, api_data) if title_template else ""
+    title = rendered_title or f"{employee_name} · 天气查询"
+
+    return {
+        "type": "weather",
+        "title": title,
+        "data": {
+            "city": str(city or ""),
+            "temp": str(temp or ""),
+            "weather": str(weather_text or ""),
+            "date": str(date or ""),
+            "detail": detail,
+            "fields": fields,
+        },
+    }
+
+
+def _build_card_from_template(template: str, api_data, employee_name: str, user_message: str = "") -> dict:
+    """Build a card from configured JSON card mapping/templates."""
     try:
         config = json.loads(template) if template else {}
     except (json.JSONDecodeError, TypeError):
         return {"type": "default", "title": employee_name, "data": api_data}
     if not isinstance(config, dict):
         return {"type": "default", "title": employee_name, "data": api_data}
+    card_type = _normalize_card_type(config.get("type", "default"))
     mapping = config.get("mapping")
-    if not isinstance(mapping, dict):
-        card_data = api_data
-    else:
+    if isinstance(mapping, dict):
         card_data = {}
         for output_key, source_path in mapping.items():
-            current = api_data
-            for part in str(source_path).split("."):
-                if not isinstance(current, dict) or part not in current:
-                    current = None
-                    break
-                current = current[part]
+            current = _extract_path_value(api_data, str(source_path))
             if current is not None:
                 card_data[output_key] = current
+        return {
+            "type": card_type,
+            "title": _render_value_template(config.get("title", employee_name), api_data) or employee_name,
+            "data": card_data,
+        }
+
+    if card_type == "weather":
+        return _build_weather_card(api_data, employee_name, user_message, config)
+
+    if not isinstance(mapping, dict):
+        card_data = {}
+        fields = _render_value_template(config.get("fields", []), api_data)
+        if fields:
+            card_data["fields"] = fields
+        if not card_data:
+            card_data = api_data
     return {
-        "type": config.get("type", "default"),
-        "title": config.get("title", employee_name),
+        "type": card_type,
+        "title": _render_value_template(config.get("title", employee_name), api_data) or employee_name,
         "data": card_data,
     }
+
+
+def _card_to_plain_text(card: dict, fallback: str = "") -> str:
+    """Return a concise human-readable text for a card, avoiding raw JSON echo."""
+    if not isinstance(card, dict):
+        return fallback
+    card_type = card.get("type", "default")
+    data = card.get("data") if isinstance(card.get("data"), dict) else {}
+    title = card.get("title") or "信息卡片"
+    if card_type == "weather":
+        pieces = []
+        if data.get("city"):
+            pieces.append(str(data["city"]))
+        weather = str(data.get("weather") or "").strip()
+        temp = str(data.get("temp") or "").strip()
+        if weather or temp:
+            pieces.append(" / ".join(p for p in [weather, f"{temp}°C" if temp and not temp.endswith("°C") else temp] if p))
+        if data.get("detail"):
+            pieces.append(str(data["detail"]))
+        return "天气信息：" + "，".join(p for p in pieces if p) if pieces else str(title)
+    if card_type == "music":
+        return f"{title}：{data.get('name', '未知歌曲')} - {data.get('artist', '未知歌手')}"
+    if data.get("text"):
+        return str(data["text"])
+    if data.get("items"):
+        return str(title)
+    return fallback or str(title)
 
 
 def _build_employee_card(emp: dict, api_data: dict, user_message: str = "") -> dict:
@@ -232,21 +445,23 @@ def _build_employee_card(emp: dict, api_data: dict, user_message: str = "") -> d
     emp_type = emp.get("employee_type", "llm")
     response_template = emp.get("response_render_template", "")
     if response_template:
-        return _build_card_from_template(response_template, api_data, emp_name)
+        return _build_card_from_template(response_template, api_data, emp_name, user_message)
 
     # 天气类员工：识别天气数据
-    if ("天气" in emp_name or "weather" in emp_name.lower() or
-            "temp" in str(api_data).lower() or "weather" in str(api_data).lower()):
-        card = {"type": "weather", "title": f"{emp_name} · 天气查询", "data": {}}
-        if isinstance(api_data, dict):
-            card["data"] = {
-                "city": api_data.get("city") or api_data.get("location") or api_data.get("name") or user_message,
-                "temp": api_data.get("temp") or api_data.get("temperature") or api_data.get("current"),
-                "weather": api_data.get("weather") or api_data.get("condition") or api_data.get("text") or api_data.get("status"),
-                "date": api_data.get("date") or api_data.get("time") or api_data.get("updateTime") or "",
-                "detail": str(api_data.get("detail", api_data.get("description", ""))) if api_data.get("detail") or api_data.get("description") else "",
-            }
-        return card
+    # Issue #121: 使用 employee_type + 精确名称匹配，避免中文子串误识别
+    # 不再依赖 str(api_data) 子串匹配（"temp" 会误匹配 "template" 等）
+    emp_name_clean = emp_name.strip()
+    is_weather_name = emp_name_clean in ("天气助手", "Weather Assistant")
+    is_weather_api = (
+        emp_type == "api" and
+        ("天气" in emp_name_clean or "weather" in emp_name_clean.lower())
+    )
+    is_weather_struct = isinstance(api_data, dict) and (
+        "current_condition" in api_data or
+        (isinstance(api_data.get("weather"), list) and len(api_data["weather"]) > 0)
+    )
+    if is_weather_name or is_weather_api or is_weather_struct:
+        return _build_weather_card(api_data, emp_name, user_message)
 
     # 音乐类员工：识别音乐数据（支持 Meting API 列表格式和 dict 格式）
     if ("音乐" in emp_name or "music" in emp_name.lower() or
@@ -401,13 +616,10 @@ class UserChatPageHandler(BaseHandler):
 
     @tornado.web.authenticated
     def get(self):
-        models_data, _ = AiModelRepository.get_all(page=1, page_size=50)
-        selected_model = AiModelRepository.get_default()
-        if not selected_model:
-            for m in models_data:
-                if m.get("is_enabled") == 1:
-                    selected_model = m
-                    break
+        models_data, _ = AiModelRepository.get_available_for_user(
+            self.current_user, page=1, page_size=100
+        )
+        selected_model = AiModelRepository.get_default_for_user(self.current_user)
 
         conversations = ConversationRepository.get_all(
             username=self.current_user, limit=50
@@ -440,7 +652,9 @@ class UserChatPageHandler(BaseHandler):
 class UserModelListHandler(BaseHandler):
     @tornado.web.authenticated
     def get(self):
-        models_data, _ = AiModelRepository.get_all(page=1, page_size=50)
+        models_data, _ = AiModelRepository.get_available_for_user(
+            self.current_user, page=1, page_size=100
+        )
         items = []
         for m in models_data:
             if m.get("is_enabled") == 1:
@@ -450,6 +664,7 @@ class UserModelListHandler(BaseHandler):
                     "model_name": m.get("model_name", ""),
                     "category": m.get("category", ""),
                     "is_default": m.get("is_default", 0),
+                    "model_scope": m.get("model_scope", "admin"),
                 })
         self.write({"code": 0, "items": items})
 
@@ -525,7 +740,16 @@ class UserConversationCreateHandler(BaseHandler):
     @tornado.web.authenticated
     def post(self):
         model_id_str = self.get_body_argument("model_id", None)
-        model_id = int(model_id_str) if model_id_str else None
+        try:
+            model_id = int(model_id_str) if model_id_str else None
+        except (ValueError, TypeError):
+            self.write({"code": 1, "msg": "无效的模型ID"})
+            return
+        if model_id:
+            model = AiModelRepository.get_accessible_by_id(model_id, self.current_user)
+            if not model or model.get("is_enabled") == 0:
+                self.write({"code": 1, "msg": "模型不可用"})
+                return
         title = self.get_body_argument("title", "新对话").strip()[:200] or "新对话"
         conv_id = ConversationRepository.create(
             title=title, model_id=model_id, username=self.current_user
@@ -626,7 +850,9 @@ class UserChatStreamHandler(BaseHandler):
             return
 
         # ── 模型校验 ──
-        model = AiModelRepository.get_by_id(model_id, include_api_key=True)
+        model = AiModelRepository.get_accessible_by_id(
+            model_id, self.current_user, include_api_key=True
+        )
         if not model or model.get("is_enabled") == 0:
             self.write({"code": 1, "msg": "模型不可用"})
             return
@@ -638,21 +864,38 @@ class UserChatStreamHandler(BaseHandler):
         temperature = model.get("temperature", 0.7)
         max_tokens = model.get("max_tokens", 4096)
 
-        # ── 多轮对话历史 ──
-        history_messages = []
+        # ── 解析对话 ID ──
         conv_id = None
         if conversation_id:
             try:
                 conv_id = int(conversation_id)
-                conv = ConversationRepository.get_by_id(conv_id)
-                if conv and conv.get("username", "") == self.current_user:
-                    history_messages = ConversationRepository.get_recent_messages(
-                        conv_id, limit=10
-                    )
-                else:
-                    conv_id = None
             except (ValueError, TypeError):
                 pass
+
+        # ── 模型分类快捷路由：图像/视频模型跳过 LLM 直接生成 ──
+        model_category = (model.get("category") or "text").strip().lower()
+        if model_category in ("image", "video"):
+            if not api_key:
+                self.write({"code": 1, "msg": f"{model_category} 模型未配置 API Key"})
+                return
+            # 设置 SSE 响应头（必须在 _handle_media_direct 之前）
+            self.set_header("Content-Type", "text/event-stream")
+            self.set_header("Cache-Control", "no-cache")
+            self.set_header("Connection", "keep-alive")
+            self.set_header("X-Accel-Buffering", "no")
+            await self._handle_media_direct(model, model_category, message, conv_id)
+            return
+
+        # ── 多轮对话历史 ──
+        history_messages = []
+        if conv_id:
+            conv = ConversationRepository.get_by_id(conv_id)
+            if not conv or conv.get("username", "") != self.current_user:
+                conv_id = None
+            else:
+                history_messages = ConversationRepository.get_recent_messages(
+                    conv_id, limit=10
+                )
 
         # ── 设置 MCP 上下文 ──
         set_mcp_context(username=self.current_user)
@@ -834,6 +1077,14 @@ class UserChatStreamHandler(BaseHandler):
                                 await self.flush()
                         except Exception:
                             pass
+                    # 图像/视频生成工具：发送媒体卡片
+                    if tool_name in ("generate_image", "generate_video"):
+                        try:
+                            result_data = json.loads(tr.get("content", "{}"))
+                            if isinstance(result_data, dict) and result_data.get("success"):
+                                await self._send_media_card(tool_name, result_data)
+                        except Exception:
+                            pass
                 continue
 
             elif tool_calls:
@@ -852,7 +1103,7 @@ class UserChatStreamHandler(BaseHandler):
                         + sanitize_untrusted_llm_context(tr.get("content", ""))
                     )
                     messages.append(safe_tr)
-                    # 音乐工具：发送卡片事件
+                    # 音乐 + 媒体生成工具：发送卡片事件
                     try:
                         tool_name_2 = ""
                         for tc in tool_calls:
@@ -876,6 +1127,10 @@ class UserChatStreamHandler(BaseHandler):
                                     f"event: card\ndata: {json.dumps(music_card, ensure_ascii=False)}\n\n"
                                 )
                                 await self.flush()
+                        if tool_name_2 in ("generate_image", "generate_video"):
+                            result_data = json.loads(tr.get("content", "{}"))
+                            if isinstance(result_data, dict) and result_data.get("success"):
+                                await self._send_media_card(tool_name_2, result_data)
                     except Exception:
                         pass
                 continue
@@ -985,6 +1240,9 @@ class UserChatStreamHandler(BaseHandler):
                             f"event: card\ndata: {json.dumps(music_card, ensure_ascii=False)}\n\n"
                         )
                         await self.flush()
+                    # 图像/视频生成工具：发送媒体卡片
+                    if tool_name in ("generate_image", "generate_video") and isinstance(result, dict) and result.get("success"):
+                        await self._send_media_card(tool_name, result)
                     reply = self._format_tool_result_as_reply(
                         tool_name, arguments, result, user_message, model
                     )
@@ -1139,6 +1397,113 @@ class UserChatStreamHandler(BaseHandler):
             )
 
     # ═══════════════════════════════════════════════════════════
+    # 媒体生成：卡片推送 + 直连路由
+    # ═══════════════════════════════════════════════════════════
+
+    async def _send_media_card(self, tool_name: str, result: dict):
+        """根据工具结果发送 SSE 媒体卡片事件。"""
+        if tool_name == "generate_image":
+            urls = result.get("urls", [])
+            prompt = result.get("prompt", "")
+            card = {
+                "type": "image",
+                "title": prompt[:100] or "AI 生成图片",
+                "data": {"urls": urls, "prompt": prompt, "model": result.get("model", "")},
+            }
+            self.write(f"event: card\ndata: {json.dumps(card, ensure_ascii=False)}\n\n")
+            await self.flush()
+
+        elif tool_name == "generate_video":
+            local_url = result.get("local_url", "")
+            card = {
+                "type": "video",
+                "title": result.get("prompt", "")[:100] or "AI 生成视频",
+                "data": {
+                    "url": local_url,
+                    "content_type": result.get("content_type", "video/mp4"),
+                    "model": result.get("model", ""),
+                },
+            }
+            self.write(f"event: card\ndata: {json.dumps(card, ensure_ascii=False)}\n\n")
+            await self.flush()
+
+    async def _handle_media_direct(self, model: dict, category: str, message: str, conv_id):
+        """用户直接选中 image/video 模型时，跳过 LLM 直接调用生成 API。"""
+        import asyncio as _asyncio
+        import time as _time
+
+        _start = _time.time()
+        model_name = model.get("model_name") or model.get("name")
+        api_base = (model.get("api_base") or "").rstrip("/")
+        api_key = model.get("api_key") or ""
+        model_id = model.get("id", 0)
+
+        if category == "image":
+            await _sse_write(self, f"🎨 正在生成图片：{message[:50]}...", event="tool_status")
+            from app.services.media_generator import call_image_gen_in_thread
+
+            loop = _asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                _user_chat_executor,
+                lambda: call_image_gen_in_thread(
+                    prompt=message, model_name=model_name,
+                    api_base=api_base, api_key=api_key,
+                ),
+            )
+            if result.get("success"):
+                await self._send_media_card("generate_image", result)
+                reply = f"✅ 已按你的描述生成图片：{message[:60]}"
+                await _sse_write(self, reply)
+            else:
+                reply = f"❌ 图像生成失败：{result.get('error', '未知错误')}"
+                for ch in reply:
+                    await _sse_write(self, ch)
+                    await _asyncio.sleep(0.01)
+
+        elif category == "video":
+            await _sse_write(self, f"🎬 正在生成视频：{message[:50]}...", event="tool_status")
+            from app.services.media_generator import call_video_gen_in_thread
+
+            loop = _asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                _user_chat_executor,
+                lambda: call_video_gen_in_thread(
+                    prompt=message, model_name=model_name,
+                    api_base=api_base, api_key=api_key,
+                ),
+            )
+            if result.get("success"):
+                await self._send_media_card("generate_video", result)
+                reply = f"✅ 已按你的描述生成视频：{message[:60]}"
+                await _sse_write(self, reply)
+            else:
+                reply = f"❌ 视频生成失败：{result.get('error', '未知错误')}"
+                for ch in reply:
+                    await _sse_write(self, ch)
+                    await _asyncio.sleep(0.01)
+
+        else:
+            reply = f"不支持的模型分类：{category}"
+
+        await _sse_done(self)
+        elapsed = round(_time.time() - _start, 2)
+        tokens = _estimate_tokens(reply)
+        await _sse_stats(self, tokens, False, elapsed, conv_id)
+
+        # 审计日志
+        write_audit_log(
+            action="MEDIA_GENERATE",
+            username=self.current_user,
+            target=f"model:{model_id}",
+            detail=f"category={category}, tokens={tokens}, elapsed={elapsed}s, msg_len={len(message)}",
+            client_ip=self.request.remote_ip or "",
+        )
+
+        if conv_id and reply:
+            ConversationRepository.add_message(conv_id, "user", message, 0)
+            ConversationRepository.add_message(conv_id, "assistant", reply, tokens)
+
+    # ═══════════════════════════════════════════════════════════
     # 快捷指令 / Mock 回复
     # ═══════════════════════════════════════════════════════════
 
@@ -1289,11 +1654,17 @@ class UserEmployeeInvokeHandler(BaseHandler):
 
         model = None
         if emp.get("model_id"):
-            model = AiModelRepository.get_by_id(emp["model_id"], include_api_key=True)
+            model = AiModelRepository.get_accessible_by_id(
+                emp["model_id"], self.current_user, include_api_key=True
+            )
         if not model or model.get("is_enabled", 0) == 0:
-            model = AiModelRepository.get_default(include_api_key=True)
+            model = AiModelRepository.get_default_for_user(
+                self.current_user, include_api_key=True
+            )
         if not model:
-            models, _ = AiModelRepository.get_all(page=1, page_size=50, include_api_key=True)
+            models, _ = AiModelRepository.get_available_for_user(
+                self.current_user, page=1, page_size=100, include_api_key=True
+            )
             for m in models:
                 if m.get("is_enabled") == 1:
                     model = m
@@ -1711,45 +2082,6 @@ class UserEmployeeInvokeHandler(BaseHandler):
             await self._mock_api_employee_fallback(emp, message, _start, err)
             return
 
-        # ── 响应模板渲染 ──
-        # FIX: Issue #4 — HTML-escape API 返回值，防止 XSS
-        rendered_body = html.escape(body)
-        if response_template:
-            try:
-                import re as _re
-                rendered = response_template
-                data_obj = {}
-                try:
-                    data_obj = json.loads(body)
-                except (json.JSONDecodeError, TypeError):
-                    data_obj = {"raw": body}
-
-                # 列表格式响应（如 Meting 播放列表）：随机选取一条
-                song_obj = None
-                if isinstance(data_obj, list) and len(data_obj) > 0:
-                    import random as _random2
-                    song_obj = _random2.choice(data_obj)
-                    if isinstance(song_obj, dict):
-                        data_obj = song_obj  # 用选中的歌曲条目替代原列表
-
-                # 扁平化：支持嵌套 data 字段（如 uomg rand.music API 返回 {code, data:{name, artistsname, ...}}）
-                flat_data = {}
-                if isinstance(data_obj, dict):
-                    for key, value in data_obj.items():
-                        if isinstance(value, str):
-                            flat_data[key] = value
-                        elif isinstance(value, dict):
-                            for sub_key, sub_val in value.items():
-                                if isinstance(sub_val, str):
-                                    flat_data[sub_key] = sub_val
-                for key, value in flat_data.items():
-                    # HTML-escape 第三方 API 返回值，防止 XSS 注入
-                    rendered = rendered.replace("{{" + key + "}}", html.escape(value))
-                rendered = _re.sub(r'\{\{.*?\}\}', '', rendered)
-                rendered_body = rendered
-            except Exception:
-                pass
-
         # ── FIX-2: 构建并发送卡片 SSE 事件 ──
         try:
             api_data = json.loads(body) if body else {}
@@ -1761,6 +2093,30 @@ class UserEmployeeInvokeHandler(BaseHandler):
                 f"event: card\ndata: {json.dumps(card_data, ensure_ascii=False)}\n\n"
             )
             await self.flush()
+
+        # ── 响应文本渲染 ──
+        # JSON 卡片模板用于构建卡片，不应把模板 JSON 或原始 API JSON 直接回显给用户。
+        rendered_body = ""
+        template_is_card_json = False
+        if response_template:
+            try:
+                template_obj = json.loads(response_template)
+                template_is_card_json = isinstance(template_obj, dict) and any(
+                    key in template_obj for key in ("type", "fields", "mapping")
+                )
+            except (json.JSONDecodeError, TypeError):
+                template_obj = None
+
+            if template_is_card_json:
+                rendered_body = _card_to_plain_text(card_data, "")
+            else:
+                rendered_body = _render_value_template(response_template, api_data)
+        if not rendered_body:
+            rendered_body = _card_to_plain_text(card_data, "")
+        if not rendered_body:
+            rendered_body = body
+        # FIX: Issue #4 — HTML-escape API 返回值，防止 XSS
+        rendered_body = html.escape(str(rendered_body))
 
         # ── 流式输出文本 ──
         for ch in rendered_body[:5000]:

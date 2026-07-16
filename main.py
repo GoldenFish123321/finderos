@@ -6,6 +6,7 @@ main.py — 瞭望与问数系统 (DataFinderAgentOS) 主入口
 
 import logging
 import os
+import signal
 
 import tornado.ioloop
 import tornado.web
@@ -42,8 +43,9 @@ from app.controllers.admin_warehouse import (
     WarehouseBatchDeleteHandler, WarehouseDeepCollectHandler, WatchLogHandler,
 )
 from app.controllers.admin_model import (
-    ModelListHandler, ModelFormHandler, ModelQuickConfigHandler, ModelDeleteHandler,
-    ModelToggleHandler, ModelDefaultHandler, ModelApiListHandler,
+    ModelListHandler, ModelFormHandler, ModelQuickConfigHandler,
+    ModelQuickConfigTestHandler, ModelDeleteHandler, ModelToggleHandler,
+    ModelDefaultHandler, ModelApiListHandler,
 )
 from app.controllers.admin_interface import (
     InterfaceListHandler, InterfaceFormHandler, InterfaceDeleteHandler,
@@ -56,6 +58,10 @@ from app.controllers.admin_employee import (
 )
 from app.controllers.admin_conversation import (
     AdminConversationListHandler, AdminConversationDeleteHandler,
+)
+from app.controllers.admin_message import (
+    AdminMessageListHandler, AdminMessageDeleteHandler,
+    AdminMessageMarkHandler, AdminMessageBatchHandler,
 )
 from app.controllers.admin_skill import (
     SkillListHandler, SkillFormHandler, SkillDeleteHandler, SkillToggleHandler,
@@ -166,6 +172,7 @@ def make_app() -> tornado.web.Application:
 
             # 模型引擎
             (r"/admin/model", ModelListHandler),
+            (r"/admin/model/config/test", ModelQuickConfigTestHandler),
             (r"/admin/model/config", ModelQuickConfigHandler),
             (r"/admin/model/add", ModelFormHandler),
             (r"/admin/model/edit", ModelFormHandler),
@@ -176,6 +183,11 @@ def make_app() -> tornado.web.Application:
             # 会话管理：管理员查看/筛选/删除所有用户会话
             (r"/admin/conversation", AdminConversationListHandler),
             (r"/admin/conversation/delete", AdminConversationDeleteHandler),
+            # 消息管理：管理员逐条管理跨会话消息（Issue #18）
+            (r"/admin/message", AdminMessageListHandler),
+            (r"/admin/message/delete", AdminMessageDeleteHandler),
+            (r"/admin/message/mark", AdminMessageMarkHandler),
+            (r"/admin/message/batch", AdminMessageBatchHandler),
             # 接口管理：API 接口模板 CRUD / 测试 / 数字员工联动
             (r"/admin/interface", InterfaceListHandler),
             (r"/admin/interface/add", InterfaceFormHandler),
@@ -285,6 +297,16 @@ if __name__ == "__main__":
     # 启动定时舆情扫描器 (v1.2.0) — 每5分钟
     _sentiment_scanner = SentimentScanner(check_interval_ms=300000)
     _sentiment_scanner.start()
+
+    # 注册优雅关闭信号处理器
+    ioloop = tornado.ioloop.IOLoop.current()
+    def _shutdown(signum, frame):
+        logger.info(f"收到信号 {signum}，正在优雅关闭...")
+        scheduler.stop()
+        _sentiment_scanner.stop()
+        ioloop.add_callback(ioloop.stop)
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
 
     # 启动 HTTP 服务器
     bind_address = os.environ.get("BIND_ADDRESS", "127.0.0.1")

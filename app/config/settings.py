@@ -14,7 +14,7 @@ class Settings:
     """全局应用配置"""
 
     # === 应用版本（唯一硬编码位置） ===
-    VERSION = "1.2.0-beta"
+    VERSION = "1.5.1-beta"
     """应用版本号。项目中所有版本展示均由此处统一管理。"""
 
     # === UI 可配置项（默认值，启动后被 DB system_config 表覆盖） ===
@@ -38,6 +38,45 @@ class Settings:
 
     AI_DEFAULT_MAX_TOKENS = 4096
     """AI 默认最大输出 Token 数。"""
+
+    # === 备份配置（#99） ===
+    DB_BACKUP_PATH = "backups/"
+    """数据库备份文件存放路径（相对于项目根目录）。"""
+
+    DB_BACKUP_INTERVAL_DAYS = 7
+    """数据库自动备份间隔天数。"""
+
+    DB_BACKUP_KEEP_COUNT = 5
+    """备份文件最大保留份数，超出自动清理旧文件。"""
+
+    # === 日志配置（#99） ===
+    LOG_LEVEL = "INFO"
+    """应用日志级别：DEBUG / INFO / WARNING / ERROR。"""
+
+    # === 通知配置（#99） ===
+    SMTP_HOST = ""
+    """SMTP 邮件服务器地址（为空则不启用邮件通知）。"""
+
+    WEBHOOK_URL = ""
+    """Webhook 通知 URL（为空则不启用 Webhook 通知）。"""
+
+    # === 采集配置（#99） ===
+    COLLECTOR_INTERVAL_MINUTES = 60
+    """全局默认采集调度间隔（分钟）。"""
+
+    # === 安全策略开关（#99） ===
+    CAPTCHA_ENABLED = False
+    """是否启用登录验证码。"""
+
+    REGISTRATION_ENABLED = True
+    """是否允许新用户注册。"""
+
+    SESSION_EXPIRE_HOURS = 24
+    """用户会话过期时间（小时）。"""
+
+    # === 上传限制（#99） ===
+    UPLOAD_MAX_SIZE_MB = 10
+    """文件上传大小限制（MB）。"""
 
     # === 安全配置 ===
     COOKIE_SECRET = os.environ.get("COOKIE_SECRET", "")
@@ -70,6 +109,7 @@ class Settings:
             "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "img-src 'self' data: https: blob:; "
+            "media-src 'self' https:; "
             "font-src 'self' https://cdn.jsdelivr.net; "
             "connect-src 'self' https://cdn.jsdelivr.net blob: https://*.jsdelivr.net; "
             "worker-src 'self' blob:; "
@@ -146,30 +186,50 @@ class Settings:
                 "system_subtitle": "SYSTEM_SUBTITLE",
                 "system_logo": "SYSTEM_LOGO",
                 "icp_number": "ICP_NUMBER",
+                "default_port": "PORT",
                 "ai_default_model": "AI_DEFAULT_MODEL",
                 "ai_default_temperature": "AI_DEFAULT_TEMPERATURE",
                 "ai_default_max_tokens": "AI_DEFAULT_MAX_TOKENS",
+                # #99 新增配置项映射
+                "db_backup_path": "DB_BACKUP_PATH",
+                "db_backup_interval_days": "DB_BACKUP_INTERVAL_DAYS",
+                "db_backup_keep_count": "DB_BACKUP_KEEP_COUNT",
+                "log_level": "LOG_LEVEL",
+                "smtp_host": "SMTP_HOST",
+                "webhook_url": "WEBHOOK_URL",
+                "collector_interval_minutes": "COLLECTOR_INTERVAL_MINUTES",
+                "captcha_enabled": "CAPTCHA_ENABLED",
+                "registration_enabled": "REGISTRATION_ENABLED",
+                "session_expire_hours": "SESSION_EXPIRE_HOURS",
+                "upload_max_size_mb": "UPLOAD_MAX_SIZE_MB",
             }
+
+            # 需要 int 类型转换的属性
+            _INT_ATTRS = {
+                "AI_DEFAULT_MAX_TOKENS", "PORT",
+                "DB_BACKUP_INTERVAL_DAYS", "DB_BACKUP_KEEP_COUNT",
+                "COLLECTOR_INTERVAL_MINUTES", "SESSION_EXPIRE_HOURS",
+                "UPLOAD_MAX_SIZE_MB",
+            }
+            # 需要 float 类型转换的属性
+            _FLOAT_ATTRS = {"AI_DEFAULT_TEMPERATURE"}
+            # 需要 bool 类型转换的属性
+            _BOOL_ATTRS = {"CAPTCHA_ENABLED", "REGISTRATION_ENABLED"}
 
             for db_key, attr_name in _DB_KEY_MAP.items():
                 if db_key in db_config and db_config[db_key]:
                     raw_value = db_config[db_key]
-                    # 类型转换：数值型属性
-                    if attr_name in ("AI_DEFAULT_TEMPERATURE",):
-                        try:
+                    try:
+                        if attr_name in _FLOAT_ATTRS:
                             setattr(self, attr_name, float(raw_value))
-                        except (ValueError, TypeError):
-                            logger.warning(f"system_config.{db_key} 值 '{raw_value}' 无效，使用默认值")
-                    elif attr_name in ("AI_DEFAULT_MAX_TOKENS",):
-                        try:
+                        elif attr_name in _INT_ATTRS:
                             setattr(self, attr_name, int(raw_value))
-                        except (ValueError, TypeError):
-                            logger.warning(f"system_config.{db_key} 值 '{raw_value}' 无效，使用默认值")
-                    elif attr_name in ("AI_DEFAULT_MODEL",):
-                        # 模型 ID 保留为字符串（模板中统一用字符串比较）
-                        setattr(self, attr_name, raw_value)
-                    else:
-                        setattr(self, attr_name, raw_value)
+                        elif attr_name in _BOOL_ATTRS:
+                            setattr(self, attr_name, raw_value.lower() in ("true", "1", "yes"))
+                        else:
+                            setattr(self, attr_name, raw_value)
+                    except (ValueError, TypeError):
+                        logger.warning(f"system_config.{db_key} 值 '{raw_value}' 无效，使用默认值")
 
             logger.info(f"已从 system_config 表加载 {len(db_config)} 项配置")
         except Exception as e:

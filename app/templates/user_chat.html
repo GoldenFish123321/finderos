@@ -665,14 +665,26 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
             <label>🤖 模型引擎</label>
             <select id="model-select" onchange="switchModel()">
                 {% if models %}
+                <optgroup label="我的模型配置">
                 {% for m in models %}
-                {% if m.get('is_enabled') == 1 %}
+                {% if m.get('is_enabled') == 1 and m.get('model_scope', 'admin') == 'user' %}
                 <option value="{{ m['id'] }}"
                     {% if selected and selected['id'] == m['id'] %}selected{% end %}>
                     {{ '⭐ ' if m.get('is_default') == 1 else '' }}{{ m['name'] }}
                 </option>
                 {% end %}
                 {% end %}
+                </optgroup>
+                <optgroup label="管理员提供模型">
+                {% for m in models %}
+                {% if m.get('is_enabled') == 1 and m.get('model_scope', 'admin') == 'admin' %}
+                <option value="{{ m['id'] }}"
+                    {% if selected and selected['id'] == m['id'] %}selected{% end %}>
+                    {{ '⭐ ' if m.get('is_default') == 1 else '' }}{{ m['name'] }}
+                </option>
+                {% end %}
+                {% end %}
+                </optgroup>
                 {% end %}
             </select>
             {% if can_config_model_api %}
@@ -800,6 +812,7 @@ let currentModelId = {{ selected['id'] if selected else 0 }};
 let currentConversationId = null;
 let isStreaming = false;
 let employees = [];
+let chartResizeObservers = [];
 
 function renderMarkdownSafe(value) {
     var source = String(value || '');
@@ -812,11 +825,13 @@ function renderMarkdownSafe(value) {
     });
 }
 
+function handleFetchError(err) { console.error('请求失败:', err); }
+
 // 加载数字员工列表
 fetch('/api/chat/employees?_xsrf=' + XSRF)
     .then(r => r.json())
     .then(d => { if (d.code === 0) employees = d.items; })
-    .catch(() => {});
+    .catch(handleFetchError);
 
 // 移动端侧边栏切换
 function toggleSidebar() {
@@ -896,7 +911,7 @@ function newConversation() {
             resetChatToWelcome();
             refreshTaskList();
         }
-    });
+    }).catch(handleFetchError);
 }
 
 function loadConversation(cid) {
@@ -924,7 +939,7 @@ function loadConversation(cid) {
                 });
                 scrollToBottom();
             }
-        });
+        }).catch(handleFetchError);
 }
 
 function deleteConversation(cid) {
@@ -952,7 +967,7 @@ function deleteConversation(cid) {
                     }
                     refreshTaskList();
                 }
-            });
+            }).catch(handleFetchError);
         });
     });
 }
@@ -977,7 +992,7 @@ function refreshTaskList() {
                     ).join('');
                 }
             }
-        });
+        }).catch(handleFetchError);
 }
 
 // ============================================================
@@ -1044,7 +1059,7 @@ function sendMessage() {
             } else {
                 doSend(employeeId, sendMsg, employeeName);
             }
-        });
+        }).catch(handleFetchError);
     } else {
         doSend(employeeId, sendMsg, employeeName);
     }
@@ -1444,6 +1459,7 @@ function detectAndRenderChart(aiContent, totalContent) {
                 // 响应式缩放
                 var resizeObserver = new ResizeObserver(function() { chart.resize(); });
                 resizeObserver.observe(chartDom);
+                chartResizeObservers.push(resizeObserver);
                 // 点击图表可导出为图片
                 chart.on('click', function() {
                     // 不干扰正常交互，仅记录
@@ -1581,14 +1597,15 @@ function renderInfoCard(container, card) {
     // 卡片类型图标映射
     const typeIcons = {
         weather: '🌤', news: '📰', music: '🎵',
-        movie: '🎬', science: '🔬', default: '📋'
+        movie: '🎬', science: '🔬', image: '🖼️', video: '🎬', default: '📋'
     };
-    const icon = typeIcons[card.type] || typeIcons.default;
+    var normalizedType = card.type === 'weather_card' ? 'weather' : card.type;
+    const icon = typeIcons[normalizedType] || typeIcons.default;
 
     let cardHtml = '<div class="card-title">' + icon + ' ' + escapeHtml(card.title || '信息卡片') + '</div>';
     cardHtml += '<div class="card-content">';
 
-    if (card.type === 'weather' && card.data) {
+    if (normalizedType === 'weather' && card.data) {
         // 天气卡片特殊渲染
         const d = card.data;
         cardHtml += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
@@ -1596,10 +1613,20 @@ function renderInfoCard(container, card) {
         cardHtml += '<div><div>' + escapeHtml(d.weather || '') + '</div>';
         cardHtml += '<div style="font-size:12px;color:var(--text-muted);">' + escapeHtml(d.city || '') + ' · ' + escapeHtml(d.date || '') + '</div></div>';
         cardHtml += '</div>';
+        if (d.fields && Array.isArray(d.fields) && d.fields.length) {
+            cardHtml += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px;margin-top:10px;">';
+            d.fields.forEach(function(field) {
+                cardHtml += '<div style="padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.05);">';
+                cardHtml += '<div style="font-size:11px;color:var(--text-muted);">' + escapeHtml(field.label || '') + '</div>';
+                cardHtml += '<div style="font-size:13px;">' + escapeHtml(field.value || '') + '</div>';
+                cardHtml += '</div>';
+            });
+            cardHtml += '</div>';
+        }
         if (d.detail) {
             cardHtml += '<div style="margin-top:8px;font-size:12px;color:var(--text-muted);">' + escapeHtml(d.detail) + '</div>';
         }
-    } else if (card.type === 'music' && card.data) {
+    } else if (normalizedType === 'music' && card.data) {
         // 音乐卡片特殊渲染（封面 + 歌曲信息 + 试听链接）
         const m = card.data;
         cardHtml += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
@@ -1628,6 +1655,37 @@ function renderInfoCard(container, card) {
         }
         cardHtml += '</div>';
         cardHtml += '</div>';
+    } else if (normalizedType === 'image' && card.data && card.data.urls) {
+        // 图像生成卡片：渲染 AI 生成的图片
+        var urls = card.data.urls;
+        for (var i = 0; i < urls.length; i++) {
+            var imgUrl = urls[i];
+            var safeImgUrl = (/^https?:\/\//i.test(imgUrl)) ? imgUrl : '';
+            if (safeImgUrl) {
+                cardHtml += '<div style="margin:8px 0;">';
+                cardHtml += '<img src="' + escapeHtml(safeImgUrl)
+                    + '" alt="' + escapeHtml(card.data.prompt || 'AI生成图片') + '"'
+                    + ' style="max-width:100%;border-radius:8px;cursor:pointer;display:block;"'
+                    + ' loading="lazy"'
+                    + ' onclick="window.open(this.src)"'
+                    + ' onerror="this.alt=&quot;图片加载失败&quot;;this.style.opacity=&quot;0.5&quot;;this.style.cursor=&quot;default&quot;;this.onclick=null;">';
+                cardHtml += '</div>';
+            }
+        }
+    } else if (normalizedType === 'video' && card.data && card.data.url) {
+        // 视频生成卡片：渲染 <video> 播放器
+        var vidUrl = card.data.url;
+        var safeVidUrl = (/^https?:\/\//i.test(vidUrl) || vidUrl.indexOf('/static/') === 0) ? vidUrl : '';
+        if (safeVidUrl) {
+            cardHtml += '<div style="margin:8px 0;">';
+            cardHtml += '<video src="' + escapeHtml(safeVidUrl)
+                + '" controls style="max-width:100%;max-height:400px;border-radius:8px;"'
+                + ' preload="metadata"'
+                + ' onerror="this.style.display=&quot;none&quot;;this.nextElementSibling.style.display=&quot;block&quot;">'
+                + '您的浏览器不支持视频播放</video>';
+            cardHtml += '<div style="display:none;color:var(--text-muted);font-size:12px;padding:8px;">⚠️ 视频加载失败（可能已过期）</div>';
+            cardHtml += '</div>';
+        }
     } else if (card.data && card.data.items && Array.isArray(card.data.items)) {
         // 列表型卡片
         cardHtml += '<ul style="margin:0;padding-left:18px;">';
@@ -1768,6 +1826,8 @@ window.addEventListener('beforeunload', function() {
         gestureDetector.destroy();
         gestureDetector = null;
     }
+    chartResizeObservers.forEach(function(observer) { observer.disconnect(); });
+    chartResizeObservers = [];
 });
 
 // 点击空白关闭 @ 菜单

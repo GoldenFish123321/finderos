@@ -153,9 +153,31 @@ def init_db():
                 total_tokens    INTEGER DEFAULT 0,
                 is_enabled      INTEGER DEFAULT 1,
                 is_default      INTEGER DEFAULT 0,
+                model_scope     TEXT DEFAULT 'admin',
+                owner_username  TEXT DEFAULT '',
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # 兼容旧表迁移：模型分组。admin=管理员提供的全局模型；user=用户自助配置模型。
+        try:
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(ai_models)").fetchall()}
+            if "model_scope" not in cols:
+                conn.execute("ALTER TABLE ai_models ADD COLUMN model_scope TEXT DEFAULT 'admin'")
+                logger.info("Database migration: added model_scope column to ai_models")
+            if "owner_username" not in cols:
+                conn.execute("ALTER TABLE ai_models ADD COLUMN owner_username TEXT DEFAULT ''")
+                logger.info("Database migration: added owner_username column to ai_models")
+            conn.execute(
+                "UPDATE ai_models SET model_scope = 'admin' "
+                "WHERE model_scope IS NULL OR model_scope = ''"
+            )
+            conn.execute(
+                "UPDATE ai_models SET owner_username = '' "
+                "WHERE owner_username IS NULL"
+            )
+        except Exception as e:
+            logger.error(f"Database migration failed (ai_models scope): {e}", exc_info=True)
 
         # 兼容旧表迁移：为已存在的 ai_models 表添加 total_tokens 列
         try:
@@ -348,11 +370,16 @@ def init_db():
                 role            TEXT NOT NULL,
                 content         TEXT DEFAULT '',
                 token_count     INTEGER DEFAULT 0,
+                is_sensitive    INTEGER DEFAULT 0,
+                review_status   TEXT DEFAULT 'pending',
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_msgs_conv ON conversation_messages(conversation_id)")
+        # v1.3.5 Issue #18: 消息管理索引
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_msgs_sensitive ON conversation_messages(is_sensitive)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_msgs_review ON conversation_messages(review_status)")
 
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id)")
@@ -362,6 +389,7 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_watch_sources_enabled ON watch_sources(is_enabled)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_watch_results_source ON watch_results(source_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_models_default ON ai_models(is_default)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_models_scope_owner ON ai_models(model_scope, owner_username)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_api_interfaces_enabled ON api_interfaces(is_enabled)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_api_interfaces_name ON api_interfaces(name)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_digital_employees_api_interface ON digital_employees(api_interface_id)")
@@ -442,7 +470,7 @@ def init_db():
 
         # ── v1.2.0 舆情大屏（敏感词 + 预警） ──
         from app.models.sensitive_word import SensitiveWordRepository
-        SensitiveWordRepository.init_table()
+        SensitiveWordRepository.init_table(conn)
 
         conn.commit()
         logger.info(f"Database initialized: {DB_PATH}")
@@ -531,6 +559,8 @@ def seed_default_data():
                 (21, "数智大屏", "layui-icon-screen-full", "/admin/dashboard", None, 3, 1),
                 # 舆情大屏 (v1.2.0 新增)
                 (22, "舆情大屏", "layui-icon-log", "/admin/sentiment", None, 14, 1),
+                # 消息管理 (v1.3.5 Issue #18 新增)
+                (23, "消息管理", "layui-icon-email", "/admin/message", None, 15, 1),
             ]
             conn.executemany(
                 "INSERT INTO functions (id, name, icon, route_path, parent_id, sort_order, is_enabled) "
@@ -550,6 +580,7 @@ def seed_default_data():
             ("常规设置", "layui-icon-set-fill", "/admin/config", 3, 2),
             ("数智大屏", "layui-icon-screen-full", "/admin/dashboard", None, 3),
             ("舆情大屏", "layui-icon-log", "/admin/sentiment", None, 14),
+            ("消息管理", "layui-icon-email", "/admin/message", None, 15),
         ):
             func = conn.execute(
                 "SELECT id FROM functions WHERE route_path = ?", (route_path,)
@@ -604,24 +635,68 @@ def seed_default_data():
                     (normal_role_id, func_id),
                 )
 
-        # ── 种子：系统配置默认值（v0.11 新增）──
+        # ── 种子：系统配置默认值（v0.11 新增, v1.3.5 扩展至 19 项 #99）──
         existing_config = conn.execute("SELECT COUNT(*) as cnt FROM system_config").fetchone()
         if existing_config["cnt"] == 0:
             default_configs = [
+                # === general（常规设置）===
                 ("system_name", "瞭望与问数系统", "系统名称，显示在页面标题和头部导航栏", "general"),
                 ("system_subtitle", "DataFinderAgentOS", "系统副标题/英文名称，显示在头部版本号旁", "general"),
                 ("system_logo", "", "系统 Logo 图片路径（相对于 static 目录），为空则显示文字 Logo", "general"),
                 ("icp_number", "", "ICP 备案号，显示在页面底部", "general"),
                 ("default_port", "10010", "默认服务端口（重启后生效，环境变量 PORT 优先级更高）", "general"),
+                # === ai（AI 默认参数）===
                 ("ai_default_model", "", "AI 默认模型 ID（空=使用 is_default=1 的模型）", "ai"),
                 ("ai_default_temperature", "0.7", "AI 默认温度参数（0-2）", "ai"),
                 ("ai_default_max_tokens", "4096", "AI 默认最大输出 Token 数", "ai"),
+                # === backup（备份策略）=== #99
+                ("db_backup_path", "backups/", "数据库备份文件存放路径（相对于项目根目录）", "backup"),
+                ("db_backup_interval_days", "7", "数据库自动备份间隔天数", "backup"),
+                ("db_backup_keep_count", "5", "备份文件最大保留份数（超出自动清理旧文件）", "backup"),
+                # === logging（日志配置）=== #99
+                ("log_level", "INFO", "应用日志级别：DEBUG / INFO / WARNING / ERROR", "logging"),
+                # === notification（通知配置）=== #99
+                ("smtp_host", "", "SMTP 邮件服务器地址（为空则不启用邮件通知）", "notification"),
+                ("webhook_url", "", "Webhook 通知 URL（为空则不启用 Webhook 通知）", "notification"),
+                # === collector（采集配置）=== #99
+                ("collector_interval_minutes", "60", "全局默认采集调度间隔（分钟）", "collector"),
+                # === security（安全策略）=== #99
+                ("captcha_enabled", "false", "是否启用登录验证码（true/false）", "security"),
+                ("registration_enabled", "true", "是否允许新用户注册（true/false）", "security"),
+                ("session_expire_hours", "24", "用户会话过期时间（小时）", "security"),
+                # === upload（上传限制）=== #99
+                ("upload_max_size_mb", "10", "文件上传大小限制（MB）", "upload"),
             ]
             conn.executemany(
                 "INSERT INTO system_config (key, value, description, category) VALUES (?, ?, ?, ?)",
                 default_configs,
             )
-            print("[种子] 默认系统配置已创建（8 项）")
+            print("[种子] 默认系统配置已创建（19 项）")
+
+        # #99: 迁移已有数据库 — 确保新配置项存在（使用 upsert 避免重复）
+        _MIGRATE_NEW_CONFIGS = [
+            ("db_backup_path", "backups/", "数据库备份文件存放路径（相对于项目根目录）", "backup"),
+            ("db_backup_interval_days", "7", "数据库自动备份间隔天数", "backup"),
+            ("db_backup_keep_count", "5", "备份文件最大保留份数（超出自动清理旧文件）", "backup"),
+            ("log_level", "INFO", "应用日志级别：DEBUG / INFO / WARNING / ERROR", "logging"),
+            ("smtp_host", "", "SMTP 邮件服务器地址（为空则不启用邮件通知）", "notification"),
+            ("webhook_url", "", "Webhook 通知 URL（为空则不启用 Webhook 通知）", "notification"),
+            ("collector_interval_minutes", "60", "全局默认采集调度间隔（分钟）", "collector"),
+            ("captcha_enabled", "false", "是否启用登录验证码（true/false）", "security"),
+            ("registration_enabled", "true", "是否允许新用户注册（true/false）", "security"),
+            ("session_expire_hours", "24", "用户会话过期时间（小时）", "security"),
+            ("upload_max_size_mb", "10", "文件上传大小限制（MB）", "upload"),
+        ]
+        migrated = 0
+        for key, value, desc, cat in _MIGRATE_NEW_CONFIGS:
+            cursor = conn.execute(
+                "INSERT OR IGNORE INTO system_config (key, value, description, category) VALUES (?, ?, ?, ?)",
+                (key, value, desc, cat),
+            )
+            if cursor.rowcount > 0:
+                migrated += 1
+        if migrated > 0:
+            print(f"[迁移] 已补充 {migrated} 项新配置（#99 扩展）")
 
         conn.commit()
 
@@ -722,7 +797,32 @@ def _seed_default_models():
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (6, "Whisper-1", "openai", "https://api.openai.com/v1", "whisper-1", "audio", 1, 0),
             )
-            print("[种子] 默认AI模型已创建（6个模型，覆盖6种分类）")
+            # AIGC 媒体生成模型（Issue #21/#22 — 多模态生图/生视频）
+            conn.execute(
+                "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (7, "Wan2.6-T2I", "custom", "https://aigc-api.aitoolcore.com/api/v1",
+                 "wan2.6-t2i", "image", 1, 1),
+            )
+            conn.execute(
+                "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (8, "Qwen-Image-2.0", "custom", "https://aigc-api.aitoolcore.com/api/v1",
+                 "qwen-image-2.0", "image", 1, 0),
+            )
+            conn.execute(
+                "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (9, "Wan2.6-T2V", "custom", "https://aigc-api.aitoolcore.com/api/v1",
+                 "wan2.6-t2v", "video", 1, 1),
+            )
+            conn.execute(
+                "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (10, "Wan2.6-I2V", "custom", "https://aigc-api.aitoolcore.com/api/v1",
+                 "wan2.6-i2v", "video", 1, 0),
+            )
+            print("[种子] 默认AI模型已创建（10个模型，覆盖6种分类）")
 
 
 def _seed_default_interfaces():

@@ -8,8 +8,9 @@
 - 🔐 **用户认证与 RBAC 权限管理**
 - 🔭 **瞭望采集**：可配置的 Web 数据采集引擎（百度/搜狗新闻等）
 - 🗄️ **数据仓库**：采集结果的统一存储与检索（FTS5 全文检索）
-- 🤖 **模型引擎**：OpenAI 范式多 Provider AI 模型的接入管理与流式对话
-- 🧠 **MCP 协议**：数据库驱动的 18 个工具注册中心，支持热重载和在线测试
+- 🤖 **模型引擎**：OpenAI 范式多 Provider AI 模型的接入管理与流式对话，支持 text/image/video 等多分类
+- 🖼️ **媒体生成**：AI 文生图/图生图/文生视频/图生视频，SSE 卡片渲染，视频本地代理缓存
+- 🧠 **MCP 协议**：数据库驱动的 20 个工具注册中心（builtin_tools/ 自动发现），支持热重载和在线测试
 - 💬 **智能问数**：用户前台 SSE 流式对话，支持 MCP 工具调用
 - 🧑‍💼 **数字员工**：LLM 型 / API 型，支持 MCP 工具权限精细控制（最小权限原则）
 - 🎯 **技能管理**：纯 Prompt 模板库，LLM 按需加载，支持绑定 MCP 工具
@@ -94,6 +95,7 @@ audit_logs (独立审计)
 - **菜单** → 基于用户角色动态生成侧边栏菜单
 - **路由级校验** → `AdminBaseHandler` 将当前请求解析为所需功能路由，按最长前缀匹配校验；`/admin/model` 可覆盖 `/admin/model/add`，但不会覆盖 `/admin/mcp/tool`
 - **普通用户初始权限** → 种子数据默认给“普通用户”授予 `/admin/model/config`，满足模型 API 快速配置，其它后台能力仍需额外授权
+- **登录默认落点** → 登录、注册与 `/index` 统一进入 `/chat`，后台和模型 API 配置通过前台/后台导航按权限进入
 
 ### 3.2 瞭望采集流程
 
@@ -146,7 +148,9 @@ audit_logs (独立审计)
 - **多轮对话**：conversations + conversation_messages 双表持久化
 - **@数字员工**：输入 `@` 触发下拉菜单，自动匹配并调用
 - **ECharts 图表**：`[CHART:...]` / `[TABLE:...]` 标记自动渲染
-- **自助模型配置**：`/chat` 侧边栏与欢迎页快捷区按用户是否拥有 `/admin/model/config` 显示配置入口，与普通用户默认最小权限配合使用
+- **模型分组隔离**：`ai_models.model_scope=admin` 表示管理员提供模型，`model_scope=user + owner_username` 表示用户自助模型；管理员页只管理 admin 组，普通用户快速配置只管理自己的 user 组
+- **自助模型配置**：`/chat` 侧边栏与欢迎页快捷区按用户是否拥有 `/admin/model/config` 显示配置入口，与普通用户默认最小权限配合使用；聊天模型选择按“我的模型配置 / 管理员提供模型”分组展示
+- **模型配置体验**：快速配置页遵循常见控制台交互，API Key 密码框回显、可显示/隐藏，并可调用 `/admin/model/config/test` 测试连接；连接信息变更且继续使用已保存密钥时显示醒目的确认复用区
 
 ### 3.4b 管理侧会话管理
 
@@ -161,7 +165,7 @@ audit_logs (独立审计)
 ### 3.5 数字化员工
 
 - **LLM 型**：绑定 AI 模型 + system_prompt + skills + MCP 工具权限（含 Crawl4ai 深度采集）
-- **API 型**：HTTP 调用 + 参数模板 + 响应渲染模板（天气卡片等）
+- **API 型**：HTTP 调用 + 参数模板 + 响应渲染模板（天气卡片等）；JSON 卡片模板会被解析为 SSE `card` 事件和自然语言摘要，避免原始 JSON 直接回显
 - **默认 8 个员工**：产业专员/天机助手/天气/采集专员/文案编写/新闻聚合/科普助手/随机音乐
 
 ### 3.5.1 接口管理与 API 型员工联动（Issue #26）
@@ -255,6 +259,41 @@ audit_logs (独立审计)
 - 配置文件: `app/config/settings.py`
 - 环境变量覆盖: `COOKIE_SECRET`, `DB_PATH`, `PORT`, `BIND_ADDRESS`, `DEBUG`, `PBKDF2_ITERATIONS` 等
 - 数据库: `database/finderos.db` (SQLite WAL 模式)
+
+### 5.1 系统设置（Web UI 配置中心） — #99
+
+系统配置采用 **DB 持久化 + 内存缓存** 双层架构：
+
+```
+管理后台 /admin/config (config.html)
+    │ POST 保存
+    ▼
+SystemConfigRepository.bulk_update()  ← 持久化到 system_config 表
+    │
+    ▼
+settings.load_from_db()               ← 刷新内存 Settings 对象
+    │ _DB_KEY_MAP 白名单映射
+    ▼
+Settings.XXX 属性                     ← 模板/控制器即时读取
+```
+
+**配置类别（19 项）**：
+
+| 类别 | 数量 | 配置项 |
+|------|------|--------|
+| general | 5 | system_name, subtitle, logo, icp_number, default_port |
+| ai | 3 | default_model, temperature, max_tokens |
+| backup | 3 | db_backup_path, interval_days, keep_count |
+| logging | 1 | log_level |
+| notification | 2 | smtp_host, webhook_url |
+| collector | 1 | collector_interval_minutes |
+| security | 3 | captcha_enabled, registration_enabled, session_expire_hours |
+| upload | 1 | upload_max_size_mb |
+
+**安全设计**：
+- `_DB_KEY_MAP` 白名单机制：仅允许预定义的 key 覆盖 Settings 属性
+- 类型安全转换：int / float / bool 自动转换，转换失败回退默认值
+- 即时生效：保存后立即调用 `load_from_db()` 刷新内存
 
 ## 6. 默认账户
 

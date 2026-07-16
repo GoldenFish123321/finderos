@@ -12,6 +12,102 @@
     font-size:12px;
     line-height:1.7;
 }
+.quick-model-test-result {
+    display:none;
+    padding:10px 12px;
+    margin:12px 0;
+    border-radius:8px;
+    font-size:12px;
+    line-height:1.6;
+}
+.quick-model-test-result.ok {
+    display:block;
+    border:1px solid rgba(22,163,74,0.28);
+    background:rgba(22,163,74,0.10);
+    color:#16a34a;
+}
+.quick-model-test-result.fail {
+    display:block;
+    border:1px solid rgba(239,68,68,0.28);
+    background:rgba(239,68,68,0.10);
+    color:#ef4444;
+}
+.api-key-row {
+    display:flex;
+    gap:8px;
+}
+.api-key-row .layui-input {
+    flex:1;
+}
+.api-key-toggle {
+    min-width:74px;
+}
+.api-key-status {
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    padding:3px 8px;
+    border-radius:999px;
+    font-size:12px;
+    margin-top:8px;
+}
+.api-key-status.saved {
+    color:#16a34a;
+    background:rgba(22,163,74,0.10);
+    border:1px solid rgba(22,163,74,0.24);
+}
+.api-key-status.empty {
+    color:#f59e0b;
+    background:rgba(245,158,11,0.10);
+    border:1px solid rgba(245,158,11,0.24);
+}
+.api-key-reuse-confirm {
+    display:none;
+    margin-top:10px;
+    padding:10px 12px;
+    border-radius:8px;
+    border:1px solid rgba(245,158,11,0.36);
+    background:rgba(245,158,11,0.10);
+    color:var(--text-secondary);
+    font-size:12px;
+    line-height:1.6;
+}
+.api-key-reuse-confirm.is-visible {
+    display:block;
+}
+.api-key-reuse-confirm.is-attention {
+    border-color:rgba(239,68,68,0.55);
+    background:rgba(239,68,68,0.10);
+}
+.api-key-reuse-confirm label {
+    display:flex;
+    align-items:flex-start;
+    gap:8px;
+    margin-top:8px;
+    cursor:pointer;
+    color:var(--text-primary);
+    font-weight:600;
+}
+.api-key-reuse-confirm input[type="checkbox"] {
+    margin-top:3px;
+}
+.user-model-switcher {
+    padding:12px 14px;
+    margin-bottom:14px;
+    border-radius:10px;
+    border:1px solid rgba(255,255,255,0.10);
+    background:rgba(255,255,255,0.04);
+}
+.user-model-switcher .switcher-actions {
+    display:flex;
+    gap:8px;
+    align-items:center;
+}
+.model-scope-tip {
+    margin-top:8px;
+    color:var(--text-muted);
+    font-size:12px;
+}
 </style>
 
 <div class="layui-card">
@@ -24,19 +120,49 @@
         {% end %}
 
         <div class="quick-model-help">
-            该页面面向普通用户开放，只允许配置当前默认/首个模型的基础 API 连接信息；
-            不提供模型删除、启停、设为默认等全局管理操作。如需完整模型管理，请联系管理员授权“模型引擎”。
-            修改提供商、API Base 或 Model Name 时必须重新输入 API Key，避免复用已有密钥到新的接口地址。
+            该页面面向普通用户开放，只管理“我的模型配置”分组，不会修改管理员提供的全局模型；
+            管理员模型和用户模型会在聊天页分组展示，避免多用户互相覆盖 API 配置。
+            API Key 默认以密码形式隐藏但会回显，点击“显示”可明文确认；保存前可点击“测试连接”验证配置是否可用。
+            如果修改提供商、API Base 或 Model Name，页面会显示“复用当前密钥”的确认区；
+            你可以重新输入新密钥，或勾选确认继续使用已保存密钥。
         </div>
 
-        <form class="layui-form" action="/admin/model/config" method="post" style="max-width:700px;">
+        <div class="user-model-switcher">
+            <div class="switcher-actions">
+                <select id="user-model-switch" lay-filter="user-model-switch" style="max-width:360px;">
+                    {% if model_options %}
+                    {% for opt in model_options %}
+                    <option value="{{ opt['id'] }}" {% if model and model['id'] == opt['id'] %}selected{% end %}>
+                        {{ '⭐ ' if opt.get('is_default') == 1 else '' }}{{ opt['name'] }}
+                    </option>
+                    {% end %}
+                    {% else %}
+                    <option value="">暂无我的模型配置</option>
+                    {% end %}
+                </select>
+                <a href="/admin/model/config?new=1" class="layui-btn layui-btn-primary layui-btn-sm">
+                    <i class="layui-icon layui-icon-add-1"></i> 新建我的模型
+                </a>
+            </div>
+            <div class="model-scope-tip">
+                当前编辑对象：{{ '我的模型配置' if model else '新的我的模型配置' }}。
+                管理员提供的模型请在聊天页“管理员提供”分组中直接选择，普通用户不会覆盖它们。
+            </div>
+        </div>
+
+        <form class="layui-form" id="quick-model-form" action="/admin/model/config" method="post" style="max-width:700px;">
             {% module xsrf_form_html() %}
+            {% if model %}
+            <input type="hidden" name="id" value="{{ model['id'] }}">
+            {% else %}
+            <input type="hidden" name="new_model" value="1">
+            {% end %}
 
             <div class="layui-form-item">
                 <label class="layui-form-label">模型名称</label>
                 <div class="layui-input-block">
                     <input type="text" name="name" class="layui-input" required
-                           value="{{ model['name'] if model else '自助配置模型' }}"
+                           value="{{ model['name'] if model else '我的模型配置' }}"
                            placeholder="例如：GPT-4o-mini">
                 </div>
             </div>
@@ -44,7 +170,7 @@
             <div class="layui-form-item">
                 <label class="layui-form-label">提供商</label>
                 <div class="layui-input-block">
-                    <select name="provider">
+                    <select name="provider" lay-filter="quick-provider">
                         {% for p in providers %}
                         <option value="{{ p['value'] }}" {% if model and model['provider'] == p['value'] %}selected{% end %}>
                             {{ p['name'] }}
@@ -66,14 +192,32 @@
             <div class="layui-form-item">
                 <label class="layui-form-label">API Key</label>
                 <div class="layui-input-block">
-                    <input type="password" name="api_key" class="layui-input"
-                           value="" placeholder="{{ '留空则不修改' if model else 'sk-...' }}">
+                    <div class="api-key-row">
+                        <input type="password" name="api_key" id="api-key-input" class="layui-input"
+                               value="{{ model['api_key'] if model else '' }}" placeholder="sk-...">
+                        <button type="button" class="layui-btn layui-btn-primary api-key-toggle" id="toggle-api-key">👁 显示</button>
+                    </div>
+                    {% if model and model.get('api_key') %}
+                    <div class="api-key-status saved">● 已保存密钥</div>
+                    {% else %}
+                    <div class="api-key-status empty">● 未配置密钥</div>
+                    {% end %}
                     <div class="layui-form-mid layui-word-aux">
-                        修改提供商/API Base/Model Name 时必须重填；仅修改显示名称或分类时可留空保留。
+                        已保存的密钥会在密码框中回显，默认隐藏；请自行决定是否点击“显示”明文查看。
                     </div>
                     {% if model %}
                     <div style="margin-top:6px;">
                         <input type="checkbox" name="clear_key" value="1" title="清除密钥（将 API Key 设为空）">
+                    </div>
+                    <div class="api-key-reuse-confirm" id="api-key-reuse-confirm">
+                        <strong>连接信息已变更</strong><br>
+                        你修改了提供商、API Base 或 Model Name。如果要继续使用当前已保存密钥，请勾选下面的确认项；
+                        否则请在上方输入新的 API Key。
+                        <label for="confirm-reuse-key">
+                            <input type="checkbox" name="confirm_reuse_key" id="confirm-reuse-key"
+                                   value="1" lay-ignore>
+                            <span>我确认将当前已保存密钥用于新的提供商 / API Base / Model Name</span>
+                        </label>
                     </div>
                     {% end %}
                 </div>
@@ -101,12 +245,28 @@
                 </div>
             </div>
 
+            <div class="layui-form-item">
+                <label class="layui-form-label">默认设置</label>
+                <div class="layui-input-block">
+                    <input type="checkbox" name="set_default" value="1"
+                           title="设为我的默认模型"
+                           {% if (model and model.get('is_default') == 1) or not model_options %}checked{% end %}>
+                    <div class="layui-form-mid layui-word-aux">
+                        仅影响你自己的模型分组，不会改变管理员默认模型。
+                    </div>
+                </div>
+            </div>
+
             <div class="layui-form-item" style="margin-top:20px;">
                 <div class="layui-input-block">
+                    <button type="button" class="layui-btn layui-btn-warm" id="test-api-config">
+                        <i class="layui-icon layui-icon-vercode"></i> 测试连接
+                    </button>
                     <button type="submit" class="layui-btn layui-btn-normal">
                         <i class="layui-icon layui-icon-ok"></i> 保存 API 配置
                     </button>
                     <a href="/chat" class="layui-btn layui-btn-primary">返回前台问数</a>
+                    <div id="quick-model-test-result" class="quick-model-test-result"></div>
                 </div>
             </div>
         </form>
@@ -119,5 +279,149 @@
 layui.use('form', function(){
     layui.form.render();
 });
+
+(function(){
+    var keyInput = document.getElementById('api-key-input');
+    var toggleBtn = document.getElementById('toggle-api-key');
+    var testBtn = document.getElementById('test-api-config');
+    var form = document.getElementById('quick-model-form');
+    var resultBox = document.getElementById('quick-model-test-result');
+    var userModelSwitch = document.getElementById('user-model-switch');
+    var reuseBox = document.getElementById('api-key-reuse-confirm');
+    var reuseCheck = document.getElementById('confirm-reuse-key');
+    var providerInput = form ? form.querySelector('[name="provider"]') : null;
+    var apiBaseInput = form ? form.querySelector('[name="api_base"]') : null;
+    var modelNameInput = form ? form.querySelector('[name="model_name"]') : null;
+    var clearKeyInput = form ? form.querySelector('[name="clear_key"]') : null;
+    var hasSavedKey = {% raw json_encode(True if model and model.get('api_key') else False) %};
+    var initialProvider = {% raw json_encode(model['provider'] if model else '') %};
+    var initialApiBase = {% raw json_encode(model['api_base'] if model else '') %};
+    var initialModelName = {% raw json_encode(model['model_name'] if model else '') %};
+    var initialApiKey = keyInput ? keyInput.value : '';
+
+    if (toggleBtn && keyInput) {
+        toggleBtn.addEventListener('click', function(){
+            var visible = keyInput.type === 'text';
+            keyInput.type = visible ? 'password' : 'text';
+            toggleBtn.textContent = visible ? '👁 显示' : '🙈 隐藏';
+        });
+    }
+
+    if (userModelSwitch) {
+        layui.use('form', function(){
+            layui.form.on('select(user-model-switch)', function(data){
+                if (data.value) {
+                    window.location.href = '/admin/model/config?id=' + encodeURIComponent(data.value);
+                }
+            });
+        });
+    }
+
+    function showResult(ok, text) {
+        resultBox.className = 'quick-model-test-result ' + (ok ? 'ok' : 'fail');
+        resultBox.textContent = text;
+    }
+
+    function connectionChanged() {
+        if (!hasSavedKey || !providerInput || !apiBaseInput || !modelNameInput) {
+            return false;
+        }
+        return providerInput.value !== initialProvider ||
+            apiBaseInput.value.trim() !== initialApiBase ||
+            modelNameInput.value.trim() !== initialModelName;
+    }
+
+    function currentKeyIsSavedKey() {
+        return keyInput && keyInput.value.trim() !== '' && keyInput.value.trim() === initialApiKey.trim();
+    }
+
+    function clearKeySelected() {
+        return clearKeyInput && clearKeyInput.checked;
+    }
+
+    function syncReuseConfirm() {
+        if (!reuseBox || !reuseCheck) {
+            return false;
+        }
+        var visible = connectionChanged() && currentKeyIsSavedKey() && !clearKeySelected();
+        reuseBox.classList.toggle('is-visible', visible);
+        if (!visible) {
+            reuseBox.classList.remove('is-attention');
+            reuseCheck.checked = false;
+        }
+        return visible;
+    }
+
+    function requireReuseConfirm(actionText) {
+        var visible = syncReuseConfirm();
+        if (!visible || (reuseCheck && reuseCheck.checked)) {
+            return false;
+        }
+        reuseBox.classList.add('is-attention');
+        var msg = '连接信息已变更。如果要' + actionText + '并继续使用当前已保存密钥，请先勾选“确认复用”；否则请输入新的 API Key。';
+        showResult(false, msg);
+        reuseBox.scrollIntoView({behavior: 'smooth', block: 'center'});
+        return true;
+    }
+
+    [providerInput, apiBaseInput, modelNameInput, keyInput, clearKeyInput].forEach(function(el){
+        if (el) {
+            el.addEventListener('change', syncReuseConfirm);
+            el.addEventListener('input', syncReuseConfirm);
+        }
+    });
+    layui.use('form', function(){
+        layui.form.on('select(quick-provider)', syncReuseConfirm);
+    });
+    if (reuseCheck) {
+        reuseCheck.addEventListener('change', function(){
+            if (reuseCheck.checked && reuseBox) {
+                reuseBox.classList.remove('is-attention');
+            }
+        });
+    }
+    syncReuseConfirm();
+
+    if (form) {
+        form.addEventListener('submit', function(e){
+            if (requireReuseConfirm('保存')) {
+                e.preventDefault();
+            }
+        });
+    }
+
+    if (testBtn && form) {
+        testBtn.addEventListener('click', function(){
+            if (requireReuseConfirm('测试连接')) {
+                return;
+            }
+            var formData = new FormData(form);
+            testBtn.disabled = true;
+            testBtn.innerHTML = '<i class="layui-icon layui-icon-loading layui-anim layui-anim-rotate layui-anim-loop"></i> 测试中...';
+            showResult(false, '正在测试模型 API 连接，请稍候...');
+            fetch('/admin/model/config/test', {
+                method: 'POST',
+                body: new URLSearchParams(formData),
+                credentials: 'same-origin',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'}
+            })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                var msg = d.msg || (d.code === 0 ? '测试成功' : '测试失败');
+                if (d.elapsed_ms !== undefined) {
+                    msg += '（耗时 ' + d.elapsed_ms + 'ms）';
+                }
+                showResult(d.code === 0, msg);
+            })
+            .catch(function(err){
+                showResult(false, '测试请求失败：' + err);
+            })
+            .finally(function(){
+                testBtn.disabled = false;
+                testBtn.innerHTML = '<i class="layui-icon layui-icon-vercode"></i> 测试连接';
+            });
+        });
+    }
+})();
 </script>
 {% end %}

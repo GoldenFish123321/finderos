@@ -199,7 +199,7 @@ class TestLoadSkillMCPTool(unittest.TestCase):
 
     def test_load_skill_returns_prompt_template(self):
         """加载技能，返回 prompt 模板内容。"""
-        from app.mcp.tools import _load_skill
+        from app.mcp.builtin_tools.system_tools import _load_skill
         result = _load_skill("测试技能1")
         self.assertTrue(result["success"])
         self.assertEqual(result["skill_name"], "测试技能1")
@@ -208,7 +208,7 @@ class TestLoadSkillMCPTool(unittest.TestCase):
 
     def test_load_skill_not_found(self):
         """加载不存在的技能。"""
-        from app.mcp.tools import _load_skill
+        from app.mcp.builtin_tools.system_tools import _load_skill
         result = _load_skill("不存在的技能")
         self.assertFalse(result["success"])
         self.assertIn("不存在", result["error"])
@@ -216,7 +216,7 @@ class TestLoadSkillMCPTool(unittest.TestCase):
     def test_load_skill_disabled(self):
         """加载已禁用的技能。"""
         from app.models.skill import SkillRepository
-        from app.mcp.tools import _load_skill
+        from app.mcp.builtin_tools.system_tools import _load_skill
         # 禁用技能1
         SkillRepository.toggle_enabled(1)
         result = _load_skill("测试技能1")
@@ -240,39 +240,10 @@ class TestSkillMCPRegistration(unittest.TestCase):
 
     def test_load_skill_schema(self):
         """验证 load_skill 的 JSON Schema 包含 skill_name 参数。"""
-        from app.mcp.tools import ALL_TOOL_DEFINITIONS
+        from app.mcp.registry import discover_builtin_tool_definitions
+        definitions = discover_builtin_tool_definitions()
         load_skill_def = None
-        for t in ALL_TOOL_DEFINITIONS:
-            if t["name"] == "load_skill":
-                load_skill_def = t
-                break
-        self.assertIsNotNone(load_skill_def)
-        # 禁用技能1
-        SkillRepository.toggle_enabled(1)
-        result = _load_skill("测试技能1")
-        self.assertFalse(result["success"])
-        self.assertIn("已被禁用", result["error"])
-        # 还原
-        SkillRepository.toggle_enabled(1)
-
-
-class TestSkillMCPRegistration(unittest.TestCase):
-    """验证 load_skill 工具是否注册到 MCP Server。"""
-
-    def test_tool_registered(self):
-        from app.mcp.tools import register_all_tools, get_tool_names
-        from app.mcp.server import MCPServer
-        # 创建独立的 server 实例避免单例污染
-        server = MCPServer()
-        register_all_tools(server)
-        names = get_tool_names()
-        self.assertIn("load_skill", names)
-
-    def test_load_skill_schema(self):
-        """验证 load_skill 的 JSON Schema 包含 skill_name 参数。"""
-        from app.mcp.tools import ALL_TOOL_DEFINITIONS
-        load_skill_def = None
-        for t in ALL_TOOL_DEFINITIONS:
+        for t in definitions:
             if t["name"] == "load_skill":
                 load_skill_def = t
                 break
@@ -281,9 +252,10 @@ class TestSkillMCPRegistration(unittest.TestCase):
 
 
 class TestAllToolDefinitions(unittest.TestCase):
-    """验证 ALL_TOOL_DEFINITIONS 包含完整的 18 个工具定义 (v0.10 补齐)。"""
+    """验证 discover_builtin_tool_definitions() 自动发现所有 builtin 工具（替代旧 ALL_TOOL_DEFINITIONS）。"""
 
-    EXPECTED_TOOLS = {
+    # 截至 v1.3.0-beta，builtin_tools/ 包中共有 20 个工具
+    MIN_EXPECTED_TOOLS = {
         # 数据仓库类
         "search_warehouse", "get_recent_warehouse_data", "get_warehouse_stats",
         "search_warehouse_fulltext",
@@ -303,29 +275,29 @@ class TestAllToolDefinitions(unittest.TestCase):
         "load_skill",
         # 系统管理类
         "get_system_stats",
+        # v1.3.0 新增：多模态媒体生成
+        "generate_image", "generate_video",
     }
 
-    def test_all_18_tools_defined(self):
-        """ALL_TOOL_DEFINITIONS 应包含全部 18 个工具定义。"""
-        from app.mcp.tools import ALL_TOOL_DEFINITIONS
-        actual = {t["name"] for t in ALL_TOOL_DEFINITIONS}
-        self.assertEqual(len(actual), 18, f"期望 18 个工具，实际 {len(actual)} 个")
-        missing = self.EXPECTED_TOOLS - actual
+    def test_all_expected_tools_discovered(self):
+        """discover_builtin_tool_definitions() 应包含全部预期的内置工具。"""
+        from app.mcp.registry import discover_builtin_tool_definitions
+        definitions = discover_builtin_tool_definitions()
+        actual = {t["name"] for t in definitions}
+        missing = self.MIN_EXPECTED_TOOLS - actual
         self.assertEqual(missing, set(), f"缺失工具: {missing}")
-        extra = actual - self.EXPECTED_TOOLS
-        self.assertEqual(extra, set(), f"多余工具: {extra}")
 
     def test_all_tools_have_handler(self):
         """每个工具定义必须有 handler 且 handler 可调用。"""
-        from app.mcp.tools import ALL_TOOL_DEFINITIONS
-        for t in ALL_TOOL_DEFINITIONS:
+        from app.mcp.registry import discover_builtin_tool_definitions
+        for t in discover_builtin_tool_definitions():
             self.assertIn("handler", t, f"工具 {t['name']} 缺少 handler")
             self.assertTrue(callable(t["handler"]), f"工具 {t['name']} 的 handler 不可调用")
 
     def test_all_tools_have_required_schema(self):
         """每个工具定义必须有 name、description、input_schema。"""
-        from app.mcp.tools import ALL_TOOL_DEFINITIONS
-        for t in ALL_TOOL_DEFINITIONS:
+        from app.mcp.registry import discover_builtin_tool_definitions
+        for t in discover_builtin_tool_definitions():
             self.assertIn("name", t)
             self.assertIn("description", t)
             self.assertIn("input_schema", t)

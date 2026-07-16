@@ -103,6 +103,11 @@ document.body.classList.add('dark-theme');
                     <span class="nav-icon">💬</span> <span>会话管理</span>
                 </a>
                 {% end %}
+                {% if admin_can('/admin/message') %}
+                <a href="/admin/message" class="{{ 'active' if '/admin/message' in handler.request.path else '' }}">
+                    <span class="nav-icon">📩</span> <span>消息管理</span>
+                </a>
+                {% end %}
             </div>
             {% end %}
             {% if admin_can('/admin/interface') or admin_can('/admin/employee') or admin_can('/admin/skill') or admin_can('/admin/mcp/tool') %}

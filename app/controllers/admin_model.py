@@ -9,12 +9,22 @@ admin_model.py — 模型引擎控制器
 """
 import json
 import logging
+import time
+import asyncio
+import atexit
+import concurrent.futures
 import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
 from app.models.ai_model import AiModelRepository, CATEGORIES, PROVIDERS
 from app.utils.security import write_audit_log
+from app.utils.safe_http import SafeHttpError, safe_http_request
 
 logger = logging.getLogger(__name__)
+
+_model_api_test_executor = concurrent.futures.ThreadPoolExecutor(
+    max_workers=4, thread_name_prefix="model-api-test"
+)
+atexit.register(_model_api_test_executor.shutdown, wait=True)
 
 
 def _model_connection_changed(model: dict, provider: str, api_base: str, model_name: str) -> bool:
@@ -24,6 +34,153 @@ def _model_connection_changed(model: dict, provider: str, api_base: str, model_n
         (model.get("api_base") or "") != api_base,
         (model.get("model_name") or "") != model_name,
     ])
+
+
+def _resolve_quick_config_api_key(
+    model: dict | None,
+    provider: str,
+    api_base: str,
+    model_name: str,
+    submitted_api_key: str,
+    clear_key: bool = False,
+    confirm_reuse_key: bool = False,
+) -> tuple[str, str]:
+    """Resolve which API Key should be saved/tested for quick config.
+
+    The quick-config page renders the existing key into a password input so
+    the user can verify it and optionally toggle plaintext display. Empty input
+    still means "reuse existing key" when endpoint fields are unchanged.
+    """
+    if clear_key:
+        return "", ""
+    if submitted_api_key:
+        if (
+            model and model.get("api_key")
+            and submitted_api_key == model.get("api_key")
+            and _model_connection_changed(model, provider, api_base, model_name)
+            and not confirm_reuse_key
+        ):
+            return "", (
+                "检测到提供商、API Base 或 Model Name 已变更。"
+                "若要继续使用当前已保存密钥，请在页面出现的确认区勾选复用当前密钥；"
+                "否则请重新输入新的 API Key"
+            )
+        return submitted_api_key, ""
+    if not model:
+        return "", ""
+    if _model_connection_changed(model, provider, api_base, model_name) and model.get("api_key"):
+        return "", "修改提供商、API Base 或 Model Name 时必须重新输入 API Key"
+    return model.get("api_key", "") or "", ""
+
+
+def _redact_model_test_text(text: str, api_key: str = "") -> str:
+    """Remove sensitive values from model test messages before UI/audit output."""
+    text = str(text or "")
+    if api_key:
+        text = text.replace(api_key, "[REDACTED]")
+        text = text.replace("Bearer " + api_key, "Bearer [REDACTED]")
+    return text[:300]
+
+
+def _extract_model_test_detail(status: int, reason: str, body: str, api_key: str = "") -> str:
+    """Build a short, non-secret detail message for model API test results."""
+    try:
+        data = json.loads(body or "{}")
+    except json.JSONDecodeError:
+        return _redact_model_test_text(body or reason or "", api_key)
+
+    if isinstance(data, dict):
+        if isinstance(data.get("error"), dict):
+            return _redact_model_test_text(data["error"].get("message") or data["error"], api_key)
+        choices = data.get("choices")
+        if isinstance(choices, list) and choices:
+            return "接口返回 choices，模型可正常响应"
+        if data.get("id") or data.get("model"):
+            return "接口返回模型响应元数据"
+    return _redact_model_test_text(f"HTTP {status}: {reason}", api_key)
+
+
+def _test_model_connection_sync(
+    provider: str,
+    api_base: str,
+    api_key: str,
+    model_name: str,
+    timeout: int = 20,
+) -> dict:
+    """Synchronously test an OpenAI-compatible chat completions endpoint."""
+    start = time.time()
+    api_base = (api_base or "").strip().rstrip("/")
+    model_name = (model_name or "").strip()
+    api_key = (api_key or "").strip()
+
+    if not api_base:
+        return {"code": 1, "msg": "请填写 API Base URL", "status": 0}
+    if not model_name:
+        return {"code": 1, "msg": "请填写 Model Name", "status": 0}
+    if not api_key:
+        return {"code": 1, "msg": "请填写 API Key", "status": 0}
+
+    url = f"{api_base}/chat/completions"
+    payload = json.dumps({
+        "model": model_name,
+        "messages": [
+            {"role": "user", "content": "ping"}
+        ],
+        "max_tokens": 1,
+        "temperature": 0,
+        "stream": False,
+    }).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json; charset=utf-8",
+        "Authorization": f"Bearer {api_key}",
+    }
+
+    try:
+        resp = safe_http_request(
+            url,
+            method="POST",
+            headers=headers,
+            body=payload,
+            timeout=timeout,
+            max_bytes=64 * 1024,
+        )
+        body = resp.body.decode("utf-8", errors="replace")
+        elapsed_ms = int((time.time() - start) * 1000)
+        detail = _extract_model_test_detail(resp.status, resp.reason, body, api_key)
+        ok = 200 <= resp.status < 300 and "error" not in (body[:200].lower())
+        if ok:
+            msg = f"测试成功：HTTP {resp.status}，{detail}"
+        elif resp.status in (401, 403):
+            msg = f"认证失败：HTTP {resp.status}，请检查 API Key 或模型权限"
+        else:
+            msg = f"测试失败：HTTP {resp.status} {resp.reason}，{detail}"
+        return {
+            "code": 0 if ok else 1,
+            "msg": msg,
+            "status": resp.status,
+            "elapsed_ms": elapsed_ms,
+            "provider": provider,
+            "resolved_ip": resp.resolved_ip,
+        }
+    except SafeHttpError as e:
+        msg = _redact_model_test_text(str(e), api_key)
+        return {
+            "code": 1,
+            "msg": msg,
+            "status": 0,
+            "elapsed_ms": int((time.time() - start) * 1000),
+            "provider": provider,
+        }
+    except Exception as e:
+        msg = _redact_model_test_text(str(e), api_key)
+        logger.warning("模型 API 测试失败: %s", msg)
+        return {
+            "code": 1,
+            "msg": f"模型 API 测试失败: {msg}",
+            "status": 0,
+            "elapsed_ms": int((time.time() - start) * 1000),
+            "provider": provider,
+        }
 
 
 class ModelListHandler(AdminBaseHandler):
@@ -36,9 +193,11 @@ class ModelListHandler(AdminBaseHandler):
         except (ValueError, TypeError):
             page = 1
         category = self.get_query_argument("category", "").strip()
-        rows, total = AiModelRepository.get_all(page=page, page_size=6, category=category)
+        rows, total = AiModelRepository.get_all(
+            page=page, page_size=6, category=category, model_scope="admin", owner_username=""
+        )
         total_pages = max(1, (total + 6 - 1) // 6)
-        stats = AiModelRepository.get_stats()
+        stats = AiModelRepository.get_stats(model_scope="admin", owner_username="")
 
         self.render(
             "admin/model_list.html",
@@ -70,6 +229,9 @@ class ModelFormHandler(AdminBaseHandler):
                 return
             if not model:
                 self.write('<script>alert("模型不存在");window.history.back();</script>')
+                return
+            if model.get("model_scope", "admin") != "admin":
+                self.write('<script>alert("该模型不属于管理员模型组");window.history.back();</script>')
                 return
 
         self.render(
@@ -113,24 +275,40 @@ class ModelFormHandler(AdminBaseHandler):
                 return
             # 检查是否需要清除 API Key（管理员主动勾选"清除密钥"复选框）
             clear_key = self.get_body_argument("clear_key", "0") == "1"
+            existing = AiModelRepository.get_by_id(model_id, include_api_key=True)
+            if not existing or existing.get("model_scope", "admin") != "admin":
+                self.write('<script>alert("该模型不属于管理员模型组");window.history.back();</script>')
+                return
             if clear_key:
                 api_key = ""  # 明确清除
             elif not api_key:
                 # 编辑时：如果 API Key 未填写且未勾选清除，保留数据库中的旧值
-                existing = AiModelRepository.get_by_id(model_id, include_api_key=True)
-                if existing:
-                    api_key = existing["api_key"]
+                api_key = existing["api_key"]
             ok = AiModelRepository.update(
                 model_id, name, provider, api_base, api_key, model_name,
                 category, system_prompt, temperature, top_p, top_k, max_tokens, context_size
             )
             msg = "更新成功" if ok else "更新失败"
+            write_audit_log(
+                action="MODEL_UPDATE",
+                username=self.current_user,
+                target=f"model:{model_id}",
+                detail=msg,
+                client_ip=self.request.remote_ip or "",
+            )
         else:
             new_id = AiModelRepository.create(
                 name, provider, api_base, api_key, model_name,
                 category, system_prompt, temperature, top_p, top_k, max_tokens, context_size
             )
             msg = "创建成功" if new_id > 0 else "创建失败"
+            write_audit_log(
+                action="MODEL_CREATE",
+                username=self.current_user,
+                target=f"model:{new_id}" if new_id > 0 else "model:create",
+                detail=msg,
+                client_ip=self.request.remote_ip or "",
+            )
 
         self.redirect(f"/admin/model?msg={msg}")
 
@@ -138,26 +316,67 @@ class ModelFormHandler(AdminBaseHandler):
 class ModelQuickConfigHandler(AdminBaseHandler):
     """模型 API 快速配置页。
 
-    面向默认普通用户的窄权限入口，仅允许维护当前默认/首个模型的
-    API Base、API Key、Provider、Model Name 等基础连接信息，不提供
-    删除、启停、设默认和完整模型 CRUD 能力。
+    面向默认普通用户的窄权限入口，仅允许维护当前用户自己的 user 模型组，
+    不写入管理员提供的 admin 模型组，避免多用户互相覆盖全局配置。
     """
 
-    def _get_target_model(self):
-        model = AiModelRepository.get_default(include_api_key=True)
+    def _get_user_models(self, include_api_key: bool = True):
+        rows, _ = AiModelRepository.get_all(
+            page=1,
+            page_size=200,
+            include_api_key=include_api_key,
+            model_scope="user",
+            owner_username=self.current_user,
+        )
+        return rows
+
+    def _get_target_model(self, source: str = "query"):
+        if source == "body":
+            model_id = self.get_body_argument("id", "").strip()
+            force_new = self.get_body_argument("new_model", "0") == "1"
+        else:
+            model_id = self.get_query_argument("id", "").strip()
+            force_new = self.get_query_argument("new", "0") == "1"
+        if force_new:
+            return None
+        if model_id:
+            try:
+                model = AiModelRepository.get_by_id(int(model_id), include_api_key=True)
+            except (ValueError, TypeError):
+                return None
+            if (
+                model
+                and model.get("model_scope") == "user"
+                and model.get("owner_username", "") == self.current_user
+            ):
+                return model
+            return None
+        model = AiModelRepository.get_default(
+            include_api_key=True, model_scope="user", owner_username=self.current_user
+        )
         if model:
             return model
-        rows, _ = AiModelRepository.get_all(page=1, page_size=1, include_api_key=True)
+        rows, _ = AiModelRepository.get_all(
+            page=1,
+            page_size=1,
+            include_api_key=True,
+            model_scope="user",
+            owner_username=self.current_user,
+        )
         return rows[0] if rows else None
 
     @tornado.web.authenticated
     def get(self):
         msg = self.get_query_argument("msg", "")
+        model = self._get_target_model(source="query")
+        model_options = self._get_user_models(include_api_key=False)
         self.render(
             "admin/model_quick_config.html",
             title="模型 API 快速配置 — 瞭望与问数系统",
             username=self.current_user,
-            model=self._get_target_model(),
+            model=model,
+            model_options=model_options,
+            is_new=(model is None),
             providers=PROVIDERS,
             categories=CATEGORIES,
             msg=msg,
@@ -165,13 +384,18 @@ class ModelQuickConfigHandler(AdminBaseHandler):
 
     @tornado.web.authenticated
     def post(self):
-        model = self._get_target_model()
+        model = self._get_target_model(source="body")
+        submitted_model_id = self.get_body_argument("id", "").strip()
+        if submitted_model_id and not model:
+            self.write('<script>alert("无权修改该模型或模型不存在");window.history.back();</script>')
+            return
         name = self.get_body_argument("name", "").strip()
         provider = self.get_body_argument("provider", "openai").strip()
         api_base = self.get_body_argument("api_base", "").strip()
         api_key = self.get_body_argument("api_key", "").strip()
         model_name = self.get_body_argument("model_name", "").strip()
         category = self.get_body_argument("category", "text").strip()
+        set_as_default = self.get_body_argument("set_default", "0") == "1"
 
         if not name:
             self.write('<script>alert("模型名称不能为空");window.history.back();</script>')
@@ -185,19 +409,15 @@ class ModelQuickConfigHandler(AdminBaseHandler):
 
         if model:
             clear_key = self.get_body_argument("clear_key", "0") == "1"
-            connection_changed = _model_connection_changed(model, provider, api_base, model_name)
-            if connection_changed and model.get("api_key") and not api_key and not clear_key:
+            confirm_reuse_key = self.get_body_argument("confirm_reuse_key", "0") == "1"
+            api_key_to_save, key_error = _resolve_quick_config_api_key(
+                model, provider, api_base, model_name, api_key, clear_key, confirm_reuse_key
+            )
+            if key_error:
                 self.write(
-                    '<script>alert("修改提供商、API Base 或 Model Name 时必须重新输入 API Key，'
-                    '避免复用已有密钥到新的接口地址");window.history.back();</script>'
+                    f'<script>alert("{key_error}");window.history.back();</script>'
                 )
                 return
-            if clear_key:
-                api_key_to_save = ""
-            elif api_key:
-                api_key_to_save = api_key
-            else:
-                api_key_to_save = model.get("api_key", "")
 
             ok = AiModelRepository.update(
                 model["id"],
@@ -224,11 +444,19 @@ class ModelQuickConfigHandler(AdminBaseHandler):
                 api_key=api_key,
                 model_name=model_name,
                 category=category,
+                model_scope="user",
+                owner_username=self.current_user,
             )
-            if new_id > 0:
+            has_user_default = AiModelRepository.get_default(
+                model_scope="user", owner_username=self.current_user
+            )
+            if new_id > 0 and (set_as_default or not has_user_default):
                 AiModelRepository.set_default(new_id)
             target = f"model:{new_id}" if new_id > 0 else "model:create"
             msg = "模型 API 配置已创建" if new_id > 0 else "模型 API 配置创建失败"
+
+        if model and set_as_default:
+            AiModelRepository.set_default(model["id"])
 
         write_audit_log(
             action="MODEL_QUICK_CONFIG",
@@ -237,7 +465,52 @@ class ModelQuickConfigHandler(AdminBaseHandler):
             detail=msg,
             client_ip=self.request.remote_ip or "",
         )
-        self.redirect(f"/admin/model/config?msg={msg}")
+        redirect_id = model["id"] if model else (new_id if "new_id" in locals() and new_id > 0 else "")
+        suffix = f"&id={redirect_id}" if redirect_id else ""
+        self.redirect(f"/admin/model/config?msg={msg}{suffix}")
+
+
+class ModelQuickConfigTestHandler(AdminBaseHandler):
+    """AJAX: 测试模型 API 快速配置是否可连通。"""
+
+    @tornado.web.authenticated
+    async def post(self):
+        model = ModelQuickConfigHandler._get_target_model(self, source="body")
+        submitted_model_id = self.get_body_argument("id", "").strip()
+        if submitted_model_id and not model:
+            self.write({"code": 1, "msg": "无权测试该模型或模型不存在", "status": 0})
+            return
+        provider = self.get_body_argument("provider", "openai").strip()
+        api_base = self.get_body_argument("api_base", "").strip()
+        api_key = self.get_body_argument("api_key", "").strip()
+        model_name = self.get_body_argument("model_name", "").strip()
+        clear_key = self.get_body_argument("clear_key", "0") == "1"
+        confirm_reuse_key = self.get_body_argument("confirm_reuse_key", "0") == "1"
+
+        if provider not in {p["value"] for p in PROVIDERS}:
+            self.write({"code": 1, "msg": "无效的提供商", "status": 0})
+            return
+
+        api_key_to_test, key_error = _resolve_quick_config_api_key(
+            model, provider, api_base, model_name, api_key, clear_key, confirm_reuse_key
+        )
+        if key_error:
+            self.write({"code": 1, "msg": f"{key_error}后再测试", "status": 0})
+            return
+
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            _model_api_test_executor,
+            lambda: _test_model_connection_sync(provider, api_base, api_key_to_test, model_name),
+        )
+        write_audit_log(
+            action="MODEL_QUICK_CONFIG_TEST",
+            username=self.current_user,
+            target=f"model:{model['id']}" if model else "model:draft",
+            detail=("success" if result.get("code") == 0 else "failed") + f": {_redact_model_test_text(result.get('msg', ''), api_key_to_test)[:200]}",
+            client_ip=self.request.remote_ip or "",
+        )
+        self.write(result)
 
 
 class ModelDeleteHandler(AdminBaseHandler):
@@ -250,7 +523,18 @@ class ModelDeleteHandler(AdminBaseHandler):
         except (ValueError, TypeError):
             self.write('<script>alert("无效的模型ID");window.history.back();</script>')
             return
+        model = AiModelRepository.get_by_id(model_id)
+        if not model or model.get("model_scope", "admin") != "admin":
+            self.write('<script>alert("该模型不属于管理员模型组");window.history.back();</script>')
+            return
         AiModelRepository.delete(model_id)
+        write_audit_log(
+            action="MODEL_DELETE",
+            username=self.current_user,
+            target=f"model:{model_id}",
+            detail=f"删除模型 ID={model_id}",
+            client_ip=self.request.remote_ip or "",
+        )
         self.redirect("/admin/model?msg=已删除")
 
 
@@ -264,12 +548,24 @@ class ModelToggleHandler(AdminBaseHandler):
         except (ValueError, TypeError):
             self.write('<script>alert("无效的模型ID");window.history.back();</script>')
             return
+        model = AiModelRepository.get_by_id(model_id)
+        if not model or model.get("model_scope", "admin") != "admin":
+            self.write('<script>alert("该模型不属于管理员模型组");window.history.back();</script>')
+            return
         status = AiModelRepository.toggle_enabled(model_id)
         if status == -1:
             self.write('<script>alert("模型不存在");window.history.back();</script>')
         else:
+            msg = "已启用" if status == 1 else "已禁用"
+            write_audit_log(
+                action="MODEL_TOGGLE",
+                username=self.current_user,
+                target=f"model:{model_id}",
+                detail=msg,
+                client_ip=self.request.remote_ip or "",
+            )
             self.redirect(
-                f"/admin/model?msg={'已启用' if status == 1 else '已禁用'}"
+                f"/admin/model?msg={msg}"
             )
 
 
@@ -283,7 +579,18 @@ class ModelDefaultHandler(AdminBaseHandler):
         except (ValueError, TypeError):
             self.write('<script>alert("无效的模型ID");window.history.back();</script>')
             return
+        model = AiModelRepository.get_by_id(model_id)
+        if not model or model.get("model_scope", "admin") != "admin":
+            self.write('<script>alert("该模型不属于管理员模型组");window.history.back();</script>')
+            return
         AiModelRepository.set_default(model_id)
+        write_audit_log(
+            action="MODEL_SET_DEFAULT",
+            username=self.current_user,
+            target=f"model:{model_id}",
+            detail="设为默认模型",
+            client_ip=self.request.remote_ip or "",
+        )
         self.redirect("/admin/model?msg=已设为默认模型")
 
 
@@ -302,7 +609,8 @@ class ModelApiListHandler(AdminBaseHandler):
             limit = 6
         category = self.get_query_argument("category", "").strip()
         rows, total = AiModelRepository.get_all(
-            page=page, page_size=limit, category=category, enabled_only=True
+            page=page, page_size=limit, category=category, enabled_only=True,
+            model_scope="admin", owner_username=""
         )
         items = []
         for r in rows:

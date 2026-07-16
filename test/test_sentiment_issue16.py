@@ -87,6 +87,15 @@ class TestSentimentHandler:
         from app.controllers.admin_base import AdminBaseHandler
         assert issubclass(AdminSentimentHandler, AdminBaseHandler)
 
+    def test_render_passes_xsrf_token(self):
+        """AdminSentimentHandler.get() 的 render 调用包含 xsrf_token"""
+        import inspect
+        from app.controllers.admin_sentiment import AdminSentimentHandler
+        source = inspect.getsource(AdminSentimentHandler.get)
+        assert "xsrf_token" in source, (
+            "AdminSentimentHandler.get() 的 self.render() 缺少 xsrf_token 参数"
+        )
+
 
 class TestSentimentTemplate:
     """验证模板"""

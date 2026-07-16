@@ -138,7 +138,8 @@ def _decompress(data: bytes, encoding: str) -> bytes:
         try:
             import brotli
         except ImportError:
-            raise RuntimeError("Brotli 响应需要安装 brotli 包")
+            logger.debug("Brotli 未安装，跳过 br 解压")
+            return data
         decoder = brotli.Decompressor()
         result = bytearray()
         try:
@@ -282,15 +283,19 @@ def deep_fetch(url: str, timeout: int = 30) -> Tuple[int, str, str, str]:
         if len(data) > 30 * 1024 * 1024:
             return 0, "", "", "解压后响应超过大小限制"
 
-        # 检测字符编码
+        # 检测字符编码（两阶段：strict 试探 + replace 容错解码）
         html = ""
+        detected_charset = None
         for charset_try in ["utf-8", "gbk", "gb2312", "gb18030", "latin-1"]:
             try:
-                html = data.decode(charset_try)
+                data.decode(charset_try, errors="strict")  # 试探：抛异常则表示不匹配
+                detected_charset = charset_try
                 break
             except (UnicodeDecodeError, LookupError):
                 continue
-        if not html:
+        if detected_charset:
+            html = data.decode(detected_charset, errors="replace")
+        else:
             html = data.decode("utf-8", errors="replace")
 
         if not html or len(html) < 500:

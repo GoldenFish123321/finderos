@@ -27,9 +27,9 @@ class AdminIndexHandler(AdminBaseHandler):
         source_count = WatchSourceRepository.get_count()
         result_count = WatchResultRepository.get_count()
         warehouse_count = DataWarehouseRepository.get_count()
-        model_count = AiModelRepository.get_count()
+        model_count = AiModelRepository.get_count(model_scope="admin", owner_username="")
         result_stats = WatchResultRepository.get_stats()
-        model_stats = AiModelRepository.get_stats()
+        model_stats = AiModelRepository.get_stats(model_scope="admin", owner_username="")
 
         # ── ECharts 图表数据（传递 Python 对象，模板中使用 json_encode 序列化）──
         source_distribution = self._get_source_distribution()
@@ -103,6 +103,7 @@ class AdminDashboardHandler(AdminBaseHandler):
             "admin/dashboard.html",
             title="数智大屏 — 瞭望与问数系统",
             username=self.current_user,
+            xsrf_token=self.xsrf_token.decode() if isinstance(self.xsrf_token, bytes) else self.xsrf_token,
             stats=stats,
             source_distribution=source_dist,
             trend=trend,

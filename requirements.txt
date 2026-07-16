@@ -4,7 +4,7 @@
 tornado>=6.4
 
 # 加密：API Key 存储加密
-cryptography>=41.0
+cryptography>=42.0.0
 
 # HTTP 压缩：Brotli 解压支持（百度等主流网站使用）
 brotli>=1.1

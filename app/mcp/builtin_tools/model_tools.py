@@ -12,7 +12,10 @@ from typing import Any, Dict
 def _list_ai_models() -> Dict[str, Any]:
     """列出所有启用的 AI 模型。"""
     from app.models.ai_model import AiModelRepository
-    models, _ = AiModelRepository.get_all(page=1, page_size=100, enabled_only=True)
+    models, _ = AiModelRepository.get_all(
+        page=1, page_size=100, enabled_only=True,
+        model_scope="admin", owner_username=""
+    )
     return {
         "total": len(models),
         "models": [

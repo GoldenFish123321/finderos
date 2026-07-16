@@ -19,15 +19,17 @@ migrate_db.py — 数据库迁移脚本
   v0.10 — 添加 mcp_tools MCP工具注册表 + mcp_tool_test_logs
   v0.10 — 添加 skills.mcp_tool_id / digital_employees.mcp_tool_ids
   v0.11 — 迁移旧 crawl4ai_enabled=1 员工的权限到 mcp_tool_ids
+  v1.3.5 — 为 conversation_messages 添加 is_sensitive / review_status 列（Issue #18）
 
 Usage:
   python migrate_db.py              # 执行待处理迁移
   python migrate_db.py --status     # 查看迁移状态
 """
 
-import logging
 import json
+import logging
 import os
+import re
 import sqlite3
 import sys
 
@@ -355,6 +357,27 @@ def run_migrations():
             "check": _check_crawl4ai_permissions_migrated,
             "run": _migrate_crawl4ai_permissions,
         },
+        # v1.3.5 Issue #18: conversation_messages 添加敏感标记和审核状态列
+        {
+            "name": "add_conversation_messages_is_sensitive",
+            "sql": "ALTER TABLE conversation_messages ADD COLUMN is_sensitive INTEGER DEFAULT 0",
+            "check": lambda c: _column_exists(c, "conversation_messages", "is_sensitive"),
+        },
+        {
+            "name": "add_conversation_messages_review_status",
+            "sql": "ALTER TABLE conversation_messages ADD COLUMN review_status TEXT DEFAULT 'pending'",
+            "check": lambda c: _column_exists(c, "conversation_messages", "review_status"),
+        },
+        {
+            "name": "idx_conv_msgs_sensitive",
+            "sql": "CREATE INDEX IF NOT EXISTS idx_conv_msgs_sensitive ON conversation_messages(is_sensitive)",
+            "check": lambda c: _index_exists(c, "idx_conv_msgs_sensitive"),
+        },
+        {
+            "name": "idx_conv_msgs_review",
+            "sql": "CREATE INDEX IF NOT EXISTS idx_conv_msgs_review ON conversation_messages(review_status)",
+            "check": lambda c: _index_exists(c, "idx_conv_msgs_review"),
+        },
     ]
 
     applied = 0
@@ -392,6 +415,8 @@ def _table_exists(conn, table_name: str) -> bool:
 
 def _column_exists(conn, table_name: str, column_name: str) -> bool:
     """检查列是否存在。"""
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name):
+        raise ValueError(f"非法表名: {table_name}")
     if not _table_exists(conn, table_name):
         return False
     rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()

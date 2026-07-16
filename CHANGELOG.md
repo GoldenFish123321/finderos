@@ -1,26 +1,107 @@
 # Changelog
 
-## v1.2.0-beta (2026-07-16) — 数智大屏 + 舆情大屏 + 手势交互
+## v1.5.1-beta (2026-07-16) — Crawl4ai 工具处理函数修复
 
-- 📊 **新功能 #23**：管理侧数智大屏 `/admin/dashboard` — 3D 地球 + 词云 + 数据可视化 (@GoldenFish123321)
-- 🌍 **ECharts-GL 3D 地球**：全球数据采集分布热力图，自动旋转，深色主题
-- ☁️ **词云分析**：`echarts-wordcloud` 从数据仓库标题提取关键词，圆形布局
-- 📈 **多图表联动**：近14天采集趋势（面积图）、来源分布（环形饼图）、深度采集占比
-- 🏆 **热门关键词榜**：Top 10 关键词排行，实时刷新
-- 🔄 **数据刷新**：一键刷新所有图表 + 关键词列表，支持 JSON API 异步更新
-- 🗄️ **新统计方法**：`get_keyword_frequency`、`get_dashboard_stats`、`get_trend_data`、`get_source_distribution`
-- 🔒 **CSP 更新**：允许 ECharts-GL 地球纹理加载
-- 🧪 **测试新增**：18 项大屏功能测试覆盖
+- 🐛 **Bug 修复**：修复 `collect_with_crawl4ai` 和 `batch_deep_collect` 两个 MCP 工具启动时报 "处理函数未找到" 警告
+  - `crawl4ai_tools.py` 函数重命名：`_deep_collect_url` → `_collect_with_crawl4ai`，`_batch_deep_collect_url` → `_batch_deep_collect`
+  - 消除与 `collect_tools._deep_collect_url` 的命名冲突
+  - 在 `catalog.py` 的 `upsert_builtin_tools` 中添加残留内置工具记录自动清理逻辑
 
-- 🛡️ **新功能 #16**：管理侧舆情大屏 `/admin/sentiment` — 敏感词预警 + AI 风析 (@GoldenFish123321)
-- 📋 **敏感词库**：24 个种子敏感词（高危/中危/低危三级），自动扫描数据仓库与用户对话
-- ⚠️ **实时预警**：预警滚动列表，按严重级别（高危红/中危橙/低危黄）标记
-- 📈 **预警趋势**：近7天预警趋势柱状图（全部 + 高危两条序列）
-- 🎯 **来源分布**：仓库/对话来源的环形饼图
-- 🔴 **严重级别分布**：高/中/低危占比环形图
-- 🔍 **一键扫描**：手动触发全量扫描 + 定时5分钟自动扫描
-- 🗄️ **新表**：`sentiment_sensitive_words` + `sentiment_alerts`（含索引）
-- 🧪 **测试新增**：17 项舆情功能测试覆盖
+## v1.5.0-beta (2026-07-16) — 管理侧消息管理 (Issue #18)
+
+- ✨ **新功能 #18**：管理侧独立消息管理页面，支持逐条查看/筛选/标记/删除所有跨会话消息
+  - **多维筛选**：按用户、角色（user/assistant/system）、关键字、敏感标记、审核状态、时间范围筛选
+  - **敏感内容标记**：单条/批量标记消息为敏感内容，与舆情大屏联动
+  - **审核状态管理**：支持 pending/reviewed/flagged/cleared 四种审核状态流转
+  - **批量操作**：批量删除、批量标记敏感、批量审核通过
+  - **操作审计**：所有标记/删除操作记录到 audit_logs
+- 🗄️ **数据库迁移**：`conversation_messages` 新增 `is_sensitive`（INTEGER）和 `review_status`（TEXT）列
+- 🧪 **测试 #18**：新增 `test_issue18_message_management.py`（22 个测试用例），覆盖模型层全部核心功能
+- 📝 **文档 #18**：README 新增消息管理 API 路由表，test_case.md 新增 25 个测试场景
+
+## v1.4.0-beta (2026-07-16) — 系统设置配置项扩展
+
+- ✨ **新功能 #99**：系统设置配置项从 8 项扩展至 19 项，新增 6 个配置类别
+  - **备份策略**：备份路径 `db_backup_path`、间隔天数 `db_backup_interval_days`、保留份数 `db_backup_keep_count`
+  - **日志配置**：日志级别 `log_level`（DEBUG/INFO/WARNING/ERROR）
+  - **通知配置**：SMTP 服务器 `smtp_host`、Webhook URL `webhook_url`
+  - **采集配置**：全局采集间隔 `collector_interval_minutes`
+  - **安全策略**：验证码开关 `captcha_enabled`、注册开关 `registration_enabled`、会话过期 `session_expire_hours`
+  - **上传限制**：上传大小上限 `upload_max_size_mb`（Logo 上传同步适配可配置上限）
+- 🔧 **架构改进**：`load_from_db()` 类型转换重构为集合匹配（`_INT_ATTRS`/`_FLOAT_ATTRS`/`_BOOL_ATTRS`）
+- 🗄️ **数据库迁移**：`INSERT OR IGNORE` 自动补充已有数据库缺失的新配置项
+- 🧪 **测试 #99**：新增 4 组专项测试（渲染/保存/持久化/开关行为），共 27 个测试点
+- 📝 **文档 #99**：README/design/requirement 同步更新系统配置架构说明
+
+## v1.3.4-beta (2026-07-16) — 批量 Bug 修复
+
+- 🐛 **批量修复 #58-#128**：42 个 Bug 和安全漏洞一次性修复，详见 [PR #131](https://github.com/GoldenFish123321/finderos/pull/131)
+  - **安全加固 (10)**：#128 (堆栈泄露), #126 (SQL注入), #125 (密码策略), #123 (CVE), #122 (SSRF), #119 (信息泄露), #86 (XSS), #81 (白名单), #80 (错误泄露), #79 (隐私保护)
+  - **Bug 修复 (32)**：#124, #121, #118, #117, #116, #115, #114, #113, #112, #111, #110, #109, #106, #97, #96, #95, #94, #93, #92, #91, #90, #89, #88, #87, #85, #84, #83, #82, #78, #77, #58, #113
+
+## v1.3.3-beta (2026-07-16) — Bug 修复
+
+- 🐛 **修复 #118**：`test/test_system_config.py` 移除硬编码 Windows 绝对路径（`d:\Code\shitproject\1\finderos`），改用 `os.path.dirname(os.path.abspath(__file__))` 动态构建项目路径，确保跨平台（Linux/macOS）测试可正常运行
+- 🧪 **测试 #118**：同步修复登录检测断言，适配登录后重定向至 `/chat` 页面的当前行为
+- 🐛 **修复 #119**：`admin_config.py` Logo 上传失败时不再在 redirect URL 中泄露原始异常信息（`str(e)`），改为 `logger.error` 记录异常详情 + URL 显示通用错误消息
+- ✅ **测试 #119**：新增 `test_issue119_logo_error_leak.py`（7 个静态源码测试），防止回归
+- 🐛 **批量修复 #58-#128**：42 个 Bug 和安全漏洞一次性修复，详见 [PR #131](https://github.com/GoldenFish123321/finderos/pull/131) — 涵盖安全加固（10 项）和 Bug 修复（32 项）
+
+## v1.3.2-beta (2026-07-16) — Bug 修复
+
+- 🐛 **修复 #120**：`deep_collector.py` 编码探测改为两阶段策略（`errors="strict"` 试探 + `errors="replace"` 容错），防止 GB18030 等编码含非法字节时抛出 `UnicodeDecodeError` 导致采集失败，同时确保 GBK/GB18030 中文页面能被正确检测编码
+- ✅ **测试 #120**：新增 `test_bug120_encoding_fallback.py`（6 个用例），覆盖纯 UTF-8/GBK 正确解码、非法字节容错、latin-1 兜底等场景
+
+## v1.3.1-beta (2026-07-16) — Bug 修复 + 代码清理
+
+- 🐛 **修复 #23**：`/admin/dashboard` 数智大屏页面因缺少 `xsrf_token` 模板变量导致 500 错误（`NameError: name 'xsrf_token' is not defined`）
+- 🐛 **修复 #16**：`/admin/sentiment` 舆情大屏页面同样缺少 `xsrf_token`（同类问题，一并修复）
+- ✅ **测试 #23 #16**：新增 `test_render_passes_xsrf_token` 回归测试，确保 Handler 的 `render()` 调用包含 `xsrf_token`
+- 🧹 **清理 #105**：移除 `app/mcp/tools.py` 中约 360 行死代码 `ALL_TOOL_DEFINITIONS`（已被 `discover_builtin_tool_definitions()` 取代）
+- 📝 **文档修正**：`register_all_tools()` 文档准确描述回退机制为自动发现 builtin_tools/
+- 🧪 **测试更新**：`TestAllToolDefinitions` 迁移至使用 `discover_builtin_tool_definitions()`，工具数 18→20
+- 🐛 **附带修复**：`test_issues_41_50_mcp_seed.py` 工具计数从 18 修正为 20
+
+## v1.3.0-beta (2026-07-16) — 多模态 AI 媒体生成 + 数智大屏 + 舆情大屏 + 手势交互
+
+- 🖼️ **新功能 #22**：AI 文生图 — 接入 wan2.6-t2i 模型，支持 `generate_image` MCP 工具
+- 🎨 **新功能 #22**：AI 图生图 — 接入 qwen-image-2.0 模型，支持图编辑
+- 🎬 **新功能 #21**：AI 文生视频 — 接入 wan2.6-t2v 模型，`generate_video` MCP 工具
+- 🎥 **新功能 #21**：AI 图生视频 — 接入 wan2.6-i2v 模型
+- 📦 **视频代理下载**：OSS 签名链接本地化缓存至 `/static/media/`，避免过期
+- 🔌 **MCP 工具扩展**：20 个工具（含 `generate_image` / `generate_video`），自动发现注册
+- 💬 **SSE 卡片推送**：`event: card` 实时渲染图片/视频媒体卡片
+- 🛡️ **安全加固**：视频下载 URL SSRF 校验、500MB 下载上限
+
+- 📊 **新功能 #23**：管理侧数智大屏 `/admin/dashboard` — 3D 地球 + 词云 + 数据可视化
+- 🌍 **ECharts-GL 3D 地球**：全球数据采集分布热力图，自动旋转
+- ☁️ **词云分析**：`echarts-wordcloud` 从数据仓库标题提取关键词
+
+- 🛡️ **新功能 #16**：管理侧舆情大屏 `/admin/sentiment` — 敏感词预警 + AI 风析
+- 📋 **敏感词库**：24 个种子敏感词（高危/中危/低危三级）
+- ⚠️ **实时预警**：预警滚动列表，按严重级别标记
+
+- ✋ **新功能 #15**：用户侧手势与数字员工交互
+- 📷 **MediaPipe Hands CDN 集成**：实时手部关键点检测
+- 🧠 **独立手势引擎**：支持多帧确认防抖、冷却期控制
+
+- ⚙️ **新模块 #13**：管理侧系统设置页面（`/admin/config`）
+
+---
+
+## v1.0.3-beta (2026-07-16) - Security issue hardening
+
+- Fixed Issues #57-#76 covering Mock runtime errors, URL/FTS injection, DOM XSS,
+  rate-limit races, stale TTS locks, response secret exposure, and Brotli handling.
+- AI model reads no longer decrypt API keys unless explicitly required.
+- Random administrator bootstrap passwords are no longer written to process logs.
+- Added focused regression tests for the new trust-boundary and concurrency fixes.
+
+本文档记录瞭望与问数系统 (DataFinderAgentOS) 所有版本的变更历史。
+
+---
+
+## v1.1.0-beta (2026-07-16) — 系统设置模块 + 手势交互
 
 - 🫵 **新功能 #14**：用户侧人脸识别登录 — face-api.js 人脸检测 + 128维特征匹配 (@GoldenFish123321)
 - 👤 **人脸注册**：登录用户通过摄像头注册人脸，128维描述符 JSON 存库
@@ -43,23 +124,6 @@
 - 📝 **审计日志**：配置保存、Logo 上传/移除均写入审计记录
 - 🧪 **测试新增**：31 项端到端功能测试
 - 🐛 **安全修复**：消除 self.write() 中直接拼接异常消息的 XSS 风险
-- 🐛 **修复**：`template_path` 和 `static_path` 从相对路径改为基于 `__file__` 的绝对路径，解决因工作目录不同导致 `FileNotFoundError: login.html` 的问题
-- 🐛 **修复**：数智大屏 review 问题修复（仪表板模板优化与数据展示调整）
-- 🧹 **杂项**：清理临时测试文件
-
----
-
-本文档记录瞭望与问数系统 (DataFinderAgentOS) 所有版本的变更历史。
-
----
-
-## v1.0.3-beta (2026-07-16) — Security issue hardening
-
-- Fixed Issues #57-#76 covering Mock runtime errors, URL/FTS injection, DOM XSS,
-  rate-limit races, stale TTS locks, response secret exposure, and Brotli handling.
-- AI model reads no longer decrypt API keys unless explicitly required.
-- Random administrator bootstrap passwords are no longer written to process logs.
-- Added focused regression tests for the new trust-boundary and concurrency fixes.
 
 ---
 
