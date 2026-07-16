@@ -260,7 +260,7 @@ def test_api_employee_user_sse_treats_http_error_as_fallback(monkeypatch):
         async def flush(self):
             return None
 
-        async def _mock_api_employee_fallback(self, emp, message, start, reason):
+        async def _mock_api_employee_fallback(self, emp, message, start, reason, conv_id=None):
             self.write(f"fallback:{reason}")
             await self.flush()
 

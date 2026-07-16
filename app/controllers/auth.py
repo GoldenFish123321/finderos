@@ -251,7 +251,7 @@ class RegisterHandler(BaseHandler):
             secure=is_https,
             expires_days=settings.SESSION_EXPIRE_HOURS / 24,
         )
-        self.redirect("/chat")
+        self.redirect("/index?msg=注册成功，欢迎使用瞭望与问数系统！")
 
 
 class FaceRegisterHandler(BaseHandler):

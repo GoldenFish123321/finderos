@@ -192,3 +192,36 @@ def test_issue_58_oversized_brotli_is_rejected():
     compressed = brotli.compress(b"x" * (30 * 1024 * 1024 + 1))
     with pytest.raises(ValueError, match="超过大小限制"):
         _decompress(compressed, "br")
+
+
+def test_employee_invoke_passes_tools_to_llm():
+    """验证 @员工 LLM 调用传了 tools 参数，使 load_skill 等工具可用。
+
+    修复前：_invoke_llm_employee 的流式调用缺少 tools 参数，
+    导致 LLM 无法通过 Function Calling 调用 load_skill。
+    修复后：Phase 1 非流式轮次传 tools，Phase 2 流式不传 tools。
+    """
+    src = _read("app/controllers/user_chat.py")
+    body = src[src.index("async def _invoke_llm_employee"):]
+    body = body[:body.index("async def _mock_employee_response")]
+
+    # Phase 1 非流式调用必须包含 tools
+    assert "get_openai_tools_for_employee" in body, (
+        "应调用 get_openai_tools_for_employee 获取员工权限过滤后的工具列表"
+    )
+    assert '"tools": emp_tools' in body or '"tools":' in body, (
+        "Phase 1 非流式调用必须传 tools 参数"
+    )
+    assert '"tool_choice": "auto"' in body, (
+        "Phase 1 应设置 tool_choice: auto"
+    )
+    assert '"stream": False' in body, (
+        "Phase 1 工具调用轮次应为非流式"
+    )
+
+    # Phase 2 流式调用不应包含 tools（保证流畅输出）
+    # 检查最后的流式调用
+    phase2_section = body[body.rindex('"stream": True'):]
+    assert '"tools"' not in phase2_section.split('"stream": True')[1][:500], (
+        "Phase 2 流式调用不应传 tools（保证输出流畅）"
+    )

@@ -67,3 +67,12 @@ def test_user_chat_media_onerror_handlers_do_not_break_script_string():
     assert "this.style.display=\\\\'none" not in html
     assert "this.alt=&quot;图片加载失败&quot;" in html
     assert "this.style.display=&quot;none&quot;" in html
+
+
+def test_clear_shortcut_has_been_removed_from_chat_ui():
+    """/clear 功能已移除，聊天页不应再暴露入口或特殊处理。"""
+    html = _render_chat_template(can_config_model_api=True)
+    assert "/clear" not in html
+    assert "clearChatShortcut" not in html
+    assert "clearChatView" not in html
+    assert 'onclick="setInput(\'/clear\')"' not in html

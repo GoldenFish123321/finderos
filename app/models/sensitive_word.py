@@ -157,6 +157,31 @@ class SensitiveWordRepository:
     # ════════════════════════════════════════════════════════════
 
     @staticmethod
+    def _create_alert(source_type: str, content_preview: str,
+                      matched_word: str, severity: int = 1,
+                      source_id: int = None) -> int:
+        """创建一条预警记录。返回预警 ID，已存在时返回 0。"""
+        try:
+            with get_db() as conn:
+                existing = conn.execute(
+                    "SELECT id FROM sentiment_alerts WHERE source_type = ? "
+                    "AND source_id = ? AND matched_word = ?",
+                    (source_type, source_id, matched_word),
+                ).fetchone()
+                if existing:
+                    return 0
+                conn.execute(
+                    "INSERT INTO sentiment_alerts "
+                    "(source_type, source_id, content_preview, matched_word, severity) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (source_type, source_id, content_preview[:200], matched_word, severity),
+                )
+                return conn.execute("SELECT last_insert_rowid() as id").fetchone()["id"]
+        except Exception as e:
+            logger.error(f"_create_alert 失败: {e}")
+            return 0
+
+    @staticmethod
     def scan_warehouse(limit: int = 100) -> list:
         """扫描数据仓库标题/摘要匹配敏感词。返回新产生的预警列表。"""
         words = SensitiveWordRepository.get_all_enabled()
