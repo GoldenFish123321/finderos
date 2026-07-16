@@ -13,7 +13,7 @@ from typing import Any, Dict, List
 logger = logging.getLogger(__name__)
 
 
-async def _deep_collect_url(url: str, extract_mode: str = "auto") -> Dict[str, Any]:
+async def _collect_with_crawl4ai(url: str, extract_mode: str = "auto") -> Dict[str, Any]:
     """使用 Crawl4ai 对指定 URL 进行智能深度采集。
 
     替代旧的 crawl4ai_enabled 复选框功能。
@@ -59,11 +59,11 @@ async def _deep_collect_url(url: str, extract_mode: str = "auto") -> Dict[str, A
         }
 
 
-async def _batch_deep_collect_url(urls: List[str], extract_mode: str = "auto") -> Dict[str, Any]:
+async def _batch_deep_collect(urls: List[str], extract_mode: str = "auto") -> Dict[str, Any]:
     """批量对多个 URL 进行深度采集。"""
     results = []
     for url in urls:
-        result = await _deep_collect_url(url, extract_mode=extract_mode)
+        result = await _collect_with_crawl4ai(url, extract_mode=extract_mode)
         results.append(result)
     return {
         "total": len(urls),
