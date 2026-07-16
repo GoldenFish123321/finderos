@@ -305,28 +305,46 @@ def _build_weather_card(api_data, employee_name: str, user_message: str = "",
                 return value
         return default
 
+    nested_weather = api_data.get("weather", {}) if isinstance(api_data, dict) else {}
+    if not isinstance(nested_weather, dict):
+        nested_weather = {}
+
     weather_text = (
-        first_path("current_condition.0.weatherDesc.0.value",
-                   "current.condition.text", "current.weather.0.description")
-        or current.get("weather") or current.get("condition") or current.get("text") or current.get("status") or ""
+        first_path(
+            "current_condition.0.weatherDesc.0.value",
+            "current.condition.text",
+            "current.weather.0.description",
+            "weather.0.hourly.0.weatherDesc.0.value",
+        )
+        or nested_weather.get("condition") or nested_weather.get("text")
+        or (current.get("weather") if not isinstance(current.get("weather"), dict) else "")
+        or current.get("condition") or current.get("text") or current.get("status") or ""
     )
     temp = (
-        first_path("current_condition.0.temp_C", "current.temp_C",
-                   "current.temp_c", "current.temperature")
+        first_path("current_condition.0.temp_C", "current.temp_C", "current.temp_c", "current.temperature")
+        or nested_weather.get("temperature") or nested_weather.get("temp")
         or current.get("temp") or current.get("temperature") or current.get("temp_C") or current.get("temp_c") or ""
     )
     city = (
-        first_path("nearest_area.0.areaName.0.value", "nearest_area.0.region.0.value",
-                   "location.name", "location.region")
+        first_path(
+            "nearest_area.0.areaName.0.value",
+            "nearest_area.0.region.0.value",
+            "location.name",
+            "location.region",
+        )
         or (api_data.get("city") if isinstance(api_data, dict) else "")
         or (api_data.get("location") if isinstance(api_data, dict) else "")
         or user_message
     )
-    # Issue #121: date 提取增加 current_condition 格式路径，保留 forecast weather.0.date 作为后备
-    date = first_path("current_condition.0.localObsDateTime",
-                      "current_condition.0.observation_time",
-                      "current.last_updated",
-                      "weather.0.date", "date", "time", "updateTime")
+    date = first_path(
+        "current_condition.0.localObsDateTime",
+        "current_condition.0.observation_time",
+        "current.last_updated",
+        "weather.0.date",
+        "date",
+        "time",
+        "updateTime",
+    )
 
     fields = []
     configured_fields = template_config.get("fields")
@@ -448,19 +466,8 @@ def _build_employee_card(emp: dict, api_data: dict, user_message: str = "") -> d
         return _build_card_from_template(response_template, api_data, emp_name, user_message)
 
     # 天气类员工：识别天气数据
-    # Issue #121: 使用 employee_type + 精确名称匹配，避免中文子串误识别
-    # 不再依赖 str(api_data) 子串匹配（"temp" 会误匹配 "template" 等）
-    emp_name_clean = emp_name.strip()
-    is_weather_name = emp_name_clean in ("天气助手", "Weather Assistant")
-    is_weather_api = (
-        emp_type == "api" and
-        ("天气" in emp_name_clean or "weather" in emp_name_clean.lower())
-    )
-    is_weather_struct = isinstance(api_data, dict) and (
-        "current_condition" in api_data or
-        (isinstance(api_data.get("weather"), list) and len(api_data["weather"]) > 0)
-    )
-    if is_weather_name or is_weather_api or is_weather_struct:
+    if ("天气" in emp_name or "weather" in emp_name.lower() or
+            "temp" in str(api_data).lower() or "weather" in str(api_data).lower()):
         return _build_weather_card(api_data, emp_name, user_message)
 
     # 音乐类员工：识别音乐数据（支持 Meting API 列表格式和 dict 格式）
@@ -773,6 +780,10 @@ class UserConversationDeleteHandler(BaseHandler):
             self.write({"code": 1, "msg": "无权删除此对话"})
             return
         ConversationRepository.delete(conv_id)
+        write_audit_log(
+            "USER_CONVERSATION_DELETE", self.current_user, f"conversation:{conv_id}",
+            f"title={str(conv.get('title', ''))[:100]}", self.request.remote_ip or "",
+        )
         self.write({"code": 0, "msg": "已删除"})
 
 
@@ -844,14 +855,28 @@ class UserChatStreamHandler(BaseHandler):
             return
         message = sanitize_user_input(message)
 
+        from app.models.sensitive_word import SensitiveWordRepository
+        if await asyncio.get_running_loop().run_in_executor(
+            _user_chat_executor,
+            lambda: SensitiveWordRepository.record_user_alert(message, self.current_user),
+        ):
+            self.set_header("Content-Type", "text/event-stream")
+            await _sse_stream_text(self, "系统检测到您的提问涉及敏感内容，已记录并通知管理员审核。")
+            await _sse_done(self)
+            return
+
         # 快捷指令
         if message.startswith("/"):
             await self._handle_slash_command(message, conversation_id)
             return
 
         # ── 模型校验 ──
-        model = AiModelRepository.get_accessible_by_id(
-            model_id, self.current_user, include_api_key=True
+        loop = asyncio.get_running_loop()
+        model = await loop.run_in_executor(
+            _user_chat_executor,
+            lambda: AiModelRepository.get_accessible_by_id(
+                model_id, self.current_user, include_api_key=True
+            ),
         )
         if not model or model.get("is_enabled") == 0:
             self.write({"code": 1, "msg": "模型不可用"})
@@ -889,12 +914,15 @@ class UserChatStreamHandler(BaseHandler):
         # ── 多轮对话历史 ──
         history_messages = []
         if conv_id:
-            conv = ConversationRepository.get_by_id(conv_id)
+            conv = await loop.run_in_executor(
+                _user_chat_executor, lambda: ConversationRepository.get_by_id(conv_id)
+            )
             if not conv or conv.get("username", "") != self.current_user:
                 conv_id = None
             else:
-                history_messages = ConversationRepository.get_recent_messages(
-                    conv_id, limit=10
+                history_messages = await loop.run_in_executor(
+                    _user_chat_executor,
+                    lambda: ConversationRepository.get_recent_messages(conv_id, limit=10),
                 )
 
         # ── 设置 MCP 上下文 ──
@@ -931,19 +959,32 @@ class UserChatStreamHandler(BaseHandler):
 
         # ── 记录 Token ──
         if total_tokens > 0:
-            AiModelRepository.add_tokens(model_id, total_tokens)
+            await loop.run_in_executor(
+                _user_chat_executor, lambda: AiModelRepository.add_tokens(model_id, total_tokens)
+            )
 
         # ── 保存对话 ──
         if conv_id and assistant_reply:
-            ConversationRepository.add_message(conv_id, "user", message, 0)
-            ConversationRepository.add_message(
-                conv_id, "assistant", assistant_reply, total_tokens
+            await loop.run_in_executor(
+                _user_chat_executor,
+                lambda: ConversationRepository.add_message(conv_id, "user", message, 0),
             )
-            conv = ConversationRepository.get_by_id(conv_id)
+            await loop.run_in_executor(
+                _user_chat_executor,
+                lambda: ConversationRepository.add_message(
+                    conv_id, "assistant", assistant_reply, total_tokens
+                ),
+            )
+            conv = await loop.run_in_executor(
+                _user_chat_executor, lambda: ConversationRepository.get_by_id(conv_id)
+            )
             if conv and (conv.get("title") or "").strip() in ("新对话", ""):
                 auto_title = message.strip()[:30]
                 if auto_title:
-                    ConversationRepository.update_title(conv_id, auto_title)
+                    await loop.run_in_executor(
+                        _user_chat_executor,
+                        lambda: ConversationRepository.update_title(conv_id, auto_title),
+                    )
 
         # ── 审计日志 ──
         write_audit_log(
@@ -1075,16 +1116,16 @@ class UserChatStreamHandler(BaseHandler):
                                     f"event: card\ndata: {json.dumps(music_card, ensure_ascii=False)}\n\n"
                                 )
                                 await self.flush()
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning("Failed to render music tool card: %s", e, exc_info=True)
                     # 图像/视频生成工具：发送媒体卡片
                     if tool_name in ("generate_image", "generate_video"):
                         try:
                             result_data = json.loads(tr.get("content", "{}"))
                             if isinstance(result_data, dict) and result_data.get("success"):
                                 await self._send_media_card(tool_name, result_data)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning("Failed to render media tool card: %s", e, exc_info=True)
                 continue
 
             elif tool_calls:
@@ -1131,8 +1172,8 @@ class UserChatStreamHandler(BaseHandler):
                             result_data = json.loads(tr.get("content", "{}"))
                             if isinstance(result_data, dict) and result_data.get("success"):
                                 await self._send_media_card(tool_name_2, result_data)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("Failed to render follow-up tool card: %s", e, exc_info=True)
                 continue
 
             else:
@@ -1500,8 +1541,13 @@ class UserChatStreamHandler(BaseHandler):
         )
 
         if conv_id and reply:
-            ConversationRepository.add_message(conv_id, "user", message, 0)
-            ConversationRepository.add_message(conv_id, "assistant", reply, tokens)
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                _user_chat_executor, lambda: ConversationRepository.add_message(conv_id, "user", message, 0)
+            )
+            await loop.run_in_executor(
+                _user_chat_executor, lambda: ConversationRepository.add_message(conv_id, "assistant", reply, tokens)
+            )
 
     # ═══════════════════════════════════════════════════════════
     # 快捷指令 / Mock 回复
@@ -1542,7 +1588,9 @@ class UserChatStreamHandler(BaseHandler):
                 await _sse_write(self, "当前没有活跃对话，无法生成摘要。")
                 await _sse_done(self)
                 return
-            msgs = ConversationRepository.get_messages(conv_id, limit=20)
+            msgs = await asyncio.get_running_loop().run_in_executor(
+                _user_chat_executor, lambda: ConversationRepository.get_messages(conv_id, limit=20)
+            )
             if not msgs:
                 await _sse_write(self, "当前对话尚无消息。")
                 await _sse_done(self)
@@ -1633,7 +1681,19 @@ class UserEmployeeInvokeHandler(BaseHandler):
             return
         message = sanitize_user_input(message)
 
-        emp = DigitalEmployeeRepository.get_by_id(emp_id)
+        loop = asyncio.get_running_loop()
+        from app.models.sensitive_word import SensitiveWordRepository
+        if await loop.run_in_executor(
+            _user_chat_executor,
+            lambda: SensitiveWordRepository.record_user_alert(message, self.current_user),
+        ):
+            self.set_header("Content-Type", "text/event-stream")
+            await _sse_stream_text(self, "系统检测到您的提问涉及敏感内容，已记录并通知管理员审核。")
+            await _sse_done(self)
+            return
+        emp = await loop.run_in_executor(
+            _user_chat_executor, lambda: DigitalEmployeeRepository.get_by_id(emp_id)
+        )
         if not emp or emp.get("is_enabled") == 0:
             self.write({"code": 1, "msg": "员工不可用"})
             return
@@ -1653,17 +1713,27 @@ class UserEmployeeInvokeHandler(BaseHandler):
         import time as _time
 
         model = None
+        loop = asyncio.get_running_loop()
         if emp.get("model_id"):
-            model = AiModelRepository.get_accessible_by_id(
-                emp["model_id"], self.current_user, include_api_key=True
+            model = await loop.run_in_executor(
+                _user_chat_executor,
+                lambda: AiModelRepository.get_accessible_by_id(
+                    emp["model_id"], self.current_user, include_api_key=True
+                ),
             )
         if not model or model.get("is_enabled", 0) == 0:
-            model = AiModelRepository.get_default_for_user(
-                self.current_user, include_api_key=True
+            model = await loop.run_in_executor(
+                _user_chat_executor,
+                lambda: AiModelRepository.get_default_for_user(
+                    self.current_user, include_api_key=True
+                ),
             )
         if not model:
-            models, _ = AiModelRepository.get_available_for_user(
-                self.current_user, page=1, page_size=100, include_api_key=True
+            models, _ = await loop.run_in_executor(
+                _user_chat_executor,
+                lambda: AiModelRepository.get_available_for_user(
+                    self.current_user, page=1, page_size=100, include_api_key=True
+                ),
             )
             for m in models:
                 if m.get("is_enabled") == 1:
@@ -1743,9 +1813,13 @@ class UserEmployeeInvokeHandler(BaseHandler):
         if raw_skills:
             # 兼容新旧格式：ID 数组 vs 名称数组
             if isinstance(raw_skills[0], int):
-                skill_summaries = SkillRepository.get_skill_summaries(skill_ids=raw_skills)
+                skill_summaries = await loop.run_in_executor(
+                    _user_chat_executor, lambda: SkillRepository.get_skill_summaries(skill_ids=raw_skills)
+                )
             else:
-                skill_summaries = SkillRepository.get_skill_summaries(skill_names=raw_skills)
+                skill_summaries = await loop.run_in_executor(
+                    _user_chat_executor, lambda: SkillRepository.get_skill_summaries(skill_names=raw_skills)
+                )
             if skill_summaries:
                 lines = [
                     "\n[可用技能]",
@@ -1837,7 +1911,10 @@ class UserEmployeeInvokeHandler(BaseHandler):
             total_tokens = await self._mock_employee_response(emp, message, tool_ctx)
 
         if total_tokens > 0 and model:
-            AiModelRepository.add_tokens(model["id"], total_tokens)
+            await loop.run_in_executor(
+                _user_chat_executor,
+                lambda: AiModelRepository.add_tokens(model["id"], total_tokens),
+            )
 
         elapsed = round(_time.time() - start_time, 2)
         await _sse_stats(self, total_tokens, not api_success, elapsed)
@@ -1949,7 +2026,9 @@ class UserEmployeeInvokeHandler(BaseHandler):
             # v0.7: skills 存储的是 ID 数组，需解析为技能名称用于展示
             if skills_list and isinstance(skills_list[0], int):
                 try:
-                    resolved = SkillRepository.resolve_by_ids(skills_list)
+                    resolved = await asyncio.get_running_loop().run_in_executor(
+                        _user_chat_executor, lambda: SkillRepository.resolve_by_ids(skills_list)
+                    )
                     skill_names = [s["name"] for s in resolved]
                 except Exception:
                     skill_names = [str(s) for s in skills_list]
@@ -2279,6 +2358,11 @@ def _cleanup_stale_tts_locks(max_age_seconds: int = 300) -> int:
     return removed
 
 
+def _read_binary_file(path: str) -> bytes:
+    with open(path, "rb") as handle:
+        return handle.read()
+
+
 _cleanup_stale_tts_locks()
 
 # 可用的 Edge TTS 中文语音列表
@@ -2385,8 +2469,11 @@ class UserChatTTSHandler(BaseHandler):
             self.set_header("X-TTS-Voice", voice)
             self.set_header("X-TTS-Cached", "true" if was_cached else "false")
 
-            with open(cache_file, "rb") as f:
-                self.write(f.read())
+            loop = asyncio.get_running_loop()
+            audio_data = await loop.run_in_executor(
+                _user_chat_executor, lambda: _read_binary_file(cache_file)
+            )
+            self.write(audio_data)
             await self.flush()
 
             # ── 审计日志 ──

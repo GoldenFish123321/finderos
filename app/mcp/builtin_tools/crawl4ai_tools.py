@@ -32,10 +32,24 @@ async def _collect_with_crawl4ai(url: str, extract_mode: str = "auto") -> Dict[s
 
     if _HAS_CRAWL4AI:
         try:
-            # TODO: 当 crawl4ai 集成完善后，使用专门的 crawl4ai 调用
-            logger.info(f"Crawl4ai 可用，使用标准深度采集 (crawl4ai 集成待完善)")
-        except Exception:
-            pass
+            from crawl4ai import AsyncWebCrawler
+            from app.utils.safe_http import safe_http_request
+            fetched = await asyncio.get_running_loop().run_in_executor(
+                None, lambda: safe_http_request(url, timeout=30, max_bytes=5 * 1024 * 1024)
+            )
+            html = fetched.body.decode("utf-8", errors="replace")
+            async with AsyncWebCrawler() as crawler:
+                crawled = await crawler.arun(url="raw:" + html)
+            if getattr(crawled, "success", False):
+                content = str(getattr(crawled, "markdown", "") or getattr(crawled, "cleaned_html", ""))
+                return {
+                    "success": True, "url": url, "extract_mode": extract_mode,
+                    "engine": "crawl4ai", "title": "", "content": content[:5000],
+                    "content_size": len(content),
+                }
+            logger.warning("Crawl4ai failed for %s; using standard collector", url)
+        except Exception as e:
+            logger.warning("Crawl4ai execution failed for %s; using standard collector: %s", url, e)
 
     # 使用标准 deep_fetch 作为回退
     status, title, content, error = await loop.run_in_executor(
@@ -46,7 +60,7 @@ async def _collect_with_crawl4ai(url: str, extract_mode: str = "auto") -> Dict[s
             "success": True,
             "url": url,
             "extract_mode": extract_mode,
-            "engine": "crawl4ai" if _HAS_CRAWL4AI else "standard",
+            "engine": "standard",
             "title": title or "",
             "content": (content or "")[:5000],
             "content_size": len(content) if content else 0,

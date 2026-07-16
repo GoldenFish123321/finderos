@@ -38,6 +38,37 @@ def _get_max_logo_size() -> int:
 
 logger = logging.getLogger(__name__)
 
+_INTEGER_LIMITS = {
+    "default_port": (1, 65535), "ai_default_max_tokens": (1, 131072),
+    "db_backup_interval_days": (1, 365), "db_backup_keep_count": (1, 365),
+    "collector_interval_minutes": (1, 1440), "session_expire_hours": (1, 8760),
+    "upload_max_size_mb": (1, 1024),
+}
+
+
+def validate_config_updates(updates: dict[str, str]) -> None:
+    for key, (low, high) in _INTEGER_LIMITS.items():
+        if key not in updates:
+            continue
+        try:
+            value = int(updates[key])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{key} 必须是整数") from exc
+        if not low <= value <= high:
+            raise ValueError(f"{key} 必须在 {low} 到 {high} 之间")
+    if "ai_default_temperature" in updates:
+        try:
+            value = float(updates["ai_default_temperature"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("ai_default_temperature 必须是数字") from exc
+        if not 0 <= value <= 2:
+            raise ValueError("ai_default_temperature 必须在 0 到 2 之间")
+    if updates.get("log_level", "INFO").upper() not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+        raise ValueError("log_level 无效")
+    webhook = updates.get("webhook_url", "")
+    if webhook and urllib.parse.urlparse(webhook).scheme not in {"http", "https"}:
+        raise ValueError("webhook_url 必须是 HTTP 或 HTTPS 地址")
+
 
 class SystemConfigHandler(AdminBaseHandler):
     """系统常规设置页面（GET 渲染 / POST 保存）"""
@@ -73,6 +104,7 @@ class SystemConfigHandler(AdminBaseHandler):
         logo_path = None
         logo_filename = None
         logo_removed = False
+        old_logo_path = None
         remove_logo = self.get_body_argument("remove_logo", "0")
         max_logo_size = _get_max_logo_size()
         max_logo_size_mb = max_logo_size // (1024 * 1024)
@@ -86,10 +118,7 @@ class SystemConfigHandler(AdminBaseHandler):
                     old_logo["value"].lstrip("/")
                 )
                 if os.path.isfile(old_path):
-                    try:
-                        os.remove(old_path)
-                    except OSError as e:  # #114: 精确捕获 OSError 并记录日志
-                        logger.warning(f"删除旧 Logo 文件失败: {old_path}, 错误: {e}")
+                    old_logo_path = old_path
             updates["system_logo"] = ""
             logo_removed = True  # #92: 审计日志推迟到 bulk_update 成功后
 
@@ -126,7 +155,7 @@ class SystemConfigHandler(AdminBaseHandler):
 
                 # #106: _cleanup_old_logos 和审计日志推迟到 bulk_update 成功后
         except Exception as e:
-            logger.exception("Logo 上传失败")  # #119: 详细错误记日志（含堆栈）
+            logger.error("Logo 上传失败", exc_info=True)
             self.redirect("/admin/config?error=" + urllib.parse.quote("系统错误，请重试"))
             return
 
@@ -163,6 +192,18 @@ class SystemConfigHandler(AdminBaseHandler):
         if logo_path:
             updates["system_logo"] = logo_path
 
+        try:
+            validate_config_updates(updates)
+        except ValueError as e:
+            logger.warning("系统配置校验失败: %s", e)
+            if logo_path:
+                try:
+                    os.remove(filepath)
+                except OSError:
+                    pass
+            self.redirect("/admin/config?error=" + urllib.parse.quote("配置值无效，请检查后重试"))
+            return
+
         if updates:
             count = SystemConfigRepository.bulk_update(updates)
             if count >= 0:
@@ -178,6 +219,11 @@ class SystemConfigHandler(AdminBaseHandler):
                         detail="Logo removed",
                         client_ip=self.request.remote_ip or "",
                     )
+                    if old_logo_path:
+                        try:
+                            os.remove(old_logo_path)
+                        except OSError as e:
+                            logger.warning("删除旧 Logo 文件失败: %s", e)
 
                 # #106: 清理旧 Logo 从 DB 写入前移到 bulk_update 成功后
                 if logo_filename:
@@ -198,6 +244,11 @@ class SystemConfigHandler(AdminBaseHandler):
                     client_ip=self.request.remote_ip or "",
                 )
             else:
+                if logo_path:
+                    try:
+                        os.remove(filepath)
+                    except OSError as e:
+                        logger.warning("删除未提交 Logo 文件失败: %s", e)
                 self.redirect("/admin/config?error=" + urllib.parse.quote("保存失败，请重试"))
                 return
 

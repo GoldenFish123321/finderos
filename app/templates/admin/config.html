@@ -287,14 +287,15 @@
 {% end %}
 
 {% block admin_scripts %}
+<div id="config-feedback" hidden
+     data-msg="{{ feedback_msg }}" data-error="{{ feedback_error }}"></div>
 <script>
 // 操作反馈消息
-{% if feedback_msg %}
-layer.msg('{{ feedback_msg }}', {icon: 1, time: 2000});
-{% end %}
-{% if feedback_error %}
-layer.msg('{{ feedback_error }}', {icon: 2, time: 3000});
-{% end %}
+var feedback = document.getElementById('config-feedback');
+var feedbackMsg = feedback.dataset.msg;
+var feedbackError = feedback.dataset.error;
+if (feedbackMsg) layer.msg(escapeHtml(feedbackMsg), {icon: 1, time: 2000});
+if (feedbackError) layer.msg(escapeHtml(feedbackError), {icon: 2, time: 3000});
 
 layui.use(['form', 'upload'], function() {
     var form = layui.form;

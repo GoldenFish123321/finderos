@@ -1,4 +1,4 @@
-# 瞭望与问数系统 (DataFinderAgentOS) — 需求文档 v1.0.0-beta
+# 瞭望与问数系统 (DataFinderAgentOS) — 需求文档 v{{ app_version }}
 
 > 覆盖 v0.1 ~ v1.0.0-beta 全部功能需求
 

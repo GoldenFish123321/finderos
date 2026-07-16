@@ -137,6 +137,7 @@ class LoginHandler(BaseHandler):
             httponly=True,
             samesite="Lax",
             secure=is_https,
+            expires_days=settings.SESSION_EXPIRE_HOURS / 24,
         )
         write_audit_log("LOGIN_SUCCESS", username, "", "登录成功", client_ip)
         self._redirect_by_role(username)
@@ -165,12 +166,20 @@ class RegisterHandler(BaseHandler):
     """用户注册处理器（前台自助注册）"""
 
     def get(self):
+        if not settings.REGISTRATION_ENABLED:
+            self.set_status(403)
+            self.write("用户注册当前已关闭")
+            return
         if self.current_user:
             return self.redirect("/chat")
 
         self.render("register.html", title="用户注册 - 瞭望与问数系统", error=None)
 
     def post(self):
+        if not settings.REGISTRATION_ENABLED:
+            self.set_status(403)
+            self.write("用户注册当前已关闭")
+            return
         if self.current_user:
             return self.redirect("/chat")
 
@@ -240,9 +249,9 @@ class RegisterHandler(BaseHandler):
             httponly=True,
             samesite="Lax",
             secure=is_https,
+            expires_days=settings.SESSION_EXPIRE_HOURS / 24,
         )
-<<<<<<< HEAD
-        self.redirect("/index?msg=注册成功，欢迎使用瞭望与问数系统！")
+        self.redirect("/chat")
 
 
 class FaceRegisterHandler(BaseHandler):
@@ -327,6 +336,7 @@ class FaceLoginHandler(BaseHandler):
         self.set_secure_cookie(
             "username", username,
             httponly=True, samesite="Lax", secure=is_https,
+            expires_days=settings.SESSION_EXPIRE_HOURS / 24,
         )
         write_audit_log("FACE_LOGIN_SUCCESS", username, "", "人脸登录成功", client_ip)
 
@@ -339,6 +349,3 @@ class FaceLoginHandler(BaseHandler):
             redirect = "/index"
 
         self.write({"code": 0, "msg": "登录成功", "redirect": redirect})
-=======
-        self.redirect("/chat")
->>>>>>> a94f0df28c2a08e446c3e48a91289f487914fa1c

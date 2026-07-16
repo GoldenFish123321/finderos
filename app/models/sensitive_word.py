@@ -4,6 +4,7 @@ sensitive_word.py — 敏感词管理 + 内容扫描 + 舆情预警模型
 提供敏感词库管理、数据仓库/对话内容扫描、预警记录追踪。
 """
 import json
+import hashlib
 import logging
 import re
 from datetime import datetime, timezone
@@ -71,6 +72,21 @@ class SensitiveWordRepository:
             active_conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_sa_created ON sentiment_alerts(created_at)
             """)
+            active_conn.execute(
+                "DELETE FROM sentiment_sensitive_words WHERE id NOT IN "
+                "(SELECT MIN(id) FROM sentiment_sensitive_words GROUP BY word)"
+            )
+            active_conn.execute(
+                "DELETE FROM sentiment_alerts WHERE id NOT IN "
+                "(SELECT MIN(id) FROM sentiment_alerts GROUP BY source_type, source_id, matched_word)"
+            )
+            active_conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_sensitive_word ON sentiment_sensitive_words(word)"
+            )
+            active_conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_sentiment_alert_source "
+                "ON sentiment_alerts(source_type, source_id, matched_word)"
+            )
 
         if conn is not None:
             _create_tables(conn)
@@ -83,17 +99,12 @@ class SensitiveWordRepository:
     def seed_default():
         """插入默认敏感词（幂等）。"""
         with get_db() as conn:
-            existing = conn.execute(
-                "SELECT COUNT(*) as cnt FROM sentiment_sensitive_words"
-            ).fetchone()["cnt"]
-            if existing == 0:
-                for word, category, severity in SensitiveWordRepository.SEED_WORDS:
-                    conn.execute(
-                        "INSERT INTO sentiment_sensitive_words (word, category, severity, is_enabled) "
-                        "VALUES (?, ?, ?, 1)",
-                        (word, category, severity),
-                    )
-                logger.info(f"[种子] 已创建 {len(SensitiveWordRepository.SEED_WORDS)} 个默认敏感词")
+            for word, category, severity in SensitiveWordRepository.SEED_WORDS:
+                conn.execute(
+                    "INSERT OR IGNORE INTO sentiment_sensitive_words (word, category, severity, is_enabled) "
+                    "VALUES (?, ?, ?, 1)",
+                    (word, category, severity),
+                )
 
     @staticmethod
     def get_all_enabled() -> list:
@@ -176,12 +187,14 @@ class SensitiveWordRepository:
                         if existing:
                             continue
                         preview = (row["title"] or "")[:200]
-                        conn.execute(
-                            "INSERT INTO sentiment_alerts "
+                        cursor = conn.execute(
+                            "INSERT OR IGNORE INTO sentiment_alerts "
                             "(source_type, source_id, content_preview, matched_word, severity) "
                             "VALUES (?, ?, ?, ?, ?)",
                             ("warehouse", row["id"], preview, word, severity),
                         )
+                        if cursor.rowcount == 0:
+                            continue
                         alerts.append({
                             "id": conn.execute("SELECT last_insert_rowid() as id").fetchone()["id"],
                             "source_type": "warehouse",
@@ -221,12 +234,14 @@ class SensitiveWordRepository:
                         if existing:
                             continue
                         preview = content[:200]
-                        conn.execute(
-                            "INSERT INTO sentiment_alerts "
+                        cursor = conn.execute(
+                            "INSERT OR IGNORE INTO sentiment_alerts "
                             "(source_type, source_id, content_preview, matched_word, severity) "
                             "VALUES (?, ?, ?, ?, ?)",
                             ("conversation", row["id"], preview, word, severity),
                         )
+                        if cursor.rowcount == 0:
+                            continue
                         alerts.append({
                             "id": conn.execute("SELECT last_insert_rowid() as id").fetchone()["id"],
                             "source_type": "conversation",
@@ -243,6 +258,31 @@ class SensitiveWordRepository:
         w = SensitiveWordRepository.scan_warehouse()
         c = SensitiveWordRepository.scan_conversations()
         return {"warehouse": len(w), "conversation": len(c), "total": len(w) + len(c)}
+
+    @staticmethod
+    def match_content(content: str) -> dict | None:
+        for item in SensitiveWordRepository.get_all_enabled():
+            word = item.get("word", "")
+            if word and re.search(re.escape(word), content or "", re.IGNORECASE):
+                return dict(item)
+        return None
+
+    @staticmethod
+    def record_user_alert(content: str, username: str = "") -> bool:
+        match = SensitiveWordRepository.match_content(content)
+        if not match:
+            return False
+        stable_id = int.from_bytes(
+            hashlib.sha256(f"{username}\0{content}".encode("utf-8")).digest()[:8], "big"
+        ) & 0x7FFFFFFFFFFFFFFF
+        with get_db() as conn:
+            cursor = conn.execute(
+                "INSERT OR IGNORE INTO sentiment_alerts "
+                "(source_type, source_id, content_preview, matched_word, severity) "
+                "VALUES ('live_chat', ?, ?, ?, ?)",
+                (stable_id, (content or "")[:200], match["word"], match.get("severity", 1)),
+            )
+        return True
 
     # ════════════════════════════════════════════════════════════
     # 预警查询

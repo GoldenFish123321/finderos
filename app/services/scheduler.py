@@ -29,10 +29,14 @@ class SentimentScanner:
         self._check_interval_ms = check_interval_ms
         self._callback = None
         self._running = False
+        self._executor = None
+        self._scan_future = None
 
     def start(self):
         if self._running:
             return
+        if self._executor is None:
+            self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="sentiment")
         self._running = True
         self._callback = PeriodicCallback(self._tick, self._check_interval_ms)
         self._callback.start()
@@ -43,12 +47,26 @@ class SentimentScanner:
         if self._callback:
             self._callback.stop()
             self._callback = None
+        if self._executor:
+            self._executor.shutdown(wait=False)
+            self._executor = None
 
     def _tick(self):
+        if self._scan_future and not self._scan_future.done():
+            logger.info("舆情扫描上一轮尚未完成，跳过本次 tick")
+            return
+        self._scan_future = self._executor.submit(self._run_scan)
+
+    @staticmethod
+    def _run_scan():
         try:
+            from app.services.system_operations import backup_database_if_due
+            backup_database_if_due()
             from app.models.sensitive_word import SensitiveWordRepository
             result = SensitiveWordRepository.scan_all()
             if result["total"] > 0:
+                from app.services.system_operations import send_alert_notification
+                send_alert_notification(result["total"])
                 logger.info(f"舆情扫描: 发现 {result['total']} 条新预警 "
                            f"(仓库 {result['warehouse']}, 对话 {result['conversation']})")
             # 对未分析的预警执行 AI 语义分析（每次最多分析 5 条）

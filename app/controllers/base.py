@@ -36,7 +36,9 @@ class BaseHandler(tornado.web.RequestHandler):
         Tornado 会自动将返回值赋值给 self.current_user 属性。
         返回 None 表示未登录。
         """
-        username = self.get_secure_cookie("username")
+        username = self.get_secure_cookie(
+            "username", max_age_days=settings.SESSION_EXPIRE_HOURS / 24
+        )
         if not username:
             return None
         try:

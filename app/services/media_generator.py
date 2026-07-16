@@ -2,7 +2,7 @@
 media_generator.py — AI 媒体生成服务
 
 提供图像生成（文生图 / 图生图）和视频生成（文生视频 / 图生视频）的统一 HTTP 调用层。
-所有调用使用 safe_http_request，在线程池中执行以避免阻塞 IOLoop。
+所有调用使用标准库 urllib.request，在线程池中执行以避免阻塞 IOLoop。
 视频生成后立即代理下载到本地，提供稳定访问 URL（OSS 签名链接有时效）。
 """
 
@@ -14,8 +14,8 @@ import os
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-from app.utils.safe_http import safe_http_request, SafeHttpError
 from app.utils.security import validate_url_safe
+from app.utils.safe_http import SafeHttpError, safe_http_request
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +39,19 @@ def _ensure_video_cache_dir() -> str:
     return abs_dir
 
 
+def _request_body(url: str, body: bytes, headers: dict, timeout: int, max_bytes: int = 10 * 1024 * 1024):
+    response = safe_http_request(
+        url, method="POST", headers=headers, body=body, timeout=timeout, max_bytes=max_bytes
+    )
+    text = response.body.decode("utf-8", errors="replace")
+    if response.status >= 400:
+        logger.warning("Media provider returned HTTP %s: %s", response.status, _parse_api_error(response.status, text))
+        return None, "媒体生成服务请求失败"
+    return text, ""
+
+
 def _parse_api_error(status: int, body: str) -> str:
-    """从 HTTP 错误响应中提取可读的错误信息。"""
+    """Return a stable client-facing error without exposing provider details."""
     return f"媒体生成服务返回错误 (HTTP {status})"
 
 
@@ -87,23 +98,17 @@ class ImageGenHandler:
         }
 
         try:
-            resp = safe_http_request(url, method="POST", headers=headers, body=payload, timeout=timeout)
-            body = resp.body.decode("utf-8")
-            if resp.status >= 400:
-                error_msg = _parse_api_error(resp.status, body)
-                logger.warning(f"图像生成失败 (HTTP {resp.status}): {error_msg}")
-                return {"success": False, "error": error_msg}
-        except SafeHttpError as e:
-            logger.warning(f"图像生成请求失败: {e}")
-            return {"success": False, "error": str(e)}
-        except Exception as e:
-            logger.error(f"图像生成异常: {e}")
-            return {"success": False, "error": str(e)}
+            body, error = _request_body(url, payload, headers, timeout)
+            if error:
+                return {"success": False, "error": error}
+        except (SafeHttpError, OSError) as e:
+            logger.error("图像生成安全 HTTP 请求失败: %s", e)
+            return {"success": False, "error": "媒体生成服务不可用"}
 
         try:
             data = json.loads(body)
         except json.JSONDecodeError:
-            return {"success": False, "error": f"API 返回非 JSON: {body[:200]}"}
+            return {"success": False, "error": "媒体生成服务返回格式异常"}
 
         if data.get("data") and isinstance(data["data"], list):
             urls = []
@@ -177,23 +182,17 @@ class ImageGenHandler:
         }
 
         try:
-            resp = safe_http_request(url, method="POST", headers=headers, body=body, timeout=timeout)
-            resp_body = resp.body.decode("utf-8")
-            if resp.status >= 400:
-                error_msg = _parse_api_error(resp.status, resp_body)
-                logger.warning(f"图像编辑失败 (HTTP {resp.status}): {error_msg}")
-                return {"success": False, "error": error_msg}
-        except SafeHttpError as e:
-            logger.warning(f"图像编辑请求失败: {e}")
-            return {"success": False, "error": str(e)}
-        except Exception as e:
-            logger.error(f"图像编辑异常: {e}")
-            return {"success": False, "error": str(e)}
+            resp_body, error = _request_body(url, body, headers, timeout)
+            if error:
+                return {"success": False, "error": error}
+        except (SafeHttpError, OSError) as e:
+            logger.error("图像编辑安全 HTTP 请求失败: %s", e)
+            return {"success": False, "error": "媒体生成服务不可用"}
 
         try:
             data = json.loads(resp_body)
         except json.JSONDecodeError:
-            return {"success": False, "error": f"API 返回非 JSON: {resp_body[:200]}"}
+            return {"success": False, "error": "媒体生成服务返回格式异常"}
 
         if data.get("data") and isinstance(data["data"], list):
             urls = []
@@ -260,23 +259,17 @@ class VideoGenHandler:
         }
 
         try:
-            resp = safe_http_request(url, method="POST", headers=headers, body=payload, timeout=timeout)
-            body = resp.body.decode("utf-8")
-            if resp.status >= 400:
-                error_msg = _parse_api_error(resp.status, body)
-                logger.warning(f"视频生成失败 (HTTP {resp.status}): {error_msg}")
-                return {"success": False, "error": error_msg}
-        except SafeHttpError as e:
-            logger.warning(f"视频生成请求失败: {e}")
-            return {"success": False, "error": str(e)}
-        except Exception as e:
-            logger.error(f"视频生成异常: {e}")
-            return {"success": False, "error": str(e)}
+            body, error = _request_body(url, payload, headers, timeout)
+            if error:
+                return {"success": False, "error": error}
+        except (SafeHttpError, OSError) as e:
+            logger.error("视频生成安全 HTTP 请求失败: %s", e)
+            return {"success": False, "error": "媒体生成服务不可用"}
 
         try:
             data = json.loads(body)
         except json.JSONDecodeError:
-            return {"success": False, "error": f"API 返回非 JSON: {body[:200]}"}
+            return {"success": False, "error": "媒体生成服务返回格式异常"}
 
         if not (data.get("data") and isinstance(data["data"], list) and len(data["data"]) > 0):
             error_msg = _parse_api_error(200, body)
@@ -291,7 +284,7 @@ class VideoGenHandler:
 
         # 代理下载视频到本地
         cache_dir = _ensure_video_cache_dir()
-        ext = ".mp4"
+        ext = {"video/webm": ".webm", "video/quicktime": ".mov"}.get(content_type, ".mp4")
         local_filename = f"video_{uuid.uuid4().hex[:12]}{ext}"
         local_path = os.path.join(cache_dir, local_filename)
 
@@ -306,11 +299,15 @@ class VideoGenHandler:
 
         try:
             logger.info(f"开始代理下载视频: {remote_url[:100]}...")
-            dl_resp = safe_http_request(remote_url, method="GET", timeout=_DEFAULT_DOWNLOAD_TIMEOUT, max_bytes=_MAX_VIDEO_DOWNLOAD_SIZE)
+            dl_resp = safe_http_request(
+                remote_url, timeout=_DEFAULT_DOWNLOAD_TIMEOUT, max_bytes=_MAX_VIDEO_DOWNLOAD_SIZE
+            )
+            if dl_resp.status >= 400:
+                raise SafeHttpError(f"video download HTTP {dl_resp.status}")
+            total = len(dl_resp.body)
             with open(local_path, "wb") as f:
                 f.write(dl_resp.body)
-            total = len(dl_resp.body)
-            logger.info(f"视频下载完成: {local_path} ({total} bytes)")
+                logger.info(f"视频下载完成: {local_path} ({total} bytes)")
         except Exception as e:
             logger.error(f"视频代理下载失败: {e}")
             # 清理不完整的文件
@@ -321,7 +318,7 @@ class VideoGenHandler:
                     pass
             return {
                 "success": False,
-                "error": f"视频生成成功但下载失败: {str(e)}",
+                "error": "视频生成成功但安全下载失败",
                 "original_url": remote_url,
             }
 

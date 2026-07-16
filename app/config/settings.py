@@ -215,23 +215,50 @@ class Settings:
             _FLOAT_ATTRS = {"AI_DEFAULT_TEMPERATURE"}
             # 需要 bool 类型转换的属性
             _BOOL_ATTRS = {"CAPTCHA_ENABLED", "REGISTRATION_ENABLED"}
+            _RANGES = {
+                "PORT": (1, 65535),
+                "AI_DEFAULT_MAX_TOKENS": (1, 131072),
+                "DB_BACKUP_INTERVAL_DAYS": (1, 365),
+                "DB_BACKUP_KEEP_COUNT": (1, 365),
+                "COLLECTOR_INTERVAL_MINUTES": (1, 1440),
+                "SESSION_EXPIRE_HOURS": (1, 8760),
+                "UPLOAD_MAX_SIZE_MB": (1, 1024),
+            }
 
             for db_key, attr_name in _DB_KEY_MAP.items():
                 if db_key in db_config and db_config[db_key]:
+                    if attr_name == "PORT" and "PORT" in os.environ:
+                        continue
                     raw_value = db_config[db_key]
                     try:
                         if attr_name in _FLOAT_ATTRS:
-                            setattr(self, attr_name, float(raw_value))
+                            value = float(raw_value)
+                            if not 0 <= value <= 2:
+                                raise ValueError("value out of range")
+                            setattr(self, attr_name, value)
                         elif attr_name in _INT_ATTRS:
-                            setattr(self, attr_name, int(raw_value))
+                            value = int(raw_value)
+                            low, high = _RANGES[attr_name]
+                            if not low <= value <= high:
+                                raise ValueError("value out of range")
+                            setattr(self, attr_name, value)
                         elif attr_name in _BOOL_ATTRS:
-                            setattr(self, attr_name, raw_value.lower() in ("true", "1", "yes"))
+                            normalized = str(raw_value).lower()
+                            if normalized not in {"true", "false", "1", "0", "yes", "no"}:
+                                raise ValueError("invalid boolean")
+                            setattr(self, attr_name, normalized in ("true", "1", "yes"))
+                        elif attr_name == "LOG_LEVEL":
+                            value = str(raw_value).upper()
+                            if value not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+                                raise ValueError("invalid log level")
+                            setattr(self, attr_name, value)
                         else:
                             setattr(self, attr_name, raw_value)
                     except (ValueError, TypeError):
                         logger.warning(f"system_config.{db_key} 值 '{raw_value}' 无效，使用默认值")
 
             logger.info(f"已从 system_config 表加载 {len(db_config)} 项配置")
+            logging.getLogger().setLevel(getattr(logging, self.LOG_LEVEL, logging.INFO))
         except Exception as e:
             logger.warning(f"从 system_config 表加载配置失败（将使用默认值）: {e}")
 

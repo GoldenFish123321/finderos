@@ -291,7 +291,9 @@ if __name__ == "__main__":
     app = make_app()
 
     # 启动定时采集调度器 (v0.6)
-    scheduler = CollectionScheduler(app, check_interval_ms=60000)
+    scheduler = CollectionScheduler(
+        app, check_interval_ms=settings.COLLECTOR_INTERVAL_MINUTES * 60 * 1000
+    )
     scheduler.start()
 
     # 启动定时舆情扫描器 (v1.2.0) — 每5分钟
