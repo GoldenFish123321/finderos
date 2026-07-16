@@ -95,24 +95,34 @@
             <div id="face-capture-status" style="margin-top:8px;font-size:13px;color:var(--text-muted);"></div>
         </div>
 
-        <form method="post" style="margin-top: 8px;">
-            {% module xsrf_form_html() %}
-            <input type="hidden" name="action" value="face_toggle">
+        <div style="margin-top: 8px;">
             <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;">
-                <input type="checkbox" name="face_enabled" value="1"
-                       onchange="this.form.submit()"
+                <input type="checkbox" id="face-toggle"
                        {{ 'checked' if face_enabled else '' }}
-                       {{ 'disabled' if not face_registered else '' }}>
+                       {{ 'disabled' if not face_registered else '' }}
+                       onchange="toggleFaceLogin(this.checked)">
                 启用人脸识别登录
             </label>
+            <span id="face-toggle-status" style="font-size:12px;color:var(--text-muted);margin-top:4px;display:block;">
+                {{ '✅ 人脸登录已启用' if face_enabled else '' }}
+            </span>
             {% if not face_registered %}
             <p style="font-size:12px;color:var(--text-muted);margin-top:6px;">请先通过摄像头拍照注册人脸</p>
             {% end %}
-        </form>
+        </div>
     </div>
 
 <script>
 var faceStream = null;
+
+function toggleFaceLogin(checked) {
+    var status = document.getElementById('face-toggle-status');
+    if (checked) {
+        status.textContent = '✅ 人脸登录已启用';
+    } else {
+        status.textContent = '⏸ 人脸登录已暂停';
+    }
+}
 
 function openCamera() {
     var video = document.getElementById('face-video');
