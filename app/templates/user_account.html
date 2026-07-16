@@ -111,9 +111,10 @@
         </div>
 
         <div style="margin-top: 8px;">
-            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;" title="未注册人脸时点击会引导先拍照注册">
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:{{ 'pointer' if face_registered else 'not-allowed' }};" title="先拍照注册人脸，注册成功后再勾选确认是否启用登录">
                 <input type="checkbox" id="face-toggle"
                        {{ 'checked' if face_enabled else '' }}
+                       {{ 'disabled' if not face_registered else '' }}
                        data-face-registered="{{ '1' if face_registered else '0' }}"
                        onchange="toggleFaceLogin(this.checked)">
                 启用人脸识别登录
@@ -140,7 +141,8 @@ var FACE_ENABLED = {{ 'true' if face_enabled else 'false' }};
     if (!checkbox) return;
     if (!FACE_REGISTERED) {
         checkbox.checked = false;
-        status.textContent = '请先通过摄像头拍照注册人脸，再启用人脸识别登录';
+        checkbox.disabled = true;
+        status.textContent = '请先完成拍照录入人脸数据；注册成功后再由你决定是否启用人脸识别登录。';
         return;
     }
     checkbox.checked = FACE_ENABLED;
@@ -152,8 +154,8 @@ function toggleFaceLogin(checked) {
     var status = document.getElementById('face-toggle-status');
     if (!FACE_REGISTERED) {
         checkbox.checked = false;
-        status.textContent = '请先完成拍照注册；注册成功后再勾选确认启用人脸登录。';
-        openCamera();
+        checkbox.disabled = true;
+        status.textContent = '请先完成拍照录入人脸数据；注册成功后再由你决定是否启用人脸识别登录。';
         return;
     }
     checkbox.disabled = true;

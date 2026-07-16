@@ -55,17 +55,17 @@ def test_face_registration_stops_camera_after_preview_and_before_unload():
 
 
 
-def test_face_toggle_remains_clickable_before_registration():
-    """未注册人脸时开关也应可点击，并引导用户先拍照注册。"""
+def test_face_toggle_disabled_until_face_is_registered():
+    """流程应是先拍照录入人脸数据，注册成功后用户再决定是否启用登录。"""
     html = _account_template()
     match = re.search(r'<input[^>]+id="face-toggle"[^>]*>', html, flags=re.S)
     assert match, "缺少人脸登录开关"
-    assert "disabled" not in match.group(0), "未注册时不应禁用开关，避免用户误以为按钮坏了"
+    assert "{{ 'disabled' if not face_registered else '' }}" in match.group(0)
     assert "data-face-registered" in match.group(0)
     assert "FACE_REGISTERED" in html
     assert "localStorage" not in html, "人脸登录启用状态不能只保存在浏览器本地"
-    assert "openCamera();" in html, "未注册时点击开关应引导打开摄像头注册"
-    assert "请先完成拍照注册" in html
+    assert "拍照录入人脸数据" in html
+    assert "注册成功后再由你决定是否启用人脸识别登录" in html
 
 
 def test_face_toggle_requires_server_confirmation_and_persistence():
