@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.9.3-beta (2026-07-16) — 人脸增强兼容修复
+
+- 合并人脸确认、中文路径存储和单模板识别增强，同时保留缺少 OpenCV contrib 时的账户页降级。
+- 将人脸检测与 LBPH 识别能力分开探测，基础检测测试不依赖 contrib recognizer。
+- 补充缺失模型自动重建和可选组件回归测试。
+
 ## v1.9.2-beta (2026-07-16) — Script 工具异常回退修复
 
 - 为安全脚本沙箱提供受限的 Exception 类型，使种子转换脚本可执行 except Exception 回退。
