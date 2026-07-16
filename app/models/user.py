@@ -66,6 +66,48 @@ class UserRepository:
             ).fetchone()
 
     @staticmethod
+    def save_face_descriptor(username: str, descriptor: list) -> bool:
+        """保存人脸 128 维特征描述符（JSON 数组）。"""
+        import json
+        try:
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE users SET face_descriptor = ? WHERE username = ?",
+                    (json.dumps(descriptor, ensure_ascii=False), username),
+                )
+                return True
+        except Exception as e:
+            logger.error(f"save_face_descriptor 失败: {e}")
+            return False
+
+    @staticmethod
+    def match_face(descriptor: list, threshold: float = 0.6) -> str:
+        """在所有人脸中匹配最接近的描述符。返回匹配的用户名或空字符串。"""
+        import json
+        import math
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT username, face_descriptor FROM users "
+                "WHERE face_descriptor IS NOT NULL AND face_descriptor != ''"
+            ).fetchall()
+
+        best_match = ""
+        best_dist = threshold
+        for row in rows:
+            try:
+                stored = json.loads(row["face_descriptor"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not stored or len(stored) != 128:
+                continue
+            # 欧氏距离
+            dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(descriptor, stored)))
+            if dist < best_dist:
+                best_dist = dist
+                best_match = row["username"]
+        return best_match
+
+    @staticmethod
     def get_user_by_id(user_id: int):
         """Get user by ID."""
         with get_db() as conn:

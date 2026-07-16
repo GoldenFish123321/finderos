@@ -38,6 +38,13 @@
 - 🗄️ **新表**：`sentiment_sensitive_words` + `sentiment_alerts`（含索引）
 - 🧪 **测试新增**：17 项舆情功能测试覆盖
 
+- 🫵 **新功能 #14**：用户侧人脸识别登录 — face-api.js 人脸检测 + 128维特征匹配 (@GoldenFish123321)
+- 👤 **人脸注册**：登录用户通过摄像头注册人脸，128维描述符 JSON 存库
+- 🔐 **人脸登录**：登录页一键启动摄像头，自动检测人脸并与注册库欧氏距离比对（阈值0.6）
+- 📦 **face-api.js CDN**：TinyFaceDetector + FaceLandmark68Net + FaceRecognitionNet
+- 💾 **DB 迁移**：users 表新增 face_descriptor 字段，向后兼容
+- 🧪 **测试新增**：人脸匹配 + 描述符存取测试
+
 - ✋ **新功能 #15**：用户侧手势与数字员工交互 — 剪刀手→查天气、握拳→随机音乐、手掌→新闻聚合 (@GoldenFish123321)
 - 📷 **MediaPipe Hands CDN 集成**：实时手部关键点检测，支持 3 种手势分类
 - 🎥 **摄像头模块**：用户前台一键开启/关闭摄像头，骨架可视化叠加（绿色关键点 + 连线）

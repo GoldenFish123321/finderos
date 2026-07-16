@@ -318,6 +318,15 @@ def init_db():
         except Exception as e:
             logger.error(f"Database migration failed (digital_employees.api_interface_id): {e}", exc_info=True)
 
+        # ── v1.2.0 用户表新增 face_descriptor 字段（人脸登录） ──
+        try:
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+            if "face_descriptor" not in cols:
+                conn.execute("ALTER TABLE users ADD COLUMN face_descriptor TEXT DEFAULT NULL")
+                logger.info("Database migration: added face_descriptor column to users")
+        except Exception as e:
+            logger.error(f"Database migration failed (users.face_descriptor): {e}", exc_info=True)
+
         # 对话管理表 (v0.5 新增 — 多轮对话支持)
 
         conn.execute("""
