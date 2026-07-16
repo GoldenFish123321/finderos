@@ -1761,6 +1761,14 @@ class UserEmployeeInvokeHandler(BaseHandler):
             except (ValueError, TypeError):
                 pass
 
+        # ── 校验会话归属 ──
+        if conv_id:
+            conv = await loop.run_in_executor(
+                _user_chat_executor, lambda: ConversationRepository.get_by_id(conv_id)
+            )
+            if not conv or conv.get("username", "") != self.current_user:
+                conv_id = None
+
         # ── 自动创建对话（如果未关联）──
         if not conv_id:
             auto_title = ("@" + emp.get("name", "数字员工") + " " + message)[:200]
@@ -1944,9 +1952,19 @@ class UserEmployeeInvokeHandler(BaseHandler):
                         # Prompt Injection 脱敏 + XML 标签包裹 + 长度截断
                         warehouse_ctx = _sanitize_warehouse_data(items)
 
+        # ── 加载对话历史 ──
+        history_messages = []
+        if conv_id:
+            history_messages = await loop.run_in_executor(
+                _user_chat_executor,
+                lambda: ConversationRepository.get_recent_messages(conv_id, limit=10),
+            )
+
         messages = []
         full_system = _build_system_prompt(system_prompt) + skills_ctx + warehouse_ctx
         messages.append({"role": "system", "content": full_system})
+        if history_messages:
+            messages.extend(history_messages)
         messages.append({"role": "user", "content": message})
 
         assistant_reply = ""
@@ -2099,17 +2117,29 @@ class UserEmployeeInvokeHandler(BaseHandler):
 
         # ── 保存对话消息 ──
         if conv_id:
-            ConversationRepository.add_message(conv_id, "user", message, 0)
+            await loop.run_in_executor(
+                _user_chat_executor,
+                lambda: ConversationRepository.add_message(conv_id, "user", message, 0),
+            )
             if assistant_reply:
-                ConversationRepository.add_message(
-                    conv_id, "assistant", assistant_reply, total_tokens
+                await loop.run_in_executor(
+                    _user_chat_executor,
+                    lambda: ConversationRepository.add_message(
+                        conv_id, "assistant", assistant_reply, total_tokens
+                    ),
                 )
             # 自动生成标题
-            conv = ConversationRepository.get_by_id(conv_id)
+            conv = await loop.run_in_executor(
+                _user_chat_executor,
+                lambda: ConversationRepository.get_by_id(conv_id),
+            )
             if conv and (conv.get("title") or "").strip() in ("新对话", ""):
                 auto_title = ("@" + emp.get("name", "数字员工") + " " + message.strip())[:200]
                 if auto_title:
-                    ConversationRepository.update_title(conv_id, auto_title)
+                    await loop.run_in_executor(
+                        _user_chat_executor,
+                        lambda: ConversationRepository.update_title(conv_id, auto_title),
+                    )
 
         write_audit_log(
             action="USER_EMPLOYEE_INVOKE",

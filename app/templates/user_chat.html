@@ -1101,6 +1101,10 @@ function sendMessage() {
             } else {
                 doSend(employeeId, sendMsg, employeeName);
             }
+        })
+        .catch(function(err) {
+            console.error('创建对话失败:', err);
+            doSend(employeeId, sendMsg, employeeName);
         });
     } else {
         doSend(employeeId, sendMsg, employeeName);
@@ -1816,15 +1820,7 @@ function toggleCamera() {
     var container = document.getElementById('gesture-container');
 
     if (gestureCamActive) {
-        if (gestureDetector) {
-            gestureDetector.destroy();
-            gestureDetector = null;
-        }
-        container.classList.remove('active');
-        btn.classList.remove('active');
-        btn.textContent = '✋ 手势';
-        gestureCamActive = false;
-        document.getElementById('gesture-hint').classList.remove('active');
+        closeGestureCamera();
         return;
     }
 
@@ -1871,6 +1867,27 @@ function toggleCamera() {
         });
 }
 
+function closeGestureCamera() {
+    if (gestureDetector) {
+        gestureDetector.destroy();
+        gestureDetector = null;
+    }
+    var container = document.getElementById('gesture-container');
+    var btn = document.getElementById('btn-camera');
+    if (container) container.classList.remove('active');
+    if (btn) {
+        btn.classList.remove('active');
+        btn.textContent = '✋ 手势';
+    }
+    gestureCamActive = false;
+    var hint = document.getElementById('gesture-hint');
+    if (hint) hint.classList.remove('active');
+    if (gestureHintTimer) {
+        clearTimeout(gestureHintTimer);
+        gestureHintTimer = null;
+    }
+}
+
 function handleGesture(gesture) {
     var msg = '';
     var icon = '';
@@ -1902,7 +1919,10 @@ function handleGesture(gesture) {
         hint.classList.remove('active');
     }, 3000);
 
-    sendGestureMessage(msg);
+    // 识别成功后发送消息，若发送成功则自动关闭摄像头返回对话界面
+    if (sendGestureMessage(msg)) {
+        closeGestureCamera();
+    }
 }
 
 function sendGestureMessage(text) {
@@ -1912,17 +1932,15 @@ function sendGestureMessage(text) {
         if (typeof layui !== 'undefined') layui.use(['layer'], function(l){
             l.layer.msg('请等待当前回复完成', {time: 1500});
         });
-        return;
+        return false;
     }
     sendMessage();
+    return true;
 }
 
 // 页面离开时释放摄像头资源
 window.addEventListener('beforeunload', function() {
-    if (gestureDetector) {
-        gestureDetector.destroy();
-        gestureDetector = null;
-    }
+    closeGestureCamera();
 });
 
 // 点击空白关闭 @ 菜单

@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.9.6-beta (2026-07-17) — 手势识别成功后自动关闭摄像头
+
+- 修复 #手势：手势控制成功识别后不会自动关闭手势页面回到对话的问题。
+- 新增 `closeGestureCamera()` 函数统一处理摄像头清理（销毁检测器、隐藏容器、重置按钮、清除定时器）。
+- `handleGesture()` 识别成功后调用 `closeGestureCamera()` 自动返回对话界面。
+- `sendGestureMessage()` 改为返回布尔值：发送成功返回 `true`，流式输出中返回 `false`。
+- 流式保护：当 `isStreaming` 为 true 时不关闭摄像头（手势消息未被发送）。
+- `toggleCamera()` 手动关闭路径重构为复用 `closeGestureCamera()`，消除定时器清理遗漏。
+- `beforeunload` 处理器委托给 `closeGestureCamera()`，保持清理逻辑一致。
+- `gesture.js` `destroy()` 修复 `_clearCanvas()` 在 `_canvasCtx = null` 之后调用的死代码问题。
+- `sendMessage()` 异步对话创建补充 `.catch()` 错误处理。
+- 新增 4 个测试覆盖：`sendGestureMessage` 返回值、`closeGestureCamera` 函数完整性、`handleGesture` 自动关闭、流式时不关闭。
+
+## v1.9.5-beta (2026-07-17) — 数字员工对话历史上下文修复
+
+- 修复 @数字员工 LLM 调用始终看不到历史对话的问题：`_invoke_llm_employee()` 现在加载最近 10 条对话消息并传入 LLM messages 数组。
+- 补充 @数字员工 路径的会话归属校验（此前仅普通聊天路径有校验），防止跨用户访问对话历史。
+- 员工路径消息保存改为 `loop.run_in_executor` 异步执行，与常规聊天路径保持一致。
+- 新增 `test_employee_history_loading_in_invoke_llm`、`test_employee_post_ownership_validation`、`test_employee_message_save_is_async` 三个测试。
+- 根因：`_invoke_llm_employee()` 构建 messages 时仅包含 system prompt + 当前用户消息，完全未调用 `ConversationRepository.get_recent_messages()`。
+
 ## v1.9.4-beta (2026-07-16) — 账户与脚本工具稳定性修复
 
 - 修复 #149：缺少 OpenCV contrib 时 `/account` 保留密码修改和账户管理，人脸登录返回受控提示。

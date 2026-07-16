@@ -276,8 +276,8 @@ var GestureDetector = (function() {
     GestureDetector.prototype.destroy = function() {
         this.stop();
         this._hands = null;
-        this._canvasCtx = null;
         this._clearCanvas();
+        this._canvasCtx = null;
     };
 
     /**

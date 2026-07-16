@@ -207,3 +207,99 @@ class TestEmployeeMessagePersistence:
         assert "currentConversationId = statsData.conversation_id" in content, (
             "应设置 currentConversationId"
         )
+
+    def test_employee_history_loading_in_invoke_llm(self):
+        """测试: _invoke_llm_employee 中加载对话历史逻辑存在且正确
+
+        验证修复: @数字员工 LLM 调用能加载最近10条对话历史，
+        而非仅发送 system + 当前用户消息。
+        """
+        import inspect
+        from app.controllers.user_chat import UserEmployeeInvokeHandler
+
+        # 读取 _invoke_llm_employee 方法源码
+        source = inspect.getsource(UserEmployeeInvokeHandler._invoke_llm_employee)
+
+        # 验证包含历史加载逻辑
+        assert "get_recent_messages" in source, (
+            "_invoke_llm_employee 应调用 get_recent_messages 加载历史"
+        )
+        assert "messages.extend(history_messages)" in source or \
+            "messages.extend(history_messages)" in source, (
+            "历史消息应通过 messages.extend 插入到 messages 数组中"
+        )
+        assert "history_messages" in source, (
+            "应定义 history_messages 变量"
+        )
+
+        # 验证消息构建区域（messages = [] 之后）包含 history 加载和 extend
+        msgs_start = source.find("messages = []")
+        assert msgs_start > 0, "应包含 messages 初始化"
+        msgs_section = source[msgs_start:]
+
+        # 在 messages 构建区域中验证 history 在 user 消息之前
+        hist_pos = msgs_section.find("history_messages")
+        user_pos = msgs_section.find('"user"')
+        assert hist_pos > 0, "messages 构建区域应包含 history_messages"
+        assert user_pos > 0, "messages 构建区域应包含 user role"
+        assert hist_pos < user_pos, (
+            f"history_messages({hist_pos}) 应在 user({user_pos}) 之前插入 messages 数组"
+        )
+
+        # 验证 get_recent_messages 被调用且 limit=10
+        assert "get_recent_messages(conv_id, limit=10)" in source, (
+            "应使用 limit=10 调用 get_recent_messages"
+        )
+
+    def test_employee_post_ownership_validation(self):
+        """测试: UserEmployeeInvokeHandler.post 包含会话归属校验
+
+        验证修复: 数字员工路径的 conv_id 经过归属校验，
+        防止跨用户访问对话历史。
+        """
+        import inspect
+        from app.controllers.user_chat import UserEmployeeInvokeHandler
+
+        source = inspect.getsource(UserEmployeeInvokeHandler.post)
+
+        # 验证包含归属校验（中/英文注释均可）
+        assert "conv.get(" in source, (
+            "post 方法应查询 conv 记录进行归属校验"
+        )
+        assert "current_user" in source, (
+            "post 方法应校验 conv.username 与 current_user 匹配"
+        )
+        # 验证校验失败时将 conv_id 置为 None
+        assert "conv_id = None" in source, (
+            "归属校验失败时应将 conv_id 置为 None"
+        )
+
+    def test_employee_message_save_is_async(self):
+        """测试: _invoke_llm_employee 中消息保存使用 loop.run_in_executor
+
+        验证: 与常规聊天路径一致，员工路径的消息保存也通过
+        loop.run_in_executor 异步执行，避免阻塞 Tornado 事件循环。
+        """
+        import inspect
+        from app.controllers.user_chat import UserEmployeeInvokeHandler
+
+        source = inspect.getsource(UserEmployeeInvokeHandler._invoke_llm_employee)
+
+        # 验证消息保存通过 loop.run_in_executor 异步执行
+        # 不应直接调用 ConversationRepository.add_message 而不包裹
+        save_section_start = source.find("# ── 保存对话消息 ──")
+        assert save_section_start > 0, "应包含保存对话消息逻辑"
+
+        save_section = source[save_section_start:]
+        # 下一段代码块（在 write_audit_log 之前结束）
+        audit_idx = save_section.find("write_audit_log")
+        if audit_idx > 0:
+            save_section = save_section[:audit_idx]
+
+        # add_message 调用应被 loop.run_in_executor 包裹
+        add_msg_count = save_section.count("add_message")
+        executor_count = save_section.count("loop.run_in_executor")
+        assert executor_count >= add_msg_count, (
+            f"每条 add_message 调用应通过 loop.run_in_executor 异步执行，"
+            f"发现 {add_msg_count} 处 add_message 但只有 {executor_count} 处 loop.run_in_executor"
+        )
