@@ -1789,6 +1789,7 @@ def _seed_script_tools():
         conn.execute(
             "UPDATE mcp_tools SET "
             "tool_type='script', "
+            "input_schema=?, "
             "data_sources=?, "
             "transform_script=?, "
             "script_enabled=1, "
@@ -1797,6 +1798,7 @@ def _seed_script_tools():
             "is_enabled=1 "
             "WHERE name='weather_query'",
             (
+                tools[0]["input_schema"],
                 tools[0]["data_sources"],
                 tools[0]["transform_script"],
             ),
