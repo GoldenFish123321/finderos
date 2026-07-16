@@ -713,7 +713,32 @@ def _seed_default_models():
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (6, "Whisper-1", "openai", "https://api.openai.com/v1", "whisper-1", "audio", 1, 0),
             )
-            print("[种子] 默认AI模型已创建（6个模型，覆盖6种分类）")
+            # AIGC 媒体生成模型（Issue #21/#22 — 多模态生图/生视频）
+            conn.execute(
+                "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (7, "Wan2.6-T2I", "custom", "https://aigc-api.aitoolcore.com/api/v1",
+                 "wan2.6-t2i", "image", 1, 1),
+            )
+            conn.execute(
+                "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (8, "Qwen-Image-2.0", "custom", "https://aigc-api.aitoolcore.com/api/v1",
+                 "qwen-image-2.0", "image", 1, 0),
+            )
+            conn.execute(
+                "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (9, "Wan2.6-T2V", "custom", "https://aigc-api.aitoolcore.com/api/v1",
+                 "wan2.6-t2v", "video", 1, 1),
+            )
+            conn.execute(
+                "INSERT INTO ai_models (id, name, provider, api_base, model_name, category, is_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (10, "Wan2.6-I2V", "custom", "https://aigc-api.aitoolcore.com/api/v1",
+                 "wan2.6-i2v", "video", 1, 0),
+            )
+            print("[种子] 默认AI模型已创建（10个模型，覆盖6种分类）")
 
 
 def _seed_default_interfaces():

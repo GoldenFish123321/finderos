@@ -12,6 +12,7 @@ def canonical_tool_records() -> list[dict]:
         "employee_tools": "employee", "model_tools": "model",
         "chat_tools": "chat", "entertainment_tools": "entertainment",
         "crawl4ai_tools": "crawl4ai", "system_tools": "system",
+        "media_tools": "media",
     }
     records = []
     for order, definition in enumerate(discover_builtin_tool_definitions(), 1):
