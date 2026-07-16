@@ -28,6 +28,9 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 _MODEL_PATH = os.path.join(UPLOAD_DIR, "face_model.yml")
 _LABELS_PATH = os.path.join(UPLOAD_DIR, "face_labels.json")
+_FACE_SIZE = (100, 100)
+_FACE_MARGIN_RATIO = 0.20
+_FACE_CONFIDENCE_THRESHOLD = float(os.environ.get("FACE_CONFIDENCE_THRESHOLD", "105"))
 
 # Haar cascade 文件路径（本地预下载）
 _CASCADE_PATH = os.path.join(_BASE_DIR, "haarcascades", "haarcascade_frontalface_default.xml")
@@ -69,6 +72,54 @@ def _load_face_cascade():
 _face_cascade = _load_face_cascade()
 _recognizer = cv2.face.LBPHFaceRecognizer_create()
 _model_loaded = False
+
+
+def _normalize_face(face_gray):
+    """Normalize a cropped grayscale face for LBPH training and prediction."""
+    if face_gray is None or face_gray.size == 0:
+        return None
+    if len(face_gray.shape) == 3:
+        face_gray = cv2.cvtColor(face_gray, cv2.COLOR_BGR2GRAY)
+    face = cv2.resize(face_gray, _FACE_SIZE, interpolation=cv2.INTER_AREA)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    face = clahe.apply(face)
+    face = cv2.GaussianBlur(face, (3, 3), 0)
+    return face
+
+
+def _crop_face_with_margin(gray, rect):
+    """Crop the detected face with margin to reduce Haar box jitter."""
+    x, y, w, h = [int(v) for v in rect]
+    margin_x = int(w * _FACE_MARGIN_RATIO)
+    margin_y = int(h * _FACE_MARGIN_RATIO)
+    x1 = max(0, x - margin_x)
+    y1 = max(0, y - margin_y)
+    x2 = min(gray.shape[1], x + w + margin_x)
+    y2 = min(gray.shape[0], y + h + margin_y)
+    return gray[y1:y2, x1:x2]
+
+
+def _detect_largest_face(gray):
+    """Detect the largest likely face using a few conservative fallbacks."""
+    if _face_cascade.empty():
+        logger.error("Face cascade is empty; cannot detect faces")
+        return None
+    detect_gray = cv2.equalizeHist(gray)
+    configs = (
+        (1.1, 5, (80, 80)),
+        (1.08, 4, (60, 60)),
+        (1.05, 3, (50, 50)),
+    )
+    for scale, neighbors, min_size in configs:
+        faces = _face_cascade.detectMultiScale(
+            detect_gray,
+            scaleFactor=scale,
+            minNeighbors=neighbors,
+            minSize=min_size,
+        )
+        if len(faces) > 0:
+            return max(faces, key=lambda item: item[2] * item[3])
+    return None
 
 
 def _temp_ascii_path(filename: str) -> str:
@@ -168,6 +219,8 @@ def _save_model():
         face_path = os.path.join(UPLOAD_DIR, f"{username}.jpg")
         img = _read_image_file(face_path, cv2.IMREAD_GRAYSCALE)
         if img is not None:
+            if img.shape[:2] != _FACE_SIZE:
+                img = cv2.resize(img, _FACE_SIZE, interpolation=cv2.INTER_AREA)
             faces.append(img)
             labels.append(lid)
             new_map[username] = lid
@@ -207,17 +260,19 @@ def detect_face(image_bytes: bytes):
     if img is None:
         return None
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    faces = _face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(100, 100))
+    # 降低超大摄像头图像对 Haar 检测的抖动影响，同时保留足够细节。
+    max_side = max(img.shape[:2])
+    if max_side > 960:
+        scale = 960.0 / max_side
+        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
 
-    if len(faces) != 1:
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    rect = _detect_largest_face(gray)
+    if rect is None:
         return None
 
-    x, y, w, h = faces[0]
-    face = gray[y : y + h, x : x + w]
-    face = cv2.resize(face, (100, 100))
-    face = cv2.equalizeHist(face)  # 直方图均衡化，改善光照影响
-    return face
+    face = _crop_face_with_margin(gray, rect)
+    return _normalize_face(face)
 
 
 def register_face(username: str, image_bytes: bytes) -> bool:
@@ -238,6 +293,14 @@ def register_face(username: str, image_bytes: bytes) -> bool:
 
     # 保存人脸图像
     face_path = os.path.join(UPLOAD_DIR, f"{username}.jpg")
+    previous_face_bytes = None
+    if os.path.exists(face_path):
+        try:
+            with open(face_path, "rb") as f:
+                previous_face_bytes = f.read()
+        except OSError:
+            previous_face_bytes = None
+
     if not _write_image_file(face_path, face):
         return False
 
@@ -246,6 +309,7 @@ def register_face(username: str, image_bytes: bytes) -> bool:
     if os.path.exists(_LABELS_PATH):
         with open(_LABELS_PATH, "r", encoding="utf-8") as f:
             label_map = json.load(f)
+    original_label_map = dict(label_map)
     if username not in label_map:
         label_map[username] = 0  # 占位，_save_model 会重新分配
 
@@ -256,11 +320,13 @@ def register_face(username: str, image_bytes: bytes) -> bool:
     if not _save_model():
         logger.error("Face model training failed after registering %s", username)
         try:
-            if os.path.exists(face_path):
+            if previous_face_bytes is not None:
+                with open(face_path, "wb") as f:
+                    f.write(previous_face_bytes)
+            elif os.path.exists(face_path):
                 os.remove(face_path)
-            label_map.pop(username, None)
             with open(_LABELS_PATH, "w", encoding="utf-8") as f:
-                json.dump(label_map, f)
+                json.dump(original_label_map, f)
         except Exception as e:
             logger.warning("Failed to rollback face registration for %s: %s", username, e)
         return False
@@ -286,8 +352,13 @@ def recognize_face(image_bytes: bytes):
 
     try:
         label, confidence = _recognizer.predict(face)
-        # LBPH：置信度越低表示匹配度越高，通常 < 80 为可靠匹配
-        if confidence > 80:
+        # LBPH：置信度越低表示匹配度越高。摄像头光照/距离变化较大，阈值允许通过环境变量调整。
+        if confidence > _FACE_CONFIDENCE_THRESHOLD:
+            logger.info(
+                "Face recognition rejected by confidence: %.2f > %.2f",
+                confidence,
+                _FACE_CONFIDENCE_THRESHOLD,
+            )
             return None
 
         if not os.path.exists(_LABELS_PATH):
