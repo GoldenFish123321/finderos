@@ -32,8 +32,8 @@ from app.mcp.builtin_tools.entertainment_tools import (
     _get_random_music,
 )
 from app.mcp.builtin_tools.crawl4ai_tools import (
-    _collect_with_crawl4ai,
-    _batch_deep_collect,
+    _deep_collect_url,
+    _batch_deep_collect_url,
 )
 from app.mcp.builtin_tools.system_tools import (
     _load_skill,

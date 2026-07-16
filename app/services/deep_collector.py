@@ -138,7 +138,8 @@ def _decompress(data: bytes, encoding: str) -> bytes:
         try:
             import brotli
         except ImportError:
-            raise RuntimeError("Brotli 响应需要安装 brotli 包")
+            logger.debug("Brotli 未安装，跳过 br 解压")
+            return data
         decoder = brotli.Decompressor()
         result = bytearray()
         try:

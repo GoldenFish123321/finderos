@@ -306,20 +306,27 @@ def _build_weather_card(api_data, employee_name: str, user_message: str = "",
         return default
 
     weather_text = (
-        first_path("current_condition.0.weatherDesc.0.value", "weather.0.hourly.0.weatherDesc.0.value")
+        first_path("current_condition.0.weatherDesc.0.value",
+                   "current.condition.text", "current.weather.0.description")
         or current.get("weather") or current.get("condition") or current.get("text") or current.get("status") or ""
     )
     temp = (
-        first_path("current_condition.0.temp_C", "current.temp_C", "current.temp_c")
+        first_path("current_condition.0.temp_C", "current.temp_C",
+                   "current.temp_c", "current.temperature")
         or current.get("temp") or current.get("temperature") or current.get("temp_C") or current.get("temp_c") or ""
     )
     city = (
-        first_path("nearest_area.0.areaName.0.value", "nearest_area.0.region.0.value")
+        first_path("nearest_area.0.areaName.0.value", "nearest_area.0.region.0.value",
+                   "location.name", "location.region")
         or (api_data.get("city") if isinstance(api_data, dict) else "")
         or (api_data.get("location") if isinstance(api_data, dict) else "")
         or user_message
     )
-    date = first_path("weather.0.date", "date", "time", "updateTime")
+    # Issue #121: date 提取增加 current_condition 格式路径，保留 forecast weather.0.date 作为后备
+    date = first_path("current_condition.0.localObsDateTime",
+                      "current_condition.0.observation_time",
+                      "current.last_updated",
+                      "weather.0.date", "date", "time", "updateTime")
 
     fields = []
     configured_fields = template_config.get("fields")
@@ -441,8 +448,19 @@ def _build_employee_card(emp: dict, api_data: dict, user_message: str = "") -> d
         return _build_card_from_template(response_template, api_data, emp_name, user_message)
 
     # 天气类员工：识别天气数据
-    if ("天气" in emp_name or "weather" in emp_name.lower() or
-            "temp" in str(api_data).lower() or "weather" in str(api_data).lower()):
+    # Issue #121: 使用 employee_type + 精确名称匹配，避免中文子串误识别
+    # 不再依赖 str(api_data) 子串匹配（"temp" 会误匹配 "template" 等）
+    emp_name_clean = emp_name.strip()
+    is_weather_name = emp_name_clean in ("天气助手", "Weather Assistant")
+    is_weather_api = (
+        emp_type == "api" and
+        ("天气" in emp_name_clean or "weather" in emp_name_clean.lower())
+    )
+    is_weather_struct = isinstance(api_data, dict) and (
+        "current_condition" in api_data or
+        (isinstance(api_data.get("weather"), list) and len(api_data["weather"]) > 0)
+    )
+    if is_weather_name or is_weather_api or is_weather_struct:
         return _build_weather_card(api_data, emp_name, user_message)
 
     # 音乐类员工：识别音乐数据（支持 Meting API 列表格式和 dict 格式）

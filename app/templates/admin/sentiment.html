@@ -272,12 +272,12 @@ body.dark-theme { background: #080a1a !important; }
         chartObservers[dom.id] = obs;
     }
 
-    function initCharts() {
+    function initCharts(statsData) {
         Object.keys(charts).forEach(disposeChart);
 
         document.getElementById('update-time').textContent = '🕐 ' + new Date().toLocaleString('zh-CN');
 
-        var statsData = {% raw json_encode(stats) %};
+        statsData = statsData || {% raw json_encode(stats) %};
         var trendData = statsData.trend || [];
         var sourcesData = statsData.sources || [];
 
@@ -397,17 +397,16 @@ body.dark-theme { background: #080a1a !important; }
                     }
 
                     // 重建图表
-                    var fakeStats = data.stats;
-                    var fakeEvent = { trend: fakeStats.trend || [], sources: fakeStats.sources || [],
-                        total: fakeStats.total, high_severity: fakeStats.high_severity };
-                    {% raw json_encode(stats) %}; // 重置变量
-                    initCharts();
+                    initCharts(data.stats);
                 }
+            }).catch(function(err) {
+                console.error('刷新失败:', err);
+                document.getElementById('update-time').textContent = '❌ 刷新失败';
             });
     };
 
     // 扫描
-    window.triggerScan = function() {
+    window.triggerScan = function(event) {
         var btn = event && event.target ? event.target : document.querySelector('.btn-glass.danger');
         btn.textContent = '⏳ 扫描中...';
         btn.disabled = true;
@@ -424,7 +423,7 @@ body.dark-theme { background: #080a1a !important; }
             btn.disabled = false;
             if (d.code === 0) {
                 if (typeof layui !== 'undefined') layui.use(['layer'], function(l){
-                    l.layer.msg('扫描完成: ' + (d.data ? d.data.total : 0) + ' 条新预警', {time: 2000});
+                    l.layer.msg('扫描完成: ' + String(d.data ? d.data.total : 0).replace(/[<>&"']/g, '') + ' 条新预警', {time: 2000});
                 });
                 refreshSentiment();
             }

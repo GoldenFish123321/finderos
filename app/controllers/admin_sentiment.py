@@ -8,8 +8,11 @@ import logging
 import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
 from app.models.sensitive_word import SensitiveWordRepository
+from app.utils.security import write_audit_log
 
 logger = logging.getLogger(__name__)
+
+ALLOWED_ALERT_STATUSES = {"pending", "resolved", "ignored"}
 
 
 class AdminSentimentHandler(AdminBaseHandler):
@@ -63,6 +66,13 @@ class AdminSentimentScanHandler(AdminBaseHandler):
     @tornado.web.authenticated
     def post(self):
         result = SensitiveWordRepository.scan_all()
+        write_audit_log(
+            action="SENTIMENT_SCAN",
+            username=self.current_user,
+            target="sentiment:scan",
+            detail=f"扫描完成，命中 {result.get('total_alerts', 0)} 条",
+            client_ip=self.request.remote_ip or "",
+        )
         self.write({"code": 0, "msg": f"扫描完成", "data": result})
 
 
@@ -76,7 +86,7 @@ class AdminSentimentAlertDetailHandler(AdminBaseHandler):
         except (ValueError, TypeError):
             self.write({"code": 1, "msg": "无效的预警ID"})
             return
-        detail = SensitiveWordRepository.get_alert_detail(alert_id)
+        detail = SensitiveWordRepository.get_alert_detail(alert_id, username=self.current_user)
         if not detail:
             self.write({"code": 1, "msg": "预警不存在"})
             return
@@ -94,5 +104,15 @@ class AdminSentimentResolveHandler(AdminBaseHandler):
             self.write({"code": 1, "msg": "无效的预警ID"})
             return
         status = self.get_body_argument("status", "resolved")
+        if status not in ALLOWED_ALERT_STATUSES:
+            self.write({"code": 1, "msg": f"无效的状态值: {status}"})
+            return
         SensitiveWordRepository.update_alert_status(alert_id, status)
+        write_audit_log(
+            action="SENTIMENT_RESOLVE",
+            username=self.current_user,
+            target=f"sentiment:alert:{alert_id}",
+            detail=f"预警状态 → {status}",
+            client_ip=self.request.remote_ip or "",
+        )
         self.write({"code": 0, "msg": "已更新"})

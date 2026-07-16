@@ -88,7 +88,7 @@ class CollectionScheduler:
         if self._callback:
             self._callback.stop()
             self._callback = None
-        self._executor.shutdown(wait=False)
+        self._executor.shutdown(wait=True, timeout=30)
         logger.info("定时采集调度器已停止")
 
     def _tick(self):

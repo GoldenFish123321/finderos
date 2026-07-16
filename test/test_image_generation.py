@@ -38,17 +38,17 @@ class TestImageGenHandler(unittest.TestCase):
             "error": {"message": "余额不足", "type": "image_generation_error"}
         })
 
-        # 验证解析逻辑：通过 _parse_api_error 提取错误
+        # 验证解析逻辑：_parse_api_error 返回通用消息（避免泄露第三方 API 内部信息）
         from app.services.media_generator import _parse_api_error
-        self.assertIn("余额不足", _parse_api_error(500, mock_error_body))
-        self.assertIn("Internal error", _parse_api_error(500, '{"message": "Internal error"}'))
-        self.assertIn("plain text", _parse_api_error(500, "plain text"))
-        self.assertEqual("HTTP 500", _parse_api_error(500, ""))
+        self.assertEqual("媒体生成服务返回错误 (HTTP 500)", _parse_api_error(500, mock_error_body))
+        self.assertEqual("媒体生成服务返回错误 (HTTP 500)", _parse_api_error(500, '{"message": "Internal error"}'))
+        self.assertEqual("媒体生成服务返回错误 (HTTP 500)", _parse_api_error(500, "plain text"))
+        self.assertEqual("媒体生成服务返回错误 (HTTP 500)", _parse_api_error(500, ""))
 
     def test_parse_api_error_empty(self):
         """空错误消息。"""
         from app.services.media_generator import _parse_api_error
-        self.assertEqual("HTTP 500", _parse_api_error(500, ""))
+        self.assertEqual("媒体生成服务返回错误 (HTTP 500)", _parse_api_error(500, ""))
 
     def test_validate_url_safe_blocked(self):
         """SSRF 校验：内网地址应被拦截。"""

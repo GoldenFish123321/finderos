@@ -14,7 +14,7 @@ class Settings:
     """全局应用配置"""
 
     # === 应用版本（唯一硬编码位置） ===
-    VERSION = "1.3.2-beta"
+    VERSION = "1.3.3-beta"
     """应用版本号。项目中所有版本展示均由此处统一管理。"""
 
     # === UI 可配置项（默认值，启动后被 DB system_config 表覆盖） ===
@@ -147,6 +147,7 @@ class Settings:
                 "system_subtitle": "SYSTEM_SUBTITLE",
                 "system_logo": "SYSTEM_LOGO",
                 "icp_number": "ICP_NUMBER",
+                "default_port": "PORT",  # #83: 添加 default_port → PORT 映射
                 "ai_default_model": "AI_DEFAULT_MODEL",
                 "ai_default_temperature": "AI_DEFAULT_TEMPERATURE",
                 "ai_default_max_tokens": "AI_DEFAULT_MAX_TOKENS",
@@ -161,7 +162,7 @@ class Settings:
                             setattr(self, attr_name, float(raw_value))
                         except (ValueError, TypeError):
                             logger.warning(f"system_config.{db_key} 值 '{raw_value}' 无效，使用默认值")
-                    elif attr_name in ("AI_DEFAULT_MAX_TOKENS",):
+                    elif attr_name in ("AI_DEFAULT_MAX_TOKENS", "PORT"):  # #83: PORT 加入 int 转换
                         try:
                             setattr(self, attr_name, int(raw_value))
                         except (ValueError, TypeError):

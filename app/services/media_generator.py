@@ -2,7 +2,7 @@
 media_generator.py — AI 媒体生成服务
 
 提供图像生成（文生图 / 图生图）和视频生成（文生视频 / 图生视频）的统一 HTTP 调用层。
-所有调用使用标准库 urllib.request，在线程池中执行以避免阻塞 IOLoop。
+所有调用使用 safe_http_request，在线程池中执行以避免阻塞 IOLoop。
 视频生成后立即代理下载到本地，提供稳定访问 URL（OSS 签名链接有时效）。
 """
 
@@ -12,16 +12,15 @@ import json
 import logging
 import os
 import uuid
-import urllib.request
-import urllib.error
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.utils.safe_http import safe_http_request, SafeHttpError
 from app.utils.security import validate_url_safe
 
 logger = logging.getLogger(__name__)
 
 # 视频代理下载目录（相对于项目根）
-_VIDEO_CACHE_DIR = os.path.join("app", "static", "media")
+_VIDEO_CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "media")
 
 # 通用超时
 _DEFAULT_IMAGE_TIMEOUT = 90      # 图像生成超时（秒）
@@ -42,15 +41,7 @@ def _ensure_video_cache_dir() -> str:
 
 def _parse_api_error(status: int, body: str) -> str:
     """从 HTTP 错误响应中提取可读的错误信息。"""
-    try:
-        data = json.loads(body)
-        if data.get("error") and isinstance(data["error"], dict):
-            return data["error"].get("message", body[:200])
-        if data.get("message"):
-            return data["message"]
-    except (json.JSONDecodeError, TypeError):
-        pass
-    return body[:300] if body else f"HTTP {status}"
+    return f"媒体生成服务返回错误 (HTTP {status})"
 
 
 class ImageGenHandler:
@@ -96,14 +87,15 @@ class ImageGenHandler:
         }
 
         try:
-            req = urllib.request.Request(url, data=payload, headers=headers)
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                body = resp.read().decode("utf-8")
-        except urllib.error.HTTPError as e:
-            err_body = e.read().decode("utf-8", errors="replace")
-            error_msg = _parse_api_error(e.code, err_body)
-            logger.warning(f"图像生成失败 (HTTP {e.code}): {error_msg}")
-            return {"success": False, "error": error_msg}
+            resp = safe_http_request(url, method="POST", headers=headers, body=payload, timeout=timeout)
+            body = resp.body.decode("utf-8")
+            if resp.status >= 400:
+                error_msg = _parse_api_error(resp.status, body)
+                logger.warning(f"图像生成失败 (HTTP {resp.status}): {error_msg}")
+                return {"success": False, "error": error_msg}
+        except SafeHttpError as e:
+            logger.warning(f"图像生成请求失败: {e}")
+            return {"success": False, "error": str(e)}
         except Exception as e:
             logger.error(f"图像生成异常: {e}")
             return {"success": False, "error": str(e)}
@@ -185,14 +177,15 @@ class ImageGenHandler:
         }
 
         try:
-            req = urllib.request.Request(url, data=body, headers=headers)
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                resp_body = resp.read().decode("utf-8")
-        except urllib.error.HTTPError as e:
-            err_body = e.read().decode("utf-8", errors="replace")
-            error_msg = _parse_api_error(e.code, err_body)
-            logger.warning(f"图像编辑失败 (HTTP {e.code}): {error_msg}")
-            return {"success": False, "error": error_msg}
+            resp = safe_http_request(url, method="POST", headers=headers, body=body, timeout=timeout)
+            resp_body = resp.body.decode("utf-8")
+            if resp.status >= 400:
+                error_msg = _parse_api_error(resp.status, resp_body)
+                logger.warning(f"图像编辑失败 (HTTP {resp.status}): {error_msg}")
+                return {"success": False, "error": error_msg}
+        except SafeHttpError as e:
+            logger.warning(f"图像编辑请求失败: {e}")
+            return {"success": False, "error": str(e)}
         except Exception as e:
             logger.error(f"图像编辑异常: {e}")
             return {"success": False, "error": str(e)}
@@ -267,14 +260,15 @@ class VideoGenHandler:
         }
 
         try:
-            req = urllib.request.Request(url, data=payload, headers=headers)
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                body = resp.read().decode("utf-8")
-        except urllib.error.HTTPError as e:
-            err_body = e.read().decode("utf-8", errors="replace")
-            error_msg = _parse_api_error(e.code, err_body)
-            logger.warning(f"视频生成失败 (HTTP {e.code}): {error_msg}")
-            return {"success": False, "error": error_msg}
+            resp = safe_http_request(url, method="POST", headers=headers, body=payload, timeout=timeout)
+            body = resp.body.decode("utf-8")
+            if resp.status >= 400:
+                error_msg = _parse_api_error(resp.status, body)
+                logger.warning(f"视频生成失败 (HTTP {resp.status}): {error_msg}")
+                return {"success": False, "error": error_msg}
+        except SafeHttpError as e:
+            logger.warning(f"视频生成请求失败: {e}")
+            return {"success": False, "error": str(e)}
         except Exception as e:
             logger.error(f"视频生成异常: {e}")
             return {"success": False, "error": str(e)}
@@ -297,7 +291,7 @@ class VideoGenHandler:
 
         # 代理下载视频到本地
         cache_dir = _ensure_video_cache_dir()
-        ext = ".mp4" if "mp4" in content_type else ".mp4"
+        ext = ".mp4"
         local_filename = f"video_{uuid.uuid4().hex[:12]}{ext}"
         local_path = os.path.join(cache_dir, local_filename)
 
@@ -312,20 +306,11 @@ class VideoGenHandler:
 
         try:
             logger.info(f"开始代理下载视频: {remote_url[:100]}...")
-            dl_req = urllib.request.Request(remote_url)
-            with urllib.request.urlopen(dl_req, timeout=_DEFAULT_DOWNLOAD_TIMEOUT) as dl_resp:
-                with open(local_path, "wb") as f:
-                    chunk_size = 1024 * 1024  # 1MB
-                    total = 0
-                    while True:
-                        chunk = dl_resp.read(chunk_size)
-                        if not chunk:
-                            break
-                        total += len(chunk)
-                        if total > _MAX_VIDEO_DOWNLOAD_SIZE:
-                            raise ValueError(f"视频文件超过最大限制 {_MAX_VIDEO_DOWNLOAD_SIZE // (1024*1024)}MB")
-                        f.write(chunk)
-                logger.info(f"视频下载完成: {local_path} ({total} bytes)")
+            dl_resp = safe_http_request(remote_url, method="GET", timeout=_DEFAULT_DOWNLOAD_TIMEOUT, max_bytes=_MAX_VIDEO_DOWNLOAD_SIZE)
+            with open(local_path, "wb") as f:
+                f.write(dl_resp.body)
+            total = len(dl_resp.body)
+            logger.info(f"视频下载完成: {local_path} ({total} bytes)")
         except Exception as e:
             logger.error(f"视频代理下载失败: {e}")
             # 清理不完整的文件

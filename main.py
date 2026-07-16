@@ -6,6 +6,7 @@ main.py — 瞭望与问数系统 (DataFinderAgentOS) 主入口
 
 import logging
 import os
+import signal
 
 import tornado.ioloop
 import tornado.web
@@ -284,6 +285,16 @@ if __name__ == "__main__":
     # 启动定时舆情扫描器 (v1.2.0) — 每5分钟
     _sentiment_scanner = SentimentScanner(check_interval_ms=300000)
     _sentiment_scanner.start()
+
+    # 注册优雅关闭信号处理器
+    ioloop = tornado.ioloop.IOLoop.current()
+    def _shutdown(signum, frame):
+        logger.info(f"收到信号 {signum}，正在优雅关闭...")
+        scheduler.stop()
+        _sentiment_scanner.stop()
+        ioloop.add_callback(ioloop.stop)
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
 
     # 启动 HTTP 服务器
     bind_address = os.environ.get("BIND_ADDRESS", "127.0.0.1")
