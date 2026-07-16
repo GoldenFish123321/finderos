@@ -57,12 +57,25 @@ class AdminSentimentApiHandler(AdminBaseHandler):
 
 
 class AdminSentimentScanHandler(AdminBaseHandler):
-    """触发敏感词扫描"""
+    """触发敏感词扫描 + AI 自动分析"""
 
     @tornado.web.authenticated
     def post(self):
-        result = SensitiveWordRepository.scan_all()
-        self.write({"code": 0, "msg": f"扫描完成", "data": result})
+        result = SensitiveWordRepository.scan_and_analyze_all()
+        self.write({"code": 0, "msg": f"扫描+分析完成", "data": result})
+
+
+class AdminSentimentAnalyzeHandler(AdminBaseHandler):
+    """对未分析预警触发 AI 语义分析"""
+
+    @tornado.web.authenticated
+    def post(self):
+        try:
+            limit = int(self.get_body_argument("limit", 10))
+        except (ValueError, TypeError):
+            limit = 10
+        results = SensitiveWordRepository.analyze_pending_alerts(limit=limit)
+        self.write({"code": 0, "msg": f"已分析 {len(results)} 条预警", "data": results})
 
 
 class AdminSentimentAlertDetailHandler(AdminBaseHandler):
@@ -93,5 +106,6 @@ class AdminSentimentResolveHandler(AdminBaseHandler):
             self.write({"code": 1, "msg": "无效的预警ID"})
             return
         status = self.get_body_argument("status", "resolved")
-        SensitiveWordRepository.update_alert_status(alert_id, status)
+        ai_analysis = self.get_body_argument("ai_analysis", "")
+        SensitiveWordRepository.update_alert_status(alert_id, status, ai_analysis)
         self.write({"code": 0, "msg": "已更新"})

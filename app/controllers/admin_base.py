@@ -25,6 +25,7 @@ ADMIN_ROUTE_PERMISSION_ALIASES = {
     "/admin/api/sentiment/scan": "/admin/sentiment",
     "/admin/api/sentiment/detail": "/admin/sentiment",
     "/admin/api/sentiment/resolve": "/admin/sentiment",
+    "/admin/api/sentiment/analyze": "/admin/sentiment",
     "/admin/mcp/reload": "/admin/mcp/tool",
 }
 

@@ -51,6 +51,13 @@ class SentimentScanner:
             if result["total"] > 0:
                 logger.info(f"舆情扫描: 发现 {result['total']} 条新预警 "
                            f"(仓库 {result['warehouse']}, 对话 {result['conversation']})")
+            # 对未分析的预警执行 AI 语义分析（每次最多分析 5 条）
+            try:
+                analyzed = SensitiveWordRepository.analyze_pending_alerts(limit=5)
+                if analyzed:
+                    logger.info(f"AI 风析: 完成 {len(analyzed)} 条预警语义分析")
+            except Exception as ae:
+                logger.warning(f"AI 风析异常（不影响扫描）: {ae}")
         except Exception as e:
             logger.error(f"舆情扫描异常: {e}")
 

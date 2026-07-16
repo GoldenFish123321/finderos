@@ -64,7 +64,7 @@ from app.controllers.admin_config import SystemConfigHandler
 from app.controllers.admin_sentiment import (
     AdminSentimentHandler, AdminSentimentApiHandler,
     AdminSentimentScanHandler, AdminSentimentAlertDetailHandler,
-    AdminSentimentResolveHandler,
+    AdminSentimentResolveHandler, AdminSentimentAnalyzeHandler,
 )
 from app.controllers.admin_mcp import (
     MCPToolListHandler, MCPToolFormHandler, MCPToolDeleteHandler,
@@ -217,6 +217,7 @@ def make_app() -> tornado.web.Application:
             (r"/admin/api/sentiment/scan", AdminSentimentScanHandler),
             (r"/admin/api/sentiment/detail", AdminSentimentAlertDetailHandler),
             (r"/admin/api/sentiment/resolve", AdminSentimentResolveHandler),
+            (r"/admin/api/sentiment/analyze", AdminSentimentAnalyzeHandler),
 
             # ========== v0.10 MCP 工具管理 ==========
             (r"/admin/mcp/tool", MCPToolListHandler),
