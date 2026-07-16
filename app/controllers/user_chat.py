@@ -1616,6 +1616,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
             self.write({"code": 1, "msg": "无效的员工ID"})
             return
         message = self.get_body_argument("message", "").strip()
+        conversation_id = self.get_body_argument("conversation_id", None)
 
         if not message:
             self.write({"code": 1, "msg": "消息不能为空"})
@@ -1638,17 +1639,34 @@ class UserEmployeeInvokeHandler(BaseHandler):
             self.write({"code": 1, "msg": "员工不可用"})
             return
 
+        # ── 解析对话 ID ──
+        conv_id = None
+        if conversation_id:
+            try:
+                conv_id = int(conversation_id)
+            except (ValueError, TypeError):
+                pass
+
+        # ── 自动创建对话（如果未关联）──
+        if not conv_id:
+            auto_title = ("@" + emp.get("name", "数字员工") + " " + message)[:200]
+            conv_id = ConversationRepository.create(
+                title=auto_title,
+                model_id=emp.get("model_id") or None,
+                username=self.current_user,
+            )
+
         set_mcp_context(username=self.current_user)
 
         try:
             if emp.get("employee_type") == "api":
-                await self._invoke_api_employee(emp, message)
+                await self._invoke_api_employee(emp, message, conv_id)
             else:
-                await self._invoke_llm_employee(emp, message, _start_time)
+                await self._invoke_llm_employee(emp, message, _start_time, conv_id)
         finally:
             clear_mcp_context()
 
-    async def _invoke_llm_employee(self, emp: dict, message: str, start_time: float):
+    async def _invoke_llm_employee(self, emp: dict, message: str, start_time: float, conv_id: int = None):
         """LLM 型员工调用（MCP 增强版）。"""
         import time as _time
 
@@ -1793,6 +1811,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
         messages.append({"role": "system", "content": full_system})
         messages.append({"role": "user", "content": message})
 
+        assistant_reply = ""
         if api_key:
             from app.utils.security import validate_url_safe
             safe, reason, _ = validate_url_safe(api_base)
@@ -1810,6 +1829,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
             if err is None:
                 api_success = True
                 content_chars = 0
+                reply_parts = []
                 for line in raw_data.split(b"\n"):
                     line_str = line.decode("utf-8", errors="replace").strip()
                     if line_str.startswith("data: "):
@@ -1823,24 +1843,52 @@ class UserEmployeeInvokeHandler(BaseHandler):
                             content = delta.get("content", "")
                             if content:
                                 content_chars += len(content)
+                                reply_parts.append(content)
                                 await _sse_write(self, content)
                             if chunk.get("usage"):
                                 total_tokens = chunk["usage"].get("total_tokens", 0)
                         except json.JSONDecodeError:
                             pass
+                assistant_reply = "".join(reply_parts)
                 if total_tokens == 0 and content_chars > 0:
                     total_tokens = max(1, content_chars // 2)
             else:
                 logger.warning(f"员工 API 调用失败: {err}")
 
         if not api_success:
+            # mock 回复：收集 _mock_employee_response 产生的完整回复
+            # 注意：_mock_employee_response 内部通过 _sse_write 流式输出，
+            # 此处无法直接获取完整文本，使用包含工具调用信息的摘要保存
             total_tokens = await self._mock_employee_response(emp, message, tool_ctx)
+            if tool_ctx and tool_ctx.get("tool_name"):
+                assistant_reply = (
+                    f"[{emp.get('name', '数字员工')}] "
+                    f"已通过 {tool_ctx['tool_name']} 处理您的请求。"
+                )
+            else:
+                assistant_reply = (
+                    f"[{emp.get('name', '数字员工')}] 已处理: {message[:150]}"
+                )
 
         if total_tokens > 0 and model:
             AiModelRepository.add_tokens(model["id"], total_tokens)
 
         elapsed = round(_time.time() - start_time, 2)
-        await _sse_stats(self, total_tokens, not api_success, elapsed)
+        await _sse_stats(self, total_tokens, not api_success, elapsed, conv_id)
+
+        # ── 保存对话消息 ──
+        if conv_id:
+            ConversationRepository.add_message(conv_id, "user", message, 0)
+            if assistant_reply:
+                ConversationRepository.add_message(
+                    conv_id, "assistant", assistant_reply, total_tokens
+                )
+            # 自动生成标题
+            conv = ConversationRepository.get_by_id(conv_id)
+            if conv and (conv.get("title") or "").strip() in ("新对话", ""):
+                auto_title = ("@" + emp.get("name", "数字员工") + " " + message.strip())[:200]
+                if auto_title:
+                    ConversationRepository.update_title(conv_id, auto_title)
 
         write_audit_log(
             action="USER_EMPLOYEE_INVOKE",
@@ -1970,7 +2018,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
 
         return _estimate_tokens(full_reply)
 
-    async def _invoke_api_employee(self, emp: dict, message: str):
+    async def _invoke_api_employee(self, emp: dict, message: str, conv_id: int = None):
         """API 型员工调用 — SSE 流式返回（含卡片渲染 + 元信息）。"""
         import time as _time
         import urllib.parse
@@ -2027,7 +2075,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
         safe, reason, _ = validate_url_safe(api_url)
         if not safe:
             logger.warning(f"API 员工 [{emp.get('name', '数字员工')}] SSRF 校验失败: {reason}，回退到 Mock 模式")
-            await self._mock_api_employee_fallback(emp, message, _start, reason)
+            await self._mock_api_employee_fallback(emp, message, _start, reason, conv_id)
             return
 
 
@@ -2079,7 +2127,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
 
         if err:
             logger.warning(f"API 员工 [{emp_name}] 调用失败: {err}，回退到 Mock 模式")
-            await self._mock_api_employee_fallback(emp, message, _start, err)
+            await self._mock_api_employee_fallback(emp, message, _start, err, conv_id)
             return
 
         # ── FIX-2: 构建并发送卡片 SSE 事件 ──
@@ -2127,7 +2175,21 @@ class UserEmployeeInvokeHandler(BaseHandler):
         # ── FIX-3: 发送统计元信息（Token + 响应时间）──
         elapsed = round(_time.time() - _start, 2)
         tokens = _estimate_tokens(rendered_body)
-        await _sse_stats(self, tokens, False, elapsed)
+        await _sse_stats(self, tokens, False, elapsed, conv_id)
+
+        # ── 保存对话消息 ──
+        if conv_id:
+            ConversationRepository.add_message(conv_id, "user", message, 0)
+            if rendered_body:
+                ConversationRepository.add_message(
+                    conv_id, "assistant", rendered_body[:5000], tokens
+                )
+            # 自动生成标题
+            conv = ConversationRepository.get_by_id(conv_id)
+            if conv and (conv.get("title") or "").strip() in ("新对话", ""):
+                auto_title = ("@" + emp.get("name", "数字员工") + " " + message.strip())[:200]
+                if auto_title:
+                    ConversationRepository.update_title(conv_id, auto_title)
 
         write_audit_log(
             action="USER_EMPLOYEE_INVOKE",
@@ -2139,7 +2201,7 @@ class UserEmployeeInvokeHandler(BaseHandler):
 
     async def _mock_api_employee_fallback(
         self, emp: dict, message: str, start_time: float,
-        fail_reason: str = ""
+        fail_reason: str = "", conv_id: int = None
     ):
         """API 型员工 Mock 回退：当外部 API 不可达时，生成模拟音乐/数据卡片。
 
@@ -2236,7 +2298,21 @@ class UserEmployeeInvokeHandler(BaseHandler):
 
         elapsed = round(_time.time() - start_time, 2)
         tokens = _estimate_tokens(full_text)
-        await _sse_stats(self, tokens, False, elapsed)
+        await _sse_stats(self, tokens, False, elapsed, conv_id)
+
+        # ── 保存对话消息 ──
+        if conv_id:
+            ConversationRepository.add_message(conv_id, "user", message, 0)
+            if full_text:
+                ConversationRepository.add_message(
+                    conv_id, "assistant", full_text, tokens
+                )
+            # 自动生成标题
+            conv = ConversationRepository.get_by_id(conv_id)
+            if conv and (conv.get("title") or "").strip() in ("新对话", ""):
+                auto_title = ("@" + emp.get("name", "数字员工") + " " + message.strip())[:200]
+                if auto_title:
+                    ConversationRepository.update_title(conv_id, auto_title)
 
         write_audit_log(
             action="USER_EMPLOYEE_INVOKE",

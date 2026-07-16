@@ -1,5 +1,17 @@
 # 测试用例文档 v1.0.3-beta
 
+## v1.5.2-beta: @数字员工 对话消息持久化
+
+| 编号 | 测试项 | 步骤 | 预期结果 |
+|------|--------|------|----------|
+| TC-EMP-MSG-01 | @数字员工 消息保存 | 在聊天页使用 @天气助手 发送消息，API 返回后刷新页面，点击该对话 | 对话中显示之前发送的消息和 AI 回复 |
+| TC-EMP-MSG-02 | 空对话消息列表 | 创建新对话但不发送消息，通过 API 获取消息列表 | 返回 `{"code": 0, "items": []}` |
+| TC-EMP-MSG-03 | 消息排序 | 在同一对话中依次发送3轮消息，获取消息列表 | 消息按时间正序排列（最早在前，最新在后） |
+| TC-EMP-MSG-04 | 首条消息自动标题 | 新建对话"新对话"，发送首条消息"帮我查天气" | 对话标题自动更新为"帮我查天气"（取前30字符） |
+| TC-EMP-MSG-05 | @员工 无 conversation_id 自动创建 | 首次使用 @音乐助手 且未关联对话时 | 后端自动创建对话并保存消息，前端收到 conversation_id 后同步 |
+| TC-EMP-MSG-06 | API 型员工保存消息 | 使用配置了外部 API 的数字员工 | 调用成功后用户消息和 API 返回文本均保存到数据库 |
+| TC-EMP-MSG-07 | Mock 回退保存消息 | API 型员工外部接口不可达时 | Mock 生成的回复文本和用户消息均保存到数据库 |
+
 ## v1.0.3-beta security regression
 
 - Mock chat completes without a configured API key or undefined prompt variable.

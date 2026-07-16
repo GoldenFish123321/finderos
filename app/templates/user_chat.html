@@ -1084,6 +1084,7 @@ function doSend(employeeId, message, employeeName) {
         // @数字员工调用
         formData.append('employee_id', employeeId);
         formData.append('message', message);
+        formData.append('conversation_id', currentConversationId || '');
         streamFetch('/chat/employee/invoke', formData, aiContent, aiMeta, startTime);
     } else {
         // 普通 AI 对话
@@ -1135,6 +1136,11 @@ function streamFetch(url, formData, aiContent, aiMeta, startTime) {
                                 if (statsData.mock) {
                                     aiMeta.innerHTML += ' · ⚠️ Mock';
                                 }
+                            }
+                            // 后端自动创建的对话 ID，同步到前端
+                            if (statsData.conversation_id && !currentConversationId) {
+                                currentConversationId = statsData.conversation_id;
+                                refreshTaskList();
                             }
                         } catch(e) {}
                         currentEvent = '';

@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.5.2-beta (2026-07-16) — @数字员工 对话消息持久化修复
+
+- 🐛 **Bug 修复**：修复 @数字员工 对话加载后聊天记录为空的问题
+  - **根因**：`UserEmployeeInvokeHandler`（`/chat/employee/invoke`）从未调用 `ConversationRepository.add_message()`，导致通过 `@员工名` 发送的消息在页面刷新后全部丢失
+  - `_invoke_llm_employee` 新增 `conv_id` 参数，流式过程中收集完整回复文本，结束后保存到 `conversation_messages` 表
+  - `_invoke_api_employee` 新增 `conv_id` 参数，API 调用完成后保存渲染文本和用户消息
+  - `_mock_api_employee_fallback` 新增 `conv_id` 参数，Mock 回退时同样保存消息
+  - 前端 `doSend()` 在 `@数字员工` 分支补充 `conversation_id` 表单字段
+  - SSE stats 事件处理新增 `conversation_id` 同步逻辑，后端自动创建对话时前端同步更新
+- 🧪 **测试**：新增 `test_employee_message_persistence.py`（7 个测试用例），覆盖消息保存/读取/排序/签名验证/前端模板检查
+
 ## v1.5.1-beta (2026-07-16) — Crawl4ai 工具处理函数修复
 
 - 🐛 **Bug 修复**：修复 `collect_with_crawl4ai` 和 `batch_deep_collect` 两个 MCP 工具启动时报 "处理函数未找到" 警告
