@@ -2816,8 +2816,16 @@ class UserChatTTSHandler(BaseHandler):
                             f"user={self.current_user}"
                         )
                         import edge_tts
-                        communicate = edge_tts.Communicate(text, voice)
-                        await communicate.save(cache_file)
+                        communicate = edge_tts.Communicate(
+                            text, voice,
+                            connect_timeout=10,
+                            receive_timeout=60,
+                        )
+                        # asyncio.wait_for 作为安全网，防止 edge-tts 内部超时失效
+                        await asyncio.wait_for(
+                            communicate.save(cache_file),
+                            timeout=90,
+                        )
                     finally:
                         # 释放锁
                         try:
@@ -2857,6 +2865,16 @@ class UserChatTTSHandler(BaseHandler):
             logger.error("TTS: edge-tts 库未安装")
             self.set_status(500)
             self.write({"code": 1, "msg": "TTS 服务不可用：edge-tts 库未安装。请运行 pip install edge-tts"})
+        except asyncio.TimeoutError:
+            logger.error(f"TTS: 语音合成超时 text_len={len(text)}, voice={voice}")
+            # 清理可能不完整的缓存文件
+            if _os.path.exists(cache_file):
+                try:
+                    _os.remove(cache_file)
+                except Exception:
+                    pass
+            self.set_status(500)
+            self.write({"code": 1, "msg": "语音合成超时，请稍后重试"})
         except Exception as e:
             logger.error(f"TTS: 语音合成失败 - {e}", exc_info=True)
             # 清理可能损坏的缓存文件
