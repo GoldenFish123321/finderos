@@ -2134,6 +2134,7 @@ function stripMarkdownForTTS(text) {
 }
 
 function playTTS(btn) {
+    try {
     // Bug #1 修复: 加载中不允许重复点击
     if (btn.classList.contains('loading')) return;
 
@@ -2199,17 +2200,24 @@ function playTTS(btn) {
     btn.innerHTML = '⏳ 生成中...';
     currentTTSBtn = btn;
 
-    // 请求 TTS API
+    // 请求 TTS API（带超时控制，防止网络不通时无限等待）
     var formData = new URLSearchParams();
     formData.append('_xsrf', XSRF);
     formData.append('text', rawText);
 
+    var abortController = new AbortController();
+    var timeoutId = setTimeout(function() {
+        abortController.abort();
+    }, 120000);  // 120 秒超时（后端 90 秒 + 缓冲）
+
     fetch('/api/chat/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: formData
+        body: formData,
+        signal: abortController.signal
     })
     .then(function(response) {
+        clearTimeout(timeoutId);
         if (!response.ok) {
             return response.json().then(function(d) {
                 throw new Error(d.msg || 'TTS 请求失败');
@@ -2222,6 +2230,30 @@ function playTTS(btn) {
         btn.classList.add('playing');
         btn.innerHTML = '⏸ 停止';
 
+        // 统一清理函数（防止重复清理导致状态混乱）
+        var ttsCleanedUp = false;
+        function cleanupTTS(reason) {
+            if (ttsCleanedUp) return;
+            ttsCleanedUp = true;
+            btn.classList.remove('playing', 'loading');
+            btn.innerHTML = '🔊 播报';
+            if (currentTTSAudioUrl) {
+                URL.revokeObjectURL(currentTTSAudioUrl);
+                currentTTSAudioUrl = null;
+            }
+            if (currentTTSAudio) {
+                currentTTSAudio.pause();
+                currentTTSAudio = null;
+            }
+            if (currentTTSBtn === btn) {
+                currentTTSBtn = null;
+            }
+            if (reason && reason !== 'ended') {
+                console.error('TTS 播放异常:', reason);
+                if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('音频播放失败，请重试'); });
+            }
+        }
+
         // Bug #2 修复: 先清理旧 URL 再创建新的
         if (currentTTSAudioUrl) {
             URL.revokeObjectURL(currentTTSAudioUrl);
@@ -2230,51 +2262,58 @@ function playTTS(btn) {
         currentTTSAudioUrl = audioUrl;
 
         var audio = new Audio(audioUrl);
+        audio.preload = 'auto';
         currentTTSAudio = audio;
 
         audio.onended = function() {
-            btn.classList.remove('playing');
-            btn.innerHTML = '🔊 播报';
-            if (currentTTSAudioUrl) {
-                URL.revokeObjectURL(currentTTSAudioUrl);
-                currentTTSAudioUrl = null;
-            }
-            currentTTSAudio = null;
-            currentTTSBtn = null;
+            cleanupTTS('ended');
         };
 
-        audio.onerror = function() {
-            btn.classList.remove('playing', 'loading');
-            btn.innerHTML = '🔊 播报';
-            if (currentTTSAudioUrl) {
-                URL.revokeObjectURL(currentTTSAudioUrl);
-                currentTTSAudioUrl = null;
-            }
-            currentTTSAudio = null;
-            currentTTSBtn = null;
-            if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('音频播放失败，请重试'); });
+        audio.onerror = function(e) {
+            cleanupTTS('load_error');
         };
 
-        audio.play().catch(function(err) {
-            btn.classList.remove('playing', 'loading');
-            btn.innerHTML = '🔊 播报';
-            if (currentTTSAudioUrl) {
-                URL.revokeObjectURL(currentTTSAudioUrl);
-                currentTTSAudioUrl = null;
-            }
-            currentTTSAudio = null;
-            currentTTSBtn = null;
-            console.error('TTS 播放失败:', err);
-            if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('音频播放失败: ' + err.message); });
-        });
+        // 播放音频，并添加安全检测（CSP 可能静默阻止 blob URL）
+        var playPromise = audio.play();
+        if (playPromise !== undefined) {
+            playPromise.then(function() {
+                // play() 成功，但检查音频是否真的有内容
+                // CSP 可能允许 play() 但阻止 blob: 加载，导致 duration 为 NaN
+                setTimeout(function() {
+                    if (!ttsCleanedUp && audio && (isNaN(audio.duration) || audio.paused)) {
+                        cleanupTTS('no_audio');
+                    }
+                }, 500);
+            }).catch(function(err) {
+                cleanupTTS('play_rejected');
+            });
+        }
     })
     .catch(function(err) {
+        clearTimeout(timeoutId);
         btn.classList.remove('loading');
         btn.innerHTML = '🔊 播报';
         currentTTSBtn = null;
         console.error('TTS 请求失败:', err);
-        if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg('语音合成失败: ' + err.message); });
+        var errMsg = (err.name === 'AbortError')
+            ? '语音合成超时，请稍后重试'
+            : '语音合成失败: ' + err.message;
+        if (typeof layui !== 'undefined') layui.use(['layer'], function(l){ l.layer.msg(errMsg); });
     });
+    } catch(e) {
+        // 全局安全网：防止任何未预期的错误破坏页面功能
+        console.error('TTS 未预期错误:', e);
+        if (btn) {
+            btn.classList.remove('playing', 'loading');
+            btn.innerHTML = '🔊 播报';
+        }
+        currentTTSAudio = null;
+        if (currentTTSAudioUrl) {
+            URL.revokeObjectURL(currentTTSAudioUrl);
+            currentTTSAudioUrl = null;
+        }
+        currentTTSBtn = null;
+    }
 }
 </script>
 {% end %}

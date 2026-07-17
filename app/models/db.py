@@ -51,6 +51,54 @@ def get_db():
         conn.close()
 
 
+def _migrate_face_images_to_db(conn):
+    """v1.9.0: 将 uploads/ 目录中的人脸图像迁移到数据库 face_image BLOB 列。
+
+    迁移完成后不删除原文件，确保向下兼容。
+    """
+    import json as _json
+    upload_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads"
+    )
+    labels_path = os.path.join(upload_dir, "face_labels.json")
+    if not os.path.exists(labels_path):
+        return
+
+    try:
+        with open(labels_path, "r", encoding="utf-8") as f:
+            label_map = _json.load(f)
+    except Exception:
+        return
+
+    migrated = 0
+    for username in list(label_map.keys()):
+        # 检查该用户是否已有数据库中的 face_image
+        row = conn.execute(
+            "SELECT face_image FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        if row and row.get("face_image") is not None:
+            continue  # 已迁移，跳过
+
+        face_path = os.path.join(upload_dir, f"{username}.jpg")
+        if not os.path.exists(face_path):
+            continue
+
+        try:
+            with open(face_path, "rb") as f:
+                image_bytes = f.read()
+            if image_bytes:
+                conn.execute(
+                    "UPDATE users SET face_image = ? WHERE username = ?",
+                    (image_bytes, username),
+                )
+                migrated += 1
+        except Exception:
+            continue
+
+    if migrated > 0:
+        logger.info("Face image migration: %d user(s) migrated from files to DB", migrated)
+
+
 def init_db():
     """Initialize database: create all tables if not exist."""
     os.makedirs(DB_DIR, exist_ok=True)
@@ -349,8 +397,15 @@ def init_db():
             if "face_login_enabled" not in cols:
                 conn.execute("ALTER TABLE users ADD COLUMN face_login_enabled INTEGER DEFAULT 0")
                 logger.info("Database migration: added face_login_enabled column to users")
+            # ── v1.9.0 人脸图像从文件存储迁移到数据库 BLOB ──
+            if "face_image" not in cols:
+                conn.execute("ALTER TABLE users ADD COLUMN face_image BLOB DEFAULT NULL")
+                logger.info("Database migration: added face_image BLOB column to users")
         except Exception as e:
             logger.error(f"Database migration failed (users.face fields): {e}", exc_info=True)
+
+        # ── v1.9.0 将现有文件系统中的人脸图像迁移到数据库 ──
+        _migrate_face_images_to_db(conn)
 
         # 对话管理表 (v0.5 新增 — 多轮对话支持)
 
