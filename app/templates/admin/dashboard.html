@@ -634,6 +634,13 @@ body.dark-theme {
         return String(num);
     }
 
+    function getDisplayDomain(domain) {
+        domain = String(domain == null ? '' : domain).trim();
+        if (!domain || domain === '本地/未知' || domain === '未知') return '';
+        if (/^example(\.|$)/i.test(domain)) return '';
+        return domain;
+    }
+
     function setChartFallback(domId, title, items, type) {
         var dom = document.getElementById(domId);
         if (!dom) return;
@@ -946,7 +953,7 @@ body.dark-theme {
             var lat = Number(item.coord[1]);
             if (!isFinite(lon) || !isFinite(lat)) return;
             var strength = Math.sqrt(Math.max(Number(item.value || 0), 1) / maxValue);
-            var markerSize = 2.0 + strength * 4.4;
+            var markerSize = 1.15 + strength * 2.55;
             var pos = lonLatToVector3(lon, lat, 104.2);
             var normal = pos.clone().normalize();
 
@@ -968,12 +975,12 @@ body.dark-theme {
                 depthWrite: false
             }));
             glow.position.copy(normal.clone().multiplyScalar(106.4));
-            var glowSize = 13 + strength * 18;
+            var glowSize = 7 + strength * 10;
             glow.scale.set(glowSize, glowSize, 1);
             markerGroup.add(glow);
 
             var ring = new THREE.Mesh(
-                new THREE.RingGeometry(markerSize * 1.8, markerSize * 2.35, 40),
+                new THREE.RingGeometry(markerSize * 1.45, markerSize * 1.85, 40),
                 ringMaterial.clone()
             );
             ring.position.copy(normal.clone().multiplyScalar(105.1));
@@ -1177,11 +1184,12 @@ body.dark-theme {
                 return;
             }
             var rect = dom.getBoundingClientRect();
+            var displayDomain = getDisplayDomain(item.domain);
             tooltip.innerHTML = '<strong>' + escapeHtml(item.name || '未知来源') + '</strong><br>' +
                 '城市：' + escapeHtml(item.city || '未知') + '<br>' +
                 '数量：' + formatNumber(item.value) + ' 条<br>' +
-                '今日：' + formatNumber(item.today_count) + ' 条 · 深采：' + formatNumber(item.deep_count) + ' 条<br>' +
-                '域名：' + escapeHtml(item.domain || '未知');
+                '今日：' + formatNumber(item.today_count) + ' 条 · 深采：' + formatNumber(item.deep_count) + ' 条' +
+                (displayDomain ? '<br>域名：' + escapeHtml(displayDomain) : '');
             tooltip.style.left = (event.clientX - rect.left) + 'px';
             tooltip.style.top = (event.clientY - rect.top) + 'px';
             tooltip.style.opacity = '1';
@@ -1650,7 +1658,7 @@ body.dark-theme {
                 var p = project(point.lon, point.lat);
                 point.screen = p;
                 if (p.z <= -0.12) return;
-                var base = 5 + Math.sqrt(Math.max(point.value, 1) / maxValue) * 11;
+                var base = 3 + Math.sqrt(Math.max(point.value, 1) / maxValue) * 6;
                 var radius = base * Math.max(.65, p.scale);
                 var pulse = 1 + Math.sin(now / 520 + index) * .20;
 
@@ -1741,7 +1749,7 @@ body.dark-theme {
             points.forEach(function(point, index) {
                 var p = point.screen;
                 if (!p || p.z <= -0.12) return;
-                var marker = 10 + Math.sqrt(Math.max(point.value, 1) / maxValue) * 12;
+                var marker = 7 + Math.sqrt(Math.max(point.value, 1) / maxValue) * 8;
                 var dx = pos.x - p.x;
                 var dy = pos.y - p.y;
                 var dist = Math.sqrt(dx * dx + dy * dy);
@@ -1756,11 +1764,12 @@ body.dark-theme {
                 return;
             }
             var item = points[index].source;
+            var displayDomain = getDisplayDomain(item.domain);
             tooltip.innerHTML = '<strong>' + escapeHtml(item.name || '未知来源') + '</strong><br>' +
                 '城市：' + escapeHtml(item.city || '未知') + '<br>' +
                 '数量：' + formatNumber(item.value) + ' 条<br>' +
-                '今日：' + formatNumber(item.today_count) + ' 条 · 深采：' + formatNumber(item.deep_count) + ' 条<br>' +
-                '域名：' + escapeHtml(item.domain || '未知');
+                '今日：' + formatNumber(item.today_count) + ' 条 · 深采：' + formatNumber(item.deep_count) + ' 条' +
+                (displayDomain ? '<br>域名：' + escapeHtml(displayDomain) : '');
             tooltip.style.left = pos.x + 'px';
             tooltip.style.top = pos.y + 'px';
             tooltip.style.opacity = '1';
