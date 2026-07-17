@@ -260,68 +260,6 @@
                 <legend>上传限制</legend>
             </fieldset>
 
-            <!-- ========== 脚本编写指南（v2.0 新增）========== -->
-            <fieldset class="layui-elem-field layui-field-title" style="margin-top: 30px;">
-                <legend>📜 脚本编写指南</legend>
-            </fieldset>
-
-            <div class="layui-form-item">
-                <div class="layui-input-block" style="margin-left:0; color:var(--text-secondary); line-height:1.8;">
-                    <p><strong>脚本用于 MCP 工具的 <code>transform_script</code> 字段，负责将接口返回的原始数据转换为最终输出。</strong></p>
-
-                    <h4 style="margin:12px 0 6px;">输入数据</h4>
-                    <p>脚本接收一个参数 <code>data_sources: list[dict]</code>，每个元素是 <code>{&quot;success&quot;: bool, &quot;data&quot;: any}</code>：</p>
-<pre style="background:rgba(0,0,0,0.04);padding:8px 12px;border-radius:6px;font-size:13px;">data_sources = [
-    {
-        &quot;success&quot;: True,
-        &quot;data&quot;: &lt;接口返回的原始数据&gt;   # JSON对象、数组、字符串等
-    },
-    ...
-]</pre>
-                    <p style="margin-top:6px;">通常取第一个数据源：<code>data_sources[0][&quot;data&quot;]</code></p>
-
-                    <h4 style="margin:12px 0 6px;">输出格式</h4>
-                    <p>脚本<strong>必须返回一个字符串</strong>。可以是：</p>
-                    <ul style="margin:4px 0;padding-left:20px;">
-                        <li><strong>JSON 字符串</strong>（推荐）：<code>return json.dumps({&quot;name&quot;: &quot;xxx&quot;, &quot;artist&quot;: &quot;xxx&quot;}, ensure_ascii=False)</code> — 前端可渲染为卡片</li>
-                        <li><strong>纯文本</strong>：<code>return f&quot;🎵 {name} — {artist}&quot;</code> — 直接作为对话文本</li>
-                    </ul>
-
-                    <h4 style="margin:12px 0 6px;">可用内置对象</h4>
-                    <p>以下对象已预注入，<strong>无需 import</strong>，直接使用：</p>
-                    <p><code>json</code>（JSON处理）· <code>random</code>（随机数）· <code>re</code>（正则）· <code>str, int, float, bool, list, dict, tuple, set</code> · <code>len, range, enumerate, zip, sorted, min, max, sum, abs, round</code> · <code>Exception, ValueError, TypeError, KeyError</code></p>
-
-                    <h4 style="margin:12px 0 6px;">安全限制</h4>
-                    <ul style="margin:4px 0;padding-left:20px;">
-                        <li>🚫 <strong>禁止</strong> <code>import</code> / <code>from ... import</code></li>
-                        <li>🚫 <strong>禁止</strong> <code>exec</code> / <code>eval</code> / <code>open</code> / <code>compile</code></li>
-                        <li>🚫 <strong>禁止</strong> <code>while</code> 循环，<code>for</code> 循环可用</li>
-                        <li>✅ 纯数据转换（JSON格式化、字符串拼接、条件判断、列表处理）</li>
-                    </ul>
-
-                    <h4 style="margin:12px 0 6px;">示例：天气格式化</h4>
-<pre style="background:rgba(0,0,0,0.04);padding:8px 12px;border-radius:6px;font-size:13px;overflow-x:auto;">def transform(data_sources):
-    # 透传wttr.in原始JSON，前端自动渲染天气卡片
-    if not data_sources or not data_sources[0].get('success'):
-        return json.dumps({&quot;error&quot;: &quot;数据获取失败&quot;}, ensure_ascii=False)
-    return json.dumps(data_sources[0].get('data', {}), ensure_ascii=False)</pre>
-
-                    <h4 style="margin:12px 0 6px;">示例：音乐推荐</h4>
-<pre style="background:rgba(0,0,0,0.04);padding:8px 12px;border-radius:6px;font-size:13px;overflow-x:auto;">def transform(data_sources):
-    songs = data_sources[0].get('data', [])
-    if isinstance(songs, list) and len(songs) &gt; 0:
-        song = random.choice(songs)
-        return json.dumps({
-            &quot;name&quot;: song.get(&quot;name&quot;, &quot;&quot;),
-            &quot;artist&quot;: song.get(&quot;artist&quot;, &quot;&quot;),
-            &quot;cover&quot;: song.get(&quot;pic&quot;, &quot;&quot;),
-            &quot;url&quot;: song.get(&quot;url&quot;, &quot;&quot;),
-            &quot;source&quot;: &quot;网易云音乐热歌榜&quot;
-        }, ensure_ascii=False)
-    return json.dumps({&quot;error&quot;: &quot;未找到歌曲&quot;}, ensure_ascii=False)</pre>
-                </div>
-            </div>
-
             <div class="layui-form-item">
                 <label class="layui-form-label">上传大小限制（MB）</label>
                 <div class="layui-input-block">
