@@ -86,33 +86,40 @@ body.dark-theme {
 /* ====== 网格布局 ====== */
 .dash-grid {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 14px;
-    padding: 16px 20px 10px;
+    grid-template-columns: repeat(6, minmax(132px, 1fr));
+    gap: 12px;
+    padding: 16px 18px 12px;
     position: relative; z-index: 1;
 }
 .dash-grid-2 {
     display: grid;
-    grid-template-columns: minmax(520px, 1.55fr) minmax(340px, .9fr);
-    gap: 14px;
-    padding: 0 20px 14px;
+    grid-template-columns: minmax(620px, 1.34fr) minmax(520px, .96fr);
+    gap: 16px;
+    align-items: stretch;
+    padding: 0 18px 16px;
     position: relative; z-index: 1;
 }
 .dash-grid-3 {
     display: grid;
-    grid-template-columns: 1.2fr .95fr .85fr;
-    gap: 14px;
-    padding: 0 20px 14px;
+    grid-template-columns: minmax(360px, 1.15fr) minmax(320px, .95fr) minmax(300px, .9fr);
+    gap: 16px;
+    align-items: stretch;
+    padding: 0 18px 16px;
     position: relative; z-index: 1;
 }
 
 /* ====== 统计卡片 ====== */
 .dash-stat {
-    padding: 16px 18px;
+    min-height: 92px;
+    padding: 14px 16px;
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 12px;
     backdrop-filter: blur(10px);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     transition: all 0.3s;
 }
 .dash-stat:hover {
@@ -128,7 +135,7 @@ body.dark-theme {
     margin-bottom: 6px;
 }
 .dash-stat .stat-number {
-    font-size: 32px;
+    font-size: clamp(24px, 2.1vw, 32px);
     font-weight: 800;
     background: linear-gradient(135deg, #5ea3ff, #a78bfa);
     -webkit-background-clip: text;
@@ -149,6 +156,13 @@ body.dark-theme {
     border-radius: 12px;
     padding: 14px 16px;
     backdrop-filter: blur(10px);
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.035), 0 18px 38px rgba(2,6,23,.12);
 }
 .dash-panel.full {
     grid-column: 1 / -1;
@@ -157,10 +171,14 @@ body.dark-theme {
     font-size: 13px;
     font-weight: 600;
     color: rgba(255,255,255,0.7);
+    min-height: 24px;
     margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(148,163,184,.08);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0;
 }
 .dash-panel-title .badge {
     font-size: 10px;
@@ -172,13 +190,17 @@ body.dark-theme {
 
 /* ====== 词云容器 ====== */
 #chart-wordcloud {
-    height: 210px;
+    flex: 1;
+    min-height: 178px;
+    height: 100%;
 }
 
 /* ====== 3D地球容器 ====== */
 #chart-globe {
     position: relative;
-    height: clamp(360px, 52vh, 620px);
+    flex: 1;
+    height: clamp(500px, 58vh, 680px);
+    min-height: 480px;
     width: 100%;
     overflow: hidden;
 }
@@ -274,6 +296,21 @@ body.dark-theme {
     padding: 0;
     margin: 0;
     list-style: none;
+    min-height: 0;
+    overflow: auto;
+}
+.keyword-list {
+    min-height: 0;
+    overflow: auto;
+}
+.keyword-list::-webkit-scrollbar,
+.source-list::-webkit-scrollbar,
+.recent-list::-webkit-scrollbar { width: 4px; }
+.keyword-list::-webkit-scrollbar-thumb,
+.source-list::-webkit-scrollbar-thumb,
+.recent-list::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(125,211,252,.18);
 }
 .source-item, .recent-item {
     display: grid;
@@ -375,18 +412,71 @@ body.dark-theme {
     color: #bfdbfe;
     font-size: 12px;
 }
+.dashboard-side-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: minmax(190px, .95fr) minmax(170px, .82fr) minmax(150px, .68fr);
+    gap: 14px;
+    min-height: 100%;
+    align-content: stretch;
+}
+.dashboard-wordcloud-panel,
+.dashboard-recent-panel {
+    grid-column: 1 / -1;
+}
+.dashboard-keyword-panel .keyword-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 12px;
+    align-content: start;
+}
+.dashboard-keyword-panel .keyword-item {
+    min-width: 0;
+    padding: 5px 0;
+}
+.dashboard-keyword-panel .kw-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.dashboard-source-panel .source-list,
+.dashboard-recent-panel .recent-list {
+    flex: 1;
+}
+.dash-mini-chart {
+    flex: 1;
+    height: 220px;
+    min-height: 210px;
+}
 @media (max-width: 1500px) {
     .dash-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .dash-grid-2 { grid-template-columns: minmax(520px, 1.18fr) minmax(430px, .92fr); }
+    #chart-globe { height: clamp(460px, 54vh, 620px); min-height: 430px; }
+    .dashboard-side-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: none;
+    }
+    .dashboard-wordcloud-panel,
+    .dashboard-recent-panel { grid-column: auto; }
 }
 @media (max-width: 1180px) {
     .dash-grid-2, .dash-grid-3 { grid-template-columns: 1fr; }
-    #chart-globe { height: 430px; }
+    .dashboard-side-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .dashboard-wordcloud-panel,
+    .dashboard-recent-panel { grid-column: 1 / -1; }
+    #chart-globe { height: 430px; min-height: 380px; }
 }
 @media (max-width: 760px) {
     .dashboard-header { align-items: flex-start; flex-direction: column; }
     .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; }
     .dash-grid-2, .dash-grid-3 { padding-left: 12px; padding-right: 12px; }
-    #chart-globe { height: 340px; }
+    .dashboard-side-grid,
+    .dashboard-keyword-panel .keyword-list { grid-template-columns: 1fr; }
+    .dashboard-wordcloud-panel,
+    .dashboard-recent-panel { grid-column: auto; }
+    #chart-globe { height: 340px; min-height: 320px; }
+    .dash-mini-chart { min-height: 190px; height: 200px; }
 }
 </style>
 
@@ -437,7 +527,7 @@ body.dark-theme {
 
     <!-- 3D 地球 + 词云 -->
     <div class="dash-grid-2">
-        <div class="dash-panel">
+        <div class="dash-panel dashboard-globe-panel">
             <div class="dash-panel-title">🌍 全球数据采集分布 <span class="badge">3D 地球</span></div>
             <div id="chart-globe">
                 <div class="chart-fallback">
@@ -458,8 +548,8 @@ body.dark-theme {
                 </div>
             </div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:14px;">
-            <div class="dash-panel" style="flex:1;">
+        <div class="dashboard-side-grid">
+            <div class="dash-panel dashboard-wordcloud-panel">
                 <div class="dash-panel-title">☁️ 关键词词云 <span class="badge">词频分析</span></div>
                 <div id="chart-wordcloud">
                     <div class="chart-fallback">
@@ -476,7 +566,7 @@ body.dark-theme {
                     </div>
                 </div>
             </div>
-            <div class="dash-panel" style="flex:1;">
+            <div class="dash-panel dashboard-keyword-panel">
                 <div class="dash-panel-title">🏆 热门关键词 Top 10 <span class="badge">实时</span></div>
                 <ul class="keyword-list" id="keyword-list">
                     {% for rank, kw in enumerate(keywords[:10], 1) %}
@@ -493,7 +583,7 @@ body.dark-theme {
                     {% end %}
                 </ul>
             </div>
-            <div class="dash-panel" style="flex:1;">
+            <div class="dash-panel dashboard-source-panel">
                 <div class="dash-panel-title">📍 来源点位 Top 8 <span class="badge">地球标注</span></div>
                 <ul class="source-list" id="source-list">
                     {% if source_geo %}
@@ -509,7 +599,7 @@ body.dark-theme {
                     {% end %}
                 </ul>
             </div>
-            <div class="dash-panel" style="flex:1;">
+            <div class="dash-panel dashboard-recent-panel">
                 <div class="dash-panel-title">🕘 最新入库动态 <span class="badge">运营</span></div>
                 <ul class="recent-list" id="recent-list">
                     {% if recent_items %}
@@ -538,7 +628,7 @@ body.dark-theme {
     <div class="dash-grid-3">
         <div class="dash-panel">
             <div class="dash-panel-title">📈 近14天采集趋势</div>
-            <div id="chart-trend" style="height:200px;">
+            <div id="chart-trend" class="dash-mini-chart">
                 <div class="chart-fallback">
                     <div class="chart-fallback-title">近14天采集趋势</div>
                     {% for dt, cnt in zip(trend.get('dates', [])[-8:], trend.get('counts', [])[-8:]) %}
@@ -555,7 +645,7 @@ body.dark-theme {
         </div>
         <div class="dash-panel">
             <div class="dash-panel-title">🍩 数据来源分布</div>
-            <div id="chart-source" style="height:200px;">
+            <div id="chart-source" class="dash-mini-chart">
                 <div class="chart-fallback">
                     <div class="chart-fallback-title">来源分布</div>
                     {% if source_distribution %}
@@ -570,7 +660,7 @@ body.dark-theme {
         </div>
         <div class="dash-panel">
             <div class="dash-panel-title">🔬 深度采集占比</div>
-            <div id="chart-deep" style="height:200px;">
+            <div id="chart-deep" class="dash-mini-chart">
                 <div class="chart-fallback">
                     <div class="chart-fallback-title">深采占比</div>
                     <div class="fallback-row"><span>已深度采集</span><span class="source-meta">{{ stats.get('deep_collected', 0) }} 条</span></div>

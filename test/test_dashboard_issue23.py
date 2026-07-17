@@ -99,6 +99,24 @@ class TestDashboardTemplate:
         for cid in containers:
             assert f'id="{cid}"' in content, f"缺少图表容器 {cid}"
 
+    def test_dashboard_layout_uses_coordinated_grid(self):
+        """数智大屏采用主地球、右侧信息宫格和底部等高图表的协调布局。"""
+        with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+        required_classes = [
+            "dashboard-globe-panel",
+            "dashboard-side-grid",
+            "dashboard-wordcloud-panel",
+            "dashboard-keyword-panel",
+            "dashboard-source-panel",
+            "dashboard-recent-panel",
+            "dash-mini-chart",
+        ]
+        for cls in required_classes:
+            assert cls in content, f"缺少布局类 {cls}"
+        assert "grid-template-rows: minmax(190px" in content, "右侧信息区应使用宫格行高"
+        assert "display:flex;flex-direction:column;gap:14px" not in content, "不应退回旧的竖直堆叠内联布局"
+
     def test_stat_cards_exist(self):
         """模板包含统计卡片"""
         with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
