@@ -147,13 +147,31 @@ class ConversationRepository:
         """删除对话及其所有消息（CASCADE）。"""
         with get_db() as conn:
             conn.execute("DELETE FROM conversation_messages WHERE conversation_id = ?", (conv_id,))
-            conn.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
+            cur = conn.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
             conn.commit()
-            return True
+            return cur.rowcount > 0
+
+    @staticmethod
+    def delete_for_user(conv_id: int, username: str) -> bool:
+        """仅删除指定用户自己的对话，避免检查后再删除的竞争窗口。"""
+        with get_db() as conn:
+            conn.execute(
+                "DELETE FROM conversation_messages "
+                "WHERE conversation_id IN ("
+                "SELECT id FROM conversations WHERE id = ? AND username = ?"
+                ")",
+                (conv_id, username),
+            )
+            cur = conn.execute(
+                "DELETE FROM conversations WHERE id = ? AND username = ?",
+                (conv_id, username),
+            )
+            conn.commit()
+            return cur.rowcount > 0
 
     @staticmethod
     def add_message(conv_id: int, role: str, content: str, token_count: int = 0):
-        """向对话中添加一条消息。如果对话不存在则自动创建。"""
+        """向对话中添加一条消息；对话不存在时不再隐式复活。"""
         with get_db() as conn:
             # 防御性检查：确保 conversation 存在
             exists = conn.execute(
@@ -162,12 +180,9 @@ class ConversationRepository:
             if not exists:
                 import logging
                 logging.getLogger(__name__).warning(
-                    f"add_message: 对话 {conv_id} 不存在，自动创建"
+                    f"add_message: 对话 {conv_id} 不存在，跳过写入，避免删除后被流式保存复活"
                 )
-                conn.execute(
-                    "INSERT INTO conversations (id, title) VALUES (?, ?)",
-                    (conv_id, f"(恢复的对话 #{conv_id})"),
-                )
+                return False
             conn.execute(
                 "INSERT INTO conversation_messages (conversation_id, role, content, token_count) "
                 "VALUES (?, ?, ?, ?)",
@@ -179,6 +194,7 @@ class ConversationRepository:
                 (conv_id,),
             )
             conn.commit()
+            return True
 
     @staticmethod
     def get_messages(conv_id: int, limit: int = 20) -> list:

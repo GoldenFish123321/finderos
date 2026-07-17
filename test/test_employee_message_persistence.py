@@ -70,6 +70,30 @@ class TestEmployeeMessagePersistence:
             conn.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
             conn.commit()
 
+    def test_deleted_conversation_is_not_resurrected_by_late_stream_save(self):
+        """测试: 删除会话后，迟到的流式保存不应重新创建该会话。"""
+        conv_id = ConversationRepository.create(
+            title="待删除会话",
+            username="admin",
+        )
+        ConversationRepository.add_message(conv_id, "user", "删除前消息", 0)
+
+        assert ConversationRepository.delete_for_user(conv_id, "admin")
+        assert ConversationRepository.get_by_id(conv_id) is None
+        assert ConversationRepository.get_messages(conv_id, limit=50) == []
+
+        # 模拟 SSE/员工调用在删除后才结束并尝试保存消息
+        assert not ConversationRepository.add_message(conv_id, "assistant", "迟到回复", 1)
+        assert ConversationRepository.get_by_id(conv_id) is None, (
+            "已删除会话不应被 add_message 隐式复活"
+        )
+        assert ConversationRepository.get_messages(conv_id, limit=50) == []
+
+    def test_conversation_delete_returns_false_for_missing_row(self):
+        """测试: 删除不存在的会话应返回 False，便于上层给出错误提示。"""
+        assert not ConversationRepository.delete(-999999)
+        assert not ConversationRepository.delete_for_user(-999999, "admin")
+
     def test_auto_title_update_on_first_message(self):
         """测试: 首条消息时自动更新对话标题（从"新对话"更新）"""
         conv_id = ConversationRepository.create(

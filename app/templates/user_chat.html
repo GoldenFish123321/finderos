@@ -147,6 +147,10 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
         background: rgba(94,163,255,0.12);
         border-left-color: var(--accent-blue);
     }
+    .task-item.deleting {
+        opacity: 0.55;
+        pointer-events: none;
+    }
     .task-item .task-title {
         flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         color: var(--text-secondary);
@@ -879,8 +883,54 @@ fetch('/api/chat/employees?_xsrf=' + XSRF)
     .catch(() => showRequestError('数字员工列表加载失败'));
 
 function showRequestError(message) {
-    if (typeof layer !== 'undefined') layer.msg(message, {icon: 2, time: 2500});
-    else console.error(message);
+    if (typeof layui !== 'undefined') {
+        layui.use(['layer'], function(l) {
+            if (l && l.layer && l.layer.msg) {
+                l.layer.msg(message, {icon: 2, time: 2500});
+            } else {
+                console.error(message);
+            }
+        });
+    } else if (typeof layer !== 'undefined' && layer.msg) {
+        layer.msg(message, {icon: 2, time: 2500});
+    } else {
+        console.error(message);
+        alert(message);
+    }
+}
+
+function showRequestSuccess(message) {
+    if (typeof layui !== 'undefined') {
+        layui.use(['layer'], function(l) {
+            if (l && l.layer && l.layer.msg) {
+                l.layer.msg(message, {icon: 1, time: 1200});
+            }
+        });
+    }
+}
+
+function confirmAction(message, onConfirm) {
+    if (typeof layui !== 'undefined') {
+        layui.use(['layer'], function(l) {
+            var layerObj = l && l.layer;
+            if (layerObj && layerObj.confirm) {
+                layerObj.confirm(message, {
+                    icon: 3, title: '删除确认', btn: ['确定删除', '取消']
+                }, function(index) {
+                    layerObj.close(index);
+                    onConfirm();
+                });
+            } else if (window.confirm(message)) {
+                onConfirm();
+            }
+        });
+    } else if (window.confirm(message)) {
+        onConfirm();
+    }
+}
+
+function isSameConversationId(a, b) {
+    return String(a || '') === String(b || '');
 }
 
 // 移动端侧边栏切换
@@ -1004,33 +1054,57 @@ function loadConversation(cid) {
 }
 
 function deleteConversation(cid) {
-    layui.use(['layer'], function(){
-        var layer = layui.layer;
-        layer.confirm('确定删除此对话？', {
-            icon: 3, title: '删除确认', btn: ['确定删除', '取消']
-        }, function(index){
-            layer.close(index);
+    if (!cid) {
+        showRequestError('无效的对话ID');
+        return;
+    }
+    if (isStreaming && isSameConversationId(currentConversationId, cid)) {
+        showRequestError('当前对话正在回复，请等待回复完成后再删除');
+        return;
+    }
+
+    confirmAction('确定删除此对话？', function() {
+            var item = document.querySelector('.task-item[data-cid="' + cid + '"]');
+            if (item) item.classList.add('deleting');
             var formData = new URLSearchParams();
             formData.append('_xsrf', XSRF);
             formData.append('id', cid);
             fetch('/api/chat/conversation/delete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: formData
+                body: formData,
+                credentials: 'same-origin'
             })
-            .then(function(r) { return r.json(); })
+            .then(function(r) {
+                return r.json().catch(function() {
+                    return {code: 1, msg: '服务器返回异常'};
+                }).then(function(d) {
+                    if (!r.ok) {
+                        d.code = d.code || 1;
+                        d.msg = d.msg || ('删除失败（HTTP ' + r.status + '）');
+                    }
+                    return d;
+                });
+            })
             .then(function(d) {
                 if (d.code === 0) {
-                    if (currentConversationId === cid) {
+                    if (isSameConversationId(currentConversationId, cid)) {
                         currentConversationId = null;
                         document.querySelectorAll('.task-item').forEach(function(el) { el.classList.remove('active'); });
                         resetChatToWelcome();
                     }
+                    if (item) item.remove();
+                    showRequestSuccess('会话已删除');
                     refreshTaskList();
+                } else {
+                    if (item) item.classList.remove('deleting');
+                    showRequestError(d.msg || '删除对话失败');
                 }
             })
-            .catch(function() { showRequestError('删除对话失败'); });
-        });
+            .catch(function(err) {
+                if (item) item.classList.remove('deleting');
+                showRequestError('删除对话失败: ' + (err && err.message ? err.message : '网络异常'));
+            });
     });
 }
 
@@ -1044,7 +1118,7 @@ function refreshTaskList() {
                     container.innerHTML = '<div class="task-empty">暂无对话记录</div>';
                 } else {
                     container.innerHTML = d.items.map(c =>
-                        `<div class="task-item${c.id === currentConversationId ? ' active' : ''}"
+                        `<div class="task-item${isSameConversationId(c.id, currentConversationId) ? ' active' : ''}"
                               data-cid="${c.id}" onclick="loadConversation(${c.id})">
                             <span class="task-title">${escapeHtml(c.title)}</span>
                             <span class="task-meta">${c.msg_count}条</span>

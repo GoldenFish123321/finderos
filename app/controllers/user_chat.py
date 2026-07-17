@@ -850,7 +850,9 @@ class UserConversationDeleteHandler(BaseHandler):
         if conv.get("username", "") != self.current_user:
             self.write({"code": 1, "msg": "无权删除此对话"})
             return
-        ConversationRepository.delete(conv_id)
+        if not ConversationRepository.delete_for_user(conv_id, self.current_user):
+            self.write({"code": 1, "msg": "删除失败，请刷新后重试"})
+            return
         write_audit_log(
             "USER_CONVERSATION_DELETE", self.current_user, f"conversation:{conv_id}",
             f"title={str(conv.get('title', ''))[:100]}", self.request.remote_ip or "",

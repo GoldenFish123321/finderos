@@ -78,7 +78,7 @@
 - A/B/C/D/E 五区布局对话页面
 - SSE 流式对话（Markdown 气泡渲染）
 - 多轮对话持久化（`conversations` + `conversation_messages`）
-- 模型切换 + 对话历史管理（创建/切换/删除）
+- 模型切换 + 对话历史管理（创建/切换/删除）；删除操作需做用户归属校验、失败提示和迟到流式保存防复活
 - 模型选择区与欢迎快捷操作向有 `/admin/model/config` 权限的用户提供链接，便于普通用户在聊天过程中自助配置模型 API
 - 登录、注册和 `/index` 默认进入 `/chat`，不再因普通用户拥有 `/admin/model/config` 而直接进入模型配置页
 - ECharts 图表自动注入（`[CHART:...]` / `[TABLE:...]` 标记）
