@@ -135,6 +135,8 @@ class TestDashboardTemplate:
         assert "天气" in html
         assert "source_geo" in html
         assert "recent_items" in html
+        assert "来源点位预览" in html
+        assert "最新入库动态" in html
         assert "loop.index" not in html
 
     def test_dashboard_template_uses_real_source_geo_not_random_points(self):
@@ -143,6 +145,9 @@ class TestDashboardTemplate:
             content = f.read()
         assert "source_geo" in content
         assert "renderSourceList" in content
+        assert "chart-fallback" in content
+        assert "safeChart" in content
+        assert "setChartFallback" in content
         assert "根据关键词词频生成数据点密度" not in content
         assert "sourceGeoData" in content
 
