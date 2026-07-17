@@ -111,6 +111,7 @@
 | description | TEXT DEFAULT '' | 描述 |
 | url_template | TEXT NOT NULL | URL模板（支持{keyword}/{page}占位符） |
 | request_headers | TEXT DEFAULT '{}' | HTTP请求头（JSON格式） |
+| parser | TEXT DEFAULT 'generic' | 响应解析器：baidu_news/sogou_news/bing_rss/generic |
 | is_enabled | INTEGER DEFAULT 1 | 启用状态 |
 | sort_order | INTEGER DEFAULT 0 | 排序 |
 | schedule_interval | INTEGER DEFAULT 0 | 定时采集间隔（分钟，0=不启用，v0.6 迁移新增） |

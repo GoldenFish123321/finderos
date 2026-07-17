@@ -14,6 +14,7 @@ migrate_db.py — 数据库迁移脚本
   v0.4  — 添加 digital_employees 表
   v0.5  — 添加 data_warehouse_fts 虚拟表 + 同步触发器
   v0.6  — 添加 watch_sources.schedule_interval 列
+  v1.10 — 添加 watch_sources.parser 列并迁移已有源解析器
   v0.9  — 添加 api_interfaces 表与 digital_employees.api_interface_id
   v0.7  — 添加 skills 技能库表
   v0.10 — 添加 mcp_tools MCP工具注册表 + mcp_tool_test_logs
@@ -43,6 +44,17 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 logger = logging.getLogger("migrate")
+
+
+def _add_watch_source_parser(conn):
+    conn.execute("ALTER TABLE watch_sources ADD COLUMN parser TEXT DEFAULT 'generic'")
+    conn.execute(
+        "UPDATE watch_sources SET parser = CASE "
+        "WHEN lower(url_template) LIKE '%baidu.com%' THEN 'baidu_news' "
+        "WHEN lower(url_template) LIKE '%sogou.com%' THEN 'sogou_news' "
+        "WHEN lower(url_template) LIKE '%bing.com%' THEN 'bing_rss' "
+        "ELSE 'generic' END"
+    )
 
 
 def run_migrations():
@@ -216,6 +228,11 @@ def run_migrations():
             "name": "add_watch_sources_schedule_interval",
             "sql": "ALTER TABLE watch_sources ADD COLUMN schedule_interval INTEGER DEFAULT 0",
             "check": lambda c: _column_exists(c, "watch_sources", "schedule_interval"),
+        },
+        {
+            "name": "add_watch_sources_parser",
+            "run": _add_watch_source_parser,
+            "check": lambda c: _column_exists(c, "watch_sources", "parser"),
         },
         # v0.7: 技能库表
         {

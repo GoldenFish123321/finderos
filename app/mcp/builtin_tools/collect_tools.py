@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 async def _collect_web_data(keyword: str, source_ids: Optional[List[int]] = None) -> Dict[str, Any]:
     """执行全网瞭望数据采集（通过统一出口）。"""
     from app.models.watch_source import WatchSourceRepository
+    from app.models.watch_source import resolve_source_parser
     from app.models.watch_result import WatchResultRepository
     from app.services.collector import fetch_and_parse_via_handler
 
@@ -35,7 +36,7 @@ async def _collect_web_data(keyword: str, source_ids: Optional[List[int]] = None
         all_news = []
         for source in sources:
             url_template = source["url_template"]
-            parser = "sogou_news" if "sogou" in url_template.lower() else "baidu_news"
+            parser = resolve_source_parser(source)
             request_url = url_template.replace("{keyword}", urllib.parse.quote(keyword, encoding="utf-8")).replace("{page}", "0")
 
             status, size, text, parsed_news = fetch_and_parse_via_handler(

@@ -6,6 +6,29 @@ import sqlite3
 from app.models.db import get_db
 
 
+WATCH_SOURCE_PARSERS = {
+    "baidu_news": "百度新闻 HTML",
+    "sogou_news": "搜狗搜索 HTML",
+    "bing_rss": "Bing RSS XML",
+    "generic": "通用标题链接",
+}
+
+
+def resolve_source_parser(source: dict) -> str:
+    """返回已配置解析器，并兼容迁移前的旧数据。"""
+    parser = (source.get("parser") or "").strip()
+    if parser in WATCH_SOURCE_PARSERS:
+        return parser
+    url = (source.get("url_template") or "").lower()
+    if "baidu.com" in url:
+        return "baidu_news"
+    if "sogou.com" in url:
+        return "sogou_news"
+    if "bing.com" in url:
+        return "bing_rss"
+    return "generic"
+
+
 class WatchSourceRepository:
     """Watch source data access class."""
 
@@ -48,19 +71,21 @@ class WatchSourceRepository:
     @staticmethod
     def create(name: str, description: str, url_template: str,
                request_headers: str = "{}", sort_order: int = 0,
-               schedule_interval: int = 0) -> bool:
+               schedule_interval: int = 0, parser: str = "generic") -> bool:
         """Create a watch source."""
         try:
             json.loads(request_headers)  # Validate JSON format
         except json.JSONDecodeError:
             return False
+        if parser not in WATCH_SOURCE_PARSERS:
+            return False
         try:
             with get_db() as conn:
                 conn.execute(
                     "INSERT INTO watch_sources (name, description, url_template, "
-                    "request_headers, sort_order, schedule_interval) VALUES (?, ?, ?, ?, ?, ?)",
+                    "request_headers, sort_order, schedule_interval, parser) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (name.strip(), description.strip(), url_template.strip(),
-                     request_headers, sort_order, schedule_interval),
+                     request_headers, sort_order, schedule_interval, parser),
                 )
                 conn.commit()
             return True
@@ -70,19 +95,21 @@ class WatchSourceRepository:
     @staticmethod
     def update(source_id: int, name: str, description: str, url_template: str,
                request_headers: str = "{}", sort_order: int = 0,
-               schedule_interval: int = 0) -> bool:
+               schedule_interval: int = 0, parser: str = "generic") -> bool:
         """Update a watch source."""
         try:
             json.loads(request_headers)  # Validate JSON format
         except json.JSONDecodeError:
             return False
+        if parser not in WATCH_SOURCE_PARSERS:
+            return False
         try:
             with get_db() as conn:
                 conn.execute(
                     "UPDATE watch_sources SET name=?, description=?, url_template=?, "
-                    "request_headers=?, sort_order=?, schedule_interval=? WHERE id=?",
+                    "request_headers=?, sort_order=?, schedule_interval=?, parser=? WHERE id=?",
                     (name.strip(), description.strip(), url_template.strip(),
-                     request_headers, sort_order, schedule_interval, source_id),
+                     request_headers, sort_order, schedule_interval, parser, source_id),
                 )
                 conn.commit()
             return True

@@ -10,7 +10,7 @@ import threading
 import time
 from tornado.ioloop import PeriodicCallback
 
-from app.models.watch_source import WatchSourceRepository
+from app.models.watch_source import WatchSourceRepository, resolve_source_parser
 from app.models.watch_result import WatchResultRepository
 from app.models.data_warehouse import DataWarehouseRepository
 from app.services.collector import fetch_and_parse_via_handler
@@ -162,9 +162,7 @@ class CollectionScheduler:
         # 使用配置化的关键词（从环境变量或默认值读取）
         from app.config.settings import settings
         keywords = settings.SCHEDULED_COLLECT_KEYWORDS
-        parser = "baidu_news"
-        if "sogou" in url_template.lower():
-            parser = "sogou_news"
+        parser = resolve_source_parser(source)
 
         try:
             import json

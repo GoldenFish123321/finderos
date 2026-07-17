@@ -26,6 +26,7 @@
                     <th>名称</th>
                     <th>描述</th>
                     <th>URL模板</th>
+                    <th>解析器</th>
                     <th>状态</th>
                     <th>排序</th>
                     <th>创建时间</th>
@@ -42,6 +43,7 @@
                         title="{{ s['description'] }}">{{ s['description'] or '—' }}</td>
                     <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                         title="{{ s['url_template'] }}"><code>{{ s['url_template'][:60] if len(s['url_template']) > 60 else s['url_template'] }}{% if len(s['url_template']) > 60 %}...{% end %}</code></td>
+                    <td><code>{{ s.get('parser', 'generic') }}</code></td>
                     <td>
                         {% if s['is_enabled'] == 1 %}
                         <span class="layui-badge layui-bg-green">启用</span>
@@ -76,7 +78,7 @@
                 </tr>
                 {% end %}
                 {% else %}
-                <tr><td colspan="8" class="empty-state">
+                <tr><td colspan="9" class="empty-state">
                     <i class="layui-icon layui-icon-face-surprised"></i><p>暂无瞭望源数据</p>
                 </td></tr>
                 {% end %}

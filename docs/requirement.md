@@ -41,7 +41,8 @@
 ### 6. 瞭望采集 (`/admin/watch`)
 
 - 关键词采集 + 瞭源选择 + URL模板占位符（`{keyword}`/`{page}`/计算表达式）
-- 内置解析器：百度新闻/搜狗新闻/通用
+- 默认启用至少三个可采集并落库的瞭望源：百度新闻、搜狗搜索、Bing RSS；已有数据库启动时幂等补齐缺失默认源，不覆盖已有同名配置
+- 内置解析器：百度新闻 HTML、搜狗搜索 HTML、Bing RSS XML、通用标题链接；每个瞭望源显式选择解析器，页面采集、MCP 采集与定时采集统一遵循该配置
 - SSRF 防护：协议白名单 + 内网 IP 拦截 + DNS 校验 + CRLF 检测
 - 反爬策略：Cookie 预热 + Chrome TLS 指纹 + 自定义 Headers
 - 实时进度：`/admin/watch/stream` 通过 SSE 推送 `collect_progress`（百分比、当前 URL、成功/失败数）

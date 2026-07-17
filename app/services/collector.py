@@ -1,7 +1,7 @@
 """collector.py — 瞭望采集服务
 
 - 通过 RequestHeaders + URL 模板 + 关键词 + 分页 拼装并发起 HTTP 请求
-- 内置多种 parser [baidu_news / sogou_news / generic]
+- 内置多种 parser [baidu_news / sogou_news / bing_rss / generic]
 - 仅依赖 Python 标准库 + 正则: 不引入第三方 HTML 解析器 (保持零依赖)
 """
 from __future__ import annotations
@@ -16,6 +16,7 @@ import time
 import urllib.parse
 import urllib.request
 import zlib
+import xml.etree.ElementTree as ET
 from html import unescape
 from http.cookiejar import CookieJar
 from typing import Dict, List, Optional, Tuple
@@ -274,9 +275,44 @@ def generic_parse(html: str) -> List[Dict]:
     return results
 
 
+def parse_bing_rss(xml_text: str) -> List[Dict]:
+    """使用标准 XML 解析 Bing RSS 搜索结果。"""
+    if not xml_text or "<item" not in xml_text:
+        return []
+    if len(xml_text) > 2 * 1024 * 1024:
+        return []
+    upper_xml = xml_text.upper()
+    if "<!DOCTYPE" in upper_xml or "<!ENTITY" in upper_xml:
+        logger.warning("Bing RSS 包含 DTD/ENTITY，已拒绝解析")
+        return []
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+    results: List[Dict] = []
+    for item in root.findall(".//item"):
+        title = unescape((item.findtext("title") or "").strip())[:300]
+        link = (item.findtext("link") or "").strip()
+        description = item.findtext("description") or ""
+        summary = unescape(re.sub(r"<[^>]+>", "", description)).strip()
+        source_name = unescape((item.findtext("source") or "Bing RSS").strip())[:100]
+        if len(title) < 4 or not link.startswith(("http://", "https://")):
+            continue
+        results.append({
+            "title": title,
+            "link": link[:2048],
+            "summary": summary[:200] + ("..." if len(summary) > 200 else ""),
+            "source_name": source_name or "Bing RSS",
+        })
+        if len(results) >= 20:
+            break
+    return results
+
+
 PARSERS = {
     "baidu_news": parse_baidu_news,
     "sogou_news": parse_sogou_news,
+    "bing_rss": parse_bing_rss,
     "generic": generic_parse,
 }
 

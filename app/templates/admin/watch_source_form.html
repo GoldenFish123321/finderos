@@ -21,6 +21,20 @@
                 </div>
             </div>
             <div class="layui-form-item">
+                <label class="layui-form-label">解析器</label>
+                <div class="layui-input-block">
+                    <select name="parser" required>
+                        {% for parser_value, parser_label in parser_options.items() %}
+                        <option value="{{ parser_value }}"
+                            {% if source and source.get('parser', 'generic') == parser_value %}selected{% end %}>
+                            {{ parser_label }}
+                        </option>
+                        {% end %}
+                    </select>
+                    <div class="layui-form-mid layui-word-aux">解析器应与目标响应格式一致</div>
+                </div>
+            </div>
+            <div class="layui-form-item">
                 <label class="layui-form-label">描述</label>
                 <div class="layui-input-block">
                     <input type="text" name="description" class="layui-input"
@@ -51,6 +65,14 @@
                 <div class="layui-input-block">
                     <input type="number" name="sort_order" class="layui-input" style="width:100px;"
                            value="{{ source['sort_order'] if source else '0' }}">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">定时采集</label>
+                <div class="layui-input-block">
+                    <input type="number" name="schedule_interval" min="0" class="layui-input" style="width:160px;"
+                           value="{{ source.get('schedule_interval', 0) if source else '0' }}">
+                    <div class="layui-form-mid layui-word-aux">分钟，0 表示不启用定时采集</div>
                 </div>
             </div>
             <div class="layui-form-item">

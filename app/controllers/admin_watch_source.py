@@ -6,7 +6,7 @@ admin_watch_source.py — 瞭源管理控制器
 import tornado.web
 import urllib.parse
 from app.controllers.admin_base import AdminBaseHandler
-from app.models.watch_source import WatchSourceRepository
+from app.models.watch_source import WATCH_SOURCE_PARSERS, WatchSourceRepository
 
 
 class WatchSourceListHandler(AdminBaseHandler):
@@ -59,6 +59,7 @@ class WatchSourceFormHandler(AdminBaseHandler):
             title="编辑瞭望源" if source else "新增瞭望源",
             username=self.current_user,
             source=source,
+            parser_options=WATCH_SOURCE_PARSERS,
         )
 
     @tornado.web.authenticated
@@ -68,6 +69,7 @@ class WatchSourceFormHandler(AdminBaseHandler):
         description = self.get_body_argument("description", "").strip()
         url_template = self.get_body_argument("url_template", "").strip()
         request_headers = self.get_body_argument("request_headers", "{}").strip()
+        parser = self.get_body_argument("parser", "generic").strip()
         try:
             sort_order = int(self.get_body_argument("sort_order", 0))
         except (ValueError, TypeError):
@@ -81,6 +83,10 @@ class WatchSourceFormHandler(AdminBaseHandler):
         if not name or not url_template:
             self.write('<script>alert("名称和URL模板不能为空");window.history.back();</script>')
             return
+        if parser not in WATCH_SOURCE_PARSERS:
+            self.set_status(400)
+            self.write("不支持的解析器")
+            return
         parsed_url = urllib.parse.urlsplit(url_template)
         if parsed_url.scheme.lower() not in {"http", "https"} or not parsed_url.netloc:
             self.set_status(400)
@@ -89,12 +95,14 @@ class WatchSourceFormHandler(AdminBaseHandler):
 
         if source_id:
             ok = WatchSourceRepository.update(
-                int(source_id), name, description, url_template, request_headers, sort_order, schedule_interval
+                int(source_id), name, description, url_template, request_headers,
+                sort_order, schedule_interval, parser
             )
             msg = "更新成功" if ok else "更新失败"
         else:
             ok = WatchSourceRepository.create(
-                name, description, url_template, request_headers, sort_order, schedule_interval
+                name, description, url_template, request_headers,
+                sort_order, schedule_interval, parser
             )
             msg = "创建成功" if ok else "创建失败"
 

@@ -157,6 +157,7 @@ def init_db():
                 description     TEXT DEFAULT '',
                 url_template    TEXT NOT NULL,
                 request_headers TEXT DEFAULT '{}',
+                parser          TEXT DEFAULT 'generic',
                 is_enabled      INTEGER DEFAULT 1,
                 sort_order      INTEGER DEFAULT 0,
                 schedule_interval INTEGER DEFAULT 0,
@@ -244,6 +245,27 @@ def init_db():
                 logger.info("Database migration: added schedule_interval column to watch_sources")
         except Exception as e:
             logger.error(f"Database migration failed (watch_sources.schedule_interval): {e}", exc_info=True)
+
+        # 瞭望源显式配置解析器，避免根据 URL 猜测导致新增源误用百度解析器。
+        try:
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(watch_sources)").fetchall()}
+            if "parser" not in cols:
+                conn.execute("ALTER TABLE watch_sources ADD COLUMN parser TEXT DEFAULT 'generic'")
+                conn.execute(
+                    "UPDATE watch_sources SET parser = CASE "
+                    "WHEN lower(url_template) LIKE '%baidu.com%' THEN 'baidu_news' "
+                    "WHEN lower(url_template) LIKE '%sogou.com%' THEN 'sogou_news' "
+                    "WHEN lower(url_template) LIKE '%bing.com%' THEN 'bing_rss' "
+                    "ELSE 'generic' END"
+                )
+                logger.info("Database migration: added parser column to watch_sources")
+            else:
+                conn.execute(
+                    "UPDATE watch_sources SET parser = 'generic' "
+                    "WHERE parser IS NULL OR trim(parser) = ''"
+                )
+        except Exception as e:
+            logger.error(f"Database migration failed (watch_sources.parser): {e}", exc_info=True)
 
         # 独立数据仓库表（v0.2 新增，借鉴郭家琪项目的独立设计）
         conn.execute("""
@@ -865,37 +887,67 @@ def seed_default_data():
 
 
 def _seed_default_sources():
-    """种子：默认瞭望源（百度新闻采集规则）。"""
+    """幂等补齐三个可配置、可解析的默认瞭望源。"""
     import json
+
+    browser_headers = {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    }
+    default_sources = [
+        (
+            "百度新闻",
+            "百度新闻搜索采集源，支持关键词和分页参数",
+            "https://www.baidu.com/s?rtt=1&bsst=1&cl=2&tn=news&rsv_dl=ns_pc&word={keyword}&pn={page}",
+            {**browser_headers, "Host": "www.baidu.com"},
+            "baidu_news",
+            1,
+        ),
+        (
+            "搜狗搜索",
+            "搜狗新闻搜索结果采集源，使用直达地址避免安全客户端重定向",
+            "https://www.sogou.com/sogou?ie=utf8&interation=1728053249&interV=&pid=sogou-wsse-9fc36fa768a74fa9&query={keyword}&page={page}",
+            browser_headers,
+            "sogou_news",
+            2,
+        ),
+        (
+            "Bing RSS",
+            "Bing 搜索 RSS 采集源，使用结构化 XML 解析标题、链接和摘要",
+            "https://cn.bing.com/search?q={keyword}&format=rss&mkt=zh-CN&first={page}",
+            {**browser_headers, "Accept": "application/rss+xml,application/xml;q=0.9,*/*;q=0.8"},
+            "bing_rss",
+            3,
+        ),
+    ]
+
     with get_db() as conn:
-        existing = conn.execute("SELECT COUNT(*) as cnt FROM watch_sources").fetchone()
-        if existing["cnt"] == 0:
-            headers = {
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Accept-Language": "zh-CN,zh;q=0.9",
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Host": "www.baidu.com",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
-            }
+        existing_names = {
+            row["name"] for row in conn.execute("SELECT name FROM watch_sources").fetchall()
+        }
+        inserted = []
+        for name, description, url_template, headers, parser, sort_order in default_sources:
+            if name in existing_names:
+                continue
             conn.execute(
-                "INSERT INTO watch_sources (id, name, description, url_template, request_headers, is_enabled, sort_order) "
+                "INSERT INTO watch_sources (name, description, url_template, request_headers, parser, is_enabled, sort_order) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
-                    1,
-                    "百度新闻",
-                    "百度新闻搜索采集源，支持关键词和分页参数",
-                    "https://www.baidu.com/s?rtt=1&bsst=1&cl=2&tn=news&rsv_dl=ns_pc&word={keyword}&pn={page}",
+                    name,
+                    description,
+                    url_template,
                     json.dumps(headers, ensure_ascii=False),
+                    parser,
                     1,
-                    1,
+                    sort_order,
                 ),
             )
-            print("[种子] 默认瞭望源已创建（百度新闻）")
+            inserted.append(name)
+        if inserted:
+            print(f"[种子] 默认瞭望源已补齐（{','.join(inserted)}）")
 
 
 def _seed_default_models():

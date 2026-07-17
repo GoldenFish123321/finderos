@@ -16,7 +16,7 @@ import urllib.parse
 import tornado.iostream
 import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
-from app.models.watch_source import WatchSourceRepository
+from app.models.watch_source import WatchSourceRepository, resolve_source_parser
 from app.models.watch_result import WatchResultRepository
 from app.models.data_warehouse import DataWarehouseRepository
 from app.utils.security import has_crlf, write_audit_log
@@ -75,7 +75,7 @@ def _get_collect_request(source: dict, keyword: str) -> tuple[str, dict, str]:
             continue
         headers[k] = v
 
-    parser = "sogou_news" if "sogou" in request_url.lower() else "baidu_news"
+    parser = resolve_source_parser(source)
     return request_url, headers, parser
 
 
@@ -95,7 +95,7 @@ def _collect_source(keyword: str, source_id: int) -> dict:
         }
 
     url_template = source.get("url_template", "")
-    parser = "sogou_news" if "sogou" in url_template.lower() else "baidu_news"
+    parser = resolve_source_parser(source)
     request_url = url_template.replace("{keyword}", keyword).replace("{page}", "0")
     try:
         status, size, text, parsed_news = fetch_and_parse_via_handler(

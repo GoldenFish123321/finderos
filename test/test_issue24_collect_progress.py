@@ -147,7 +147,7 @@ def test_collect_source_persists_result_and_filters_host_header(monkeypatch):
     assert seen["source_id"] == 1
     assert seen["keyword"] == "人工智能"
     assert seen["page"] == 0
-    assert seen["parser"] == "baidu_news"
+    assert seen["parser"] == "generic"
 
     rows, total = WatchResultRepository.get_all(keyword="人工智能")
     assert total >= 1

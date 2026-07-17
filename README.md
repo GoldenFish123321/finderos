@@ -71,7 +71,7 @@
 🔊 语音播报 — Edge TTS 语音合成        — AI 回复一键朗读，6 种中文语音可选
 🖼️ 媒体生成 — AI 图像与视频生成         — 文生图/图生图/文生视频/图生视频
 🔐 用户认证与 RBAC 权限管理          — 安全的密码存储、登录限速、审计日志
-🔭 瞭望采集 — 可配置的 Web 采集引擎    — 百度/搜狗新闻等多源采集 + SSRF 防护
+🔭 瞭望采集 — 可配置的 Web 采集引擎    — 百度/搜狗/Bing RSS 三源采集 + SSRF 防护
 🗄️ 数据仓库 — 采集结果独立存储与检索   — 独立 data_warehouse 表，支持去重
 🤖 模型引擎 — 多 Provider AI 统一管理  — 6 分类 + MCP 工具调用 + 文生图/视频
 📊 管理后台 — Layui 精美 UI，开箱即用  — 仪表盘统计、树形菜单、批量操作
@@ -632,7 +632,12 @@ limiter.clear(client_ip, username)
 |--------|--------|------|---------|---------|
 | 百度新闻解析 | `parse_baidu_news` | `baidu_news` | 百度新闻搜索结果 | 标题、链接、摘要、来源 |
 | 搜狗新闻解析 | `parse_sogou_news` | `sogou_news` | 搜狗新闻搜索结果 | 标题、链接、摘要 |
+| Bing RSS解析 | `parse_bing_rss` | `bing_rss` | Bing 搜索 RSS XML | 标题、链接、摘要、来源 |
 | 通用解析 | `generic_parse` | `generic` | 通用网页 | 提取 h2/h3 标签中的链接 |
+
+全新数据库和已有数据库启动时都会幂等确保至少存在三个启用的默认源：`百度新闻`、`搜狗搜索`、`Bing RSS`。已有同名源的 URL、请求头和描述不会被覆盖。
+
+Bing RSS 使用标准 XML 解析，并拒绝包含 DTD/ENTITY 的响应；标题、链接、来源和摘要在进入采集结果前执行长度限制，避免异常 RSS 放大内存或存储占用。
 
 #### 3.4 瞭望源管理 (`/admin/watch/source`)
 
@@ -644,6 +649,7 @@ limiter.clear(client_ip, username)
 | `description` | TEXT | 瞭源描述 | 百度新闻搜索结果采集 |
 | `url_template` | TEXT | URL 模板（支持占位符） | `https://www.baidu.com/s?tn=news&word={keyword}&pn={(page-1)*10}` |
 | `request_headers` | TEXT(JSON) | 自定义 HTTP 请求头 | `{"Referer":"https://www.baidu.com/"}` |
+| `parser` | TEXT | 响应解析器 | `baidu_news` / `sogou_news` / `bing_rss` / `generic` |
 | `sort_order` | INTEGER | 排序权重 | 数字越小越靠前 |
 | `schedule_interval` | INTEGER | 定时采集间隔（分钟） | 0=不启用，60=每小时 |
 | `is_enabled` | INTEGER | 启用状态 | 1=启用, 0=禁用 |
