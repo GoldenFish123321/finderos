@@ -59,11 +59,16 @@ class TestDashboardTemplate:
         """dashbaord.html 文件存在"""
         assert os.path.exists(self.TEMPLATE_PATH), "dashboard.html 不存在"
 
-    def test_cdn_echarts_gl_loaded(self):
-        """模板加载了 ECharts-GL CDN"""
+    def test_native_canvas_globe_no_echarts_gl_dependency(self):
+        """3D 地球使用原生 Canvas，不依赖 ECharts-GL 插件或外部地球纹理。"""
         with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
             content = f.read()
-        assert "echarts-gl" in content, "缺少 echarts-gl CDN"
+        assert "globe-canvas" in content, "缺少原生 Canvas 地球容器"
+        assert "requestAnimationFrame" in content, "原生 3D 地球应具备动画渲染"
+        assert "initCharts();" in content, "3D 地球初始化不能等待外部 ECharts CDN"
+        assert "ECharts 加载超时" not in content, "不能因 ECharts 加载失败跳过地球初始化"
+        assert "echarts-gl" not in content, "3D 地球不能依赖 echarts-gl CDN"
+        assert "baseTexture" not in content, "3D 地球不能依赖外部纹理"
         assert "echarts-wordcloud" in content, "缺少 echarts-wordcloud CDN"
 
     def test_all_chart_containers_exist(self):
@@ -148,6 +153,7 @@ class TestDashboardTemplate:
         assert "chart-fallback" in content
         assert "safeChart" in content
         assert "setChartFallback" in content
+        assert "原生 Canvas" in content
         assert "根据关键词词频生成数据点密度" not in content
         assert "sourceGeoData" in content
 
