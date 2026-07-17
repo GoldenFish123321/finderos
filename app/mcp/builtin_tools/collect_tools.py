@@ -14,10 +14,15 @@ from typing import Any, Dict, List, Optional
 
 
 async def _collect_web_data(keyword: str, source_ids: Optional[List[int]] = None) -> Dict[str, Any]:
-    """执行全网瞭望数据采集（通过统一出口）。"""
+    """执行全网瞭望数据采集（通过统一出口）。
+
+    采集结果同时写入 watch_results（原始记录）和 data_warehouse（数据仓库），
+    与 Web UI "💾 保存到数据仓库" 按钮行为一致。
+    """
     from app.models.watch_source import WatchSourceRepository
     from app.models.watch_source import resolve_source_parser
     from app.models.watch_result import WatchResultRepository
+    from app.models.data_warehouse import DataWarehouseRepository
     from app.services.collector import fetch_and_parse_via_handler
 
     if source_ids:
@@ -34,6 +39,7 @@ async def _collect_web_data(keyword: str, source_ids: Optional[List[int]] = None
 
     def _do_collect():
         all_news = []
+        dw_saved = 0
         for source in sources:
             url_template = source["url_template"]
             parser = resolve_source_parser(source)
@@ -45,7 +51,8 @@ async def _collect_web_data(keyword: str, source_ids: Optional[List[int]] = None
 
             for news in parsed_news:
                 news_link = news.get("link", "")
-                WatchResultRepository.create_if_not_exists(
+                source_name = news.get("source_name", source["name"])
+                result_id, is_new = WatchResultRepository.create_if_not_exists(
                     source_id=source["id"],
                     keyword=keyword,
                     request_url=news_link or request_url,
@@ -53,22 +60,39 @@ async def _collect_web_data(keyword: str, source_ids: Optional[List[int]] = None
                     response_size=len(_json.dumps(news, ensure_ascii=False).encode("utf-8")),
                     result_data=_json.dumps(news, ensure_ascii=False),
                 )
+                # 自动保存到数据仓库（与 Web UI "💾 保存到数据仓库" 按钮行为一致）
+                if result_id > 0:
+                    if DataWarehouseRepository.create(
+                        result_id=result_id,
+                        title=news.get("title", ""),
+                        link=news_link or request_url,
+                        summary=news.get("summary", "") or "",
+                        source_name=source_name,
+                        raw_data=_json.dumps(news, ensure_ascii=False),
+                    ):
+                        dw_saved += 1
+                        # 标记 watch_results 为已保存（与 Web UI 行为一致）
+                        WatchResultRepository.mark_saved(result_id)
                 all_news.append({
                     "title": news.get("title", ""),
                     "link": news_link,
                     "summary": (news.get("summary", "") or "")[:200],
-                    "source_name": news.get("source_name", source["name"]),
+                    "source_name": source_name,
                 })
-        return all_news
+        return all_news, dw_saved
 
     loop = asyncio.get_event_loop()
-    all_news = await loop.run_in_executor(None, _do_collect)
+    all_news, dw_saved = await loop.run_in_executor(None, _do_collect)
 
-    return {
+    result = {
         "keyword": keyword,
         "total_collected": len(all_news),
         "items": all_news[:20],
     }
+    if dw_saved > 0:
+        result["warehouse_saved"] = dw_saved
+        result["msg"] = f"已自动将 {dw_saved} 条结果保存到数据仓库"
+    return result
 
 
 async def _deep_collect_url(url: str) -> Dict[str, Any]:

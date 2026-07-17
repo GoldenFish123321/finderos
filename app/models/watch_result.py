@@ -144,7 +144,8 @@ class WatchResultRepository:
         """
         Create a collection result if URL doesn't already exist.
         Uses INSERT OR IGNORE with UNIQUE index for atomic dedup.
-        Returns (new_id, is_new) — is_new is True if created, False if duplicate skipped.
+        Returns (result_id, is_new) — is_new is True if created, False if duplicate.
+        When duplicate, returns the existing record's ID instead of 0.
         """
         with get_db() as conn:
             cur = conn.execute(
@@ -157,7 +158,13 @@ class WatchResultRepository:
             if cur.rowcount > 0:
                 conn.commit()
                 return cur.lastrowid, True
-            return 0, False
+            # Duplicate: look up the existing record's ID for warehouse linking
+            row = conn.execute(
+                "SELECT id FROM watch_results WHERE request_url = ? LIMIT 1",
+                (request_url,),
+            ).fetchone()
+            existing_id = row["id"] if row else 0
+            return existing_id, False
 
     @staticmethod
     def mark_saved_batch(result_ids: list) -> tuple:

@@ -186,6 +186,18 @@ class CollectionScheduler:
                         )
                         if is_new:
                             total_collected += 1
+                        # 自动保存到数据仓库（与 MCP 采集工具行为一致）
+                        if result_id > 0:
+                            DataWarehouseRepository.create(
+                                result_id=result_id,
+                                title=news.get("title", ""),
+                                link=link or url_template,
+                                summary=news.get("summary", "") or "",
+                                source_name=news.get("source_name", name),
+                                raw_data=json.dumps(news, ensure_ascii=False),
+                            )
+                            # 标记 watch_results 为已保存
+                            WatchResultRepository.mark_saved(result_id)
                 except Exception as e:
                     logger.warning(f"定时采集 {name}: 关键词'{keyword}' 采集失败: {e}")
 

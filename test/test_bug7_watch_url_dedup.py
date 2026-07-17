@@ -50,8 +50,8 @@ def test_url_dedup():
         result_data=json.dumps({"title": "测试2", "link": test_url}),
     )
     assert not is_new, f"相同URL应被去重，is_new={is_new}"
-    assert rid2 == 0, f"重复URL的ID应为0，实际={rid2}"
-    print(f"  ✅ 重复URL被去重: ID={rid2}, is_new={is_new}")
+    assert rid2 == rid1, f"重复URL应返回已有记录ID={rid1}，实际={rid2}"
+    print(f"  ✅ 重复URL被去重: 返回已有ID={rid2}, is_new={is_new}")
 
     # 不同URL — 应正常创建
     rid3, is_new = WatchResultRepository.create_if_not_exists(

@@ -108,7 +108,10 @@ audit_logs (独立审计)
     → SSE 推送 collect_progress (百分比/当前URL/成功失败数)
     → 结构化结果 → 保存到 watch_results
     → 写入 audit_logs (WATCH_COLLECT)，采集日志页可检索
-    → (可选) 标记保存到 data_warehouse (URL 去重 + FTS5 索引)
+    → 自动保存到 data_warehouse (URL 去重 + FTS5 索引)
+        • Web UI 路径: 用户手动点击 "💾 保存到数据仓库" 按钮
+        • MCP/LLM 路径: collect_web_data 工具调用后自动入库
+        • 定时调度路径: CollectionScheduler 采集后自动入库
     → (可选) 深度采集 (正文提取 + crawl4ai)
 ```
 
