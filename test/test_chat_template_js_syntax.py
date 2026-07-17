@@ -8,6 +8,7 @@ from tornado.template import Loader
 
 class _Settings:
     SYSTEM_NAME = "FinderOS"
+    DEFAULT_WEATHER_CITY = "成都"
 
 
 def _static_url(path: str) -> str:
@@ -76,3 +77,13 @@ def test_clear_shortcut_has_been_removed_from_chat_ui():
     assert "clearChatShortcut" not in html
     assert "clearChatView" not in html
     assert 'onclick="setInput(\'/clear\')"' not in html
+
+
+def test_conversation_delete_has_layui_fallback_and_error_feedback():
+    """用户侧删除会话不能只依赖 layui，失败时也要明确提示。"""
+    html = _render_chat_template(can_config_model_api=True)
+    assert "function confirmAction" in html
+    assert "window.confirm(message)" in html
+    assert "d.msg || '删除对话失败'" in html
+    assert "isSameConversationId(currentConversationId, cid)" in html
+    assert "当前对话正在回复，请等待回复完成后再删除" in html

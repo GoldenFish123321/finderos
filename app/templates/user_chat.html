@@ -147,6 +147,10 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
         background: rgba(94,163,255,0.12);
         border-left-color: var(--accent-blue);
     }
+    .task-item.deleting {
+        opacity: 0.55;
+        pointer-events: none;
+    }
     .task-item .task-title {
         flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         color: var(--text-secondary);
@@ -817,7 +821,7 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
                 <div class="gesture-guide-title">手势识别说明</div>
                 <div>打开摄像头后，系统会识别连续稳定的手势，并自动在输入框中触发对应数字员工。触发后有短暂冷却时间，避免重复发送。</div>
                 <div class="gesture-guide-list">
-                    <div class="gesture-guide-item"><strong>✌️ 剪刀手</strong>@天气 查看当前天气</div>
+                    <div class="gesture-guide-item"><strong>✌️ 剪刀手</strong>@天气 [当前城市]</div>
                     <div class="gesture-guide-item"><strong>✊ 握拳</strong>@随机音乐 推荐一首歌</div>
                     <div class="gesture-guide-item"><strong>✋ 手掌</strong>@新闻聚合 获取最新新闻</div>
                 </div>
@@ -879,8 +883,54 @@ fetch('/api/chat/employees?_xsrf=' + XSRF)
     .catch(() => showRequestError('数字员工列表加载失败'));
 
 function showRequestError(message) {
-    if (typeof layer !== 'undefined') layer.msg(message, {icon: 2, time: 2500});
-    else console.error(message);
+    if (typeof layui !== 'undefined') {
+        layui.use(['layer'], function(l) {
+            if (l && l.layer && l.layer.msg) {
+                l.layer.msg(message, {icon: 2, time: 2500});
+            } else {
+                console.error(message);
+            }
+        });
+    } else if (typeof layer !== 'undefined' && layer.msg) {
+        layer.msg(message, {icon: 2, time: 2500});
+    } else {
+        console.error(message);
+        alert(message);
+    }
+}
+
+function showRequestSuccess(message) {
+    if (typeof layui !== 'undefined') {
+        layui.use(['layer'], function(l) {
+            if (l && l.layer && l.layer.msg) {
+                l.layer.msg(message, {icon: 1, time: 1200});
+            }
+        });
+    }
+}
+
+function confirmAction(message, onConfirm) {
+    if (typeof layui !== 'undefined') {
+        layui.use(['layer'], function(l) {
+            var layerObj = l && l.layer;
+            if (layerObj && layerObj.confirm) {
+                layerObj.confirm(message, {
+                    icon: 3, title: '删除确认', btn: ['确定删除', '取消']
+                }, function(index) {
+                    layerObj.close(index);
+                    onConfirm();
+                });
+            } else if (window.confirm(message)) {
+                onConfirm();
+            }
+        });
+    } else if (window.confirm(message)) {
+        onConfirm();
+    }
+}
+
+function isSameConversationId(a, b) {
+    return String(a || '') === String(b || '');
 }
 
 // 移动端侧边栏切换
@@ -1004,33 +1054,57 @@ function loadConversation(cid) {
 }
 
 function deleteConversation(cid) {
-    layui.use(['layer'], function(){
-        var layer = layui.layer;
-        layer.confirm('确定删除此对话？', {
-            icon: 3, title: '删除确认', btn: ['确定删除', '取消']
-        }, function(index){
-            layer.close(index);
+    if (!cid) {
+        showRequestError('无效的对话ID');
+        return;
+    }
+    if (isStreaming && isSameConversationId(currentConversationId, cid)) {
+        showRequestError('当前对话正在回复，请等待回复完成后再删除');
+        return;
+    }
+
+    confirmAction('确定删除此对话？', function() {
+            var item = document.querySelector('.task-item[data-cid="' + cid + '"]');
+            if (item) item.classList.add('deleting');
             var formData = new URLSearchParams();
             formData.append('_xsrf', XSRF);
             formData.append('id', cid);
             fetch('/api/chat/conversation/delete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: formData
+                body: formData,
+                credentials: 'same-origin'
             })
-            .then(function(r) { return r.json(); })
+            .then(function(r) {
+                return r.json().catch(function() {
+                    return {code: 1, msg: '服务器返回异常'};
+                }).then(function(d) {
+                    if (!r.ok) {
+                        d.code = d.code || 1;
+                        d.msg = d.msg || ('删除失败（HTTP ' + r.status + '）');
+                    }
+                    return d;
+                });
+            })
             .then(function(d) {
                 if (d.code === 0) {
-                    if (currentConversationId === cid) {
+                    if (isSameConversationId(currentConversationId, cid)) {
                         currentConversationId = null;
                         document.querySelectorAll('.task-item').forEach(function(el) { el.classList.remove('active'); });
                         resetChatToWelcome();
                     }
+                    if (item) item.remove();
+                    showRequestSuccess('会话已删除');
                     refreshTaskList();
+                } else {
+                    if (item) item.classList.remove('deleting');
+                    showRequestError(d.msg || '删除对话失败');
                 }
             })
-            .catch(function() { showRequestError('删除对话失败'); });
-        });
+            .catch(function(err) {
+                if (item) item.classList.remove('deleting');
+                showRequestError('删除对话失败: ' + (err && err.message ? err.message : '网络异常'));
+            });
     });
 }
 
@@ -1044,7 +1118,7 @@ function refreshTaskList() {
                     container.innerHTML = '<div class="task-empty">暂无对话记录</div>';
                 } else {
                     container.innerHTML = d.items.map(c =>
-                        `<div class="task-item${c.id === currentConversationId ? ' active' : ''}"
+                        `<div class="task-item${isSameConversationId(c.id, currentConversationId) ? ' active' : ''}"
                               data-cid="${c.id}" onclick="loadConversation(${c.id})">
                             <span class="task-title">${escapeHtml(c.title)}</span>
                             <span class="task-meta">${c.msg_count}条</span>
@@ -1816,13 +1890,17 @@ function renderInfoCard(container, card) {
 var gestureDetector = null;
 var gestureCamActive = false;
 var gestureHintTimer = null;
+var gestureWeatherPending = false;
+var DEFAULT_WEATHER_CITY = {% raw json_encode(settings.DEFAULT_WEATHER_CITY) %};
+var weatherCityCache = { city: '', expiresAt: 0 };
+var weatherCityPromise = null;
 
 function showGestureHelp() {
     var helpHtml =
         '<div style="line-height:1.8;color:#cbd5e1;">' +
         '<p style="margin:0 0 8px;">打开“手势”后，浏览器会请求摄像头权限。识别到连续稳定手势后，系统会自动填入并发送对应数字员工指令。</p>' +
         '<ul style="padding-left:18px;margin:0 0 8px;">' +
-        '<li>✌️ 剪刀手：@天气 查看当前天气</li>' +
+        '<li>✌️ 剪刀手：@天气 [当前城市]</li>' +
         '<li>✊ 握拳：@随机音乐 推荐一首歌</li>' +
         '<li>✋ 手掌：@新闻聚合 获取最新新闻</li>' +
         '</ul>' +
@@ -1832,7 +1910,7 @@ function showGestureHelp() {
         layui.use(['layer'], function() {
             var layer = layui.layer;
             if (!layer || !layer.open) {
-                alert('手势识别说明\\n\\n✌️ 剪刀手：@天气 查看当前天气\\n✊ 握拳：@随机音乐 推荐一首歌\\n✋ 手掌：@新闻聚合 获取最新新闻\\n\\n触发后会冷却约 2.5 秒。');
+                alert('手势识别说明\\n\\n✌️ 剪刀手：@天气 [当前城市]\\n✊ 握拳：@随机音乐 推荐一首歌\\n✋ 手掌：@新闻聚合 获取最新新闻\\n\\n触发后会冷却约 2.5 秒。');
                 return;
             }
             layer.open({
@@ -1844,7 +1922,7 @@ function showGestureHelp() {
             });
         });
     } else {
-        alert('手势识别说明\\n\\n✌️ 剪刀手：@天气 查看当前天气\\n✊ 握拳：@随机音乐 推荐一首歌\\n✋ 手掌：@新闻聚合 获取最新新闻\\n\\n触发后会冷却约 2.5 秒。');
+        alert('手势识别说明\\n\\n✌️ 剪刀手：@天气 [当前城市]\\n✊ 握拳：@随机音乐 推荐一首歌\\n✋ 手掌：@新闻聚合 获取最新新闻\\n\\n触发后会冷却约 2.5 秒。');
     }
 }
 
@@ -1888,6 +1966,7 @@ function toggleCamera() {
             btn.textContent = '📷 手势开';
             gestureCamActive = true;
             gestureDetector.start();
+            prefetchCurrentWeatherCity();
         })
         .catch(function(err) {
             console.error('[手势] 初始化失败:', err);
@@ -1921,13 +2000,76 @@ function closeGestureCamera() {
     }
 }
 
+function normalizeWeatherCityName(city) {
+    city = (city || '').toString().trim();
+    return city || DEFAULT_WEATHER_CITY || '成都';
+}
+
+function resolveCurrentWeatherCity() {
+    var now = Date.now();
+    if (weatherCityCache.city && weatherCityCache.expiresAt > now) {
+        return Promise.resolve(weatherCityCache.city);
+    }
+    if (!navigator.geolocation || typeof fetch !== 'function') {
+        return Promise.resolve(DEFAULT_WEATHER_CITY || '成都');
+    }
+    if (weatherCityPromise) {
+        return weatherCityPromise;
+    }
+
+    weatherCityPromise = new Promise(function(resolve) {
+        var settled = false;
+        function finish(city) {
+            if (settled) return;
+            settled = true;
+            city = normalizeWeatherCityName(city);
+            weatherCityCache.city = city;
+            weatherCityCache.expiresAt = Date.now() + 10 * 60 * 1000;
+            weatherCityPromise = null;
+            resolve(city);
+        }
+
+        navigator.geolocation.getCurrentPosition(function(pos) {
+            var coords = pos && pos.coords ? pos.coords : {};
+            var lat = coords.latitude;
+            var lng = coords.longitude;
+            if (typeof lat !== 'number' || typeof lng !== 'number') {
+                finish(DEFAULT_WEATHER_CITY);
+                return;
+            }
+            var url = '/api/location/reverse?lat=' + encodeURIComponent(lat) +
+                '&lng=' + encodeURIComponent(lng);
+            fetch(url, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' }
+            })
+                .then(function(resp) { return resp && resp.ok ? resp.json() : null; })
+                .then(function(data) { finish(data && data.city); })
+                .catch(function() { finish(DEFAULT_WEATHER_CITY); });
+        }, function() {
+            finish(DEFAULT_WEATHER_CITY);
+        }, {
+            enableHighAccuracy: false,
+            timeout: 3000,
+            maximumAge: 10 * 60 * 1000
+        });
+    });
+    return weatherCityPromise;
+}
+
+function prefetchCurrentWeatherCity() {
+    // 摄像头启动后先后台解析城市，避免首次剪刀手识别后才开始定位造成等待。
+    resolveCurrentWeatherCity().catch(function() {});
+}
+
 function handleGesture(gesture) {
     var msg = '';
     var icon = '';
     var label = '';
 
     if (gesture === 'VICTORY') {
-        msg = '@天气 查看当前天气';
+        msg = '';
         icon = '✌️';
         label = '剪刀手 → 查天气';
     } else if (gesture === 'FIST') {
@@ -1951,6 +2093,28 @@ function handleGesture(gesture) {
     gestureHintTimer = setTimeout(function() {
         hint.classList.remove('active');
     }, 3000);
+
+    if (gesture === 'VICTORY') {
+        if (gestureWeatherPending) return;
+        gestureWeatherPending = true;
+        resolveCurrentWeatherCity()
+            .then(function(city) {
+                msg = '@天气 ' + normalizeWeatherCityName(city);
+                if (sendGestureMessage(msg)) {
+                    closeGestureCamera();
+                }
+            })
+            .catch(function() {
+                msg = '@天气 ' + normalizeWeatherCityName(DEFAULT_WEATHER_CITY);
+                if (sendGestureMessage(msg)) {
+                    closeGestureCamera();
+                }
+            })
+            .then(function() {
+                gestureWeatherPending = false;
+            });
+        return;
+    }
 
     // 识别成功后发送消息，若发送成功则自动关闭摄像头返回对话界面
     if (sendGestureMessage(msg)) {

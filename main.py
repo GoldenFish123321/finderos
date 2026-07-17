@@ -82,7 +82,7 @@ from app.controllers.user_chat import (
     UserConversationListHandler, UserConversationCreateHandler,
     UserConversationDeleteHandler, UserConversationMessagesHandler,
     UserChatStreamHandler, UserEmployeeInvokeHandler,
-    UserChatTTSHandler,
+    UserChatTTSHandler, UserLocationReverseHandler,
 )
 from app.models.db import init_db, seed_default_data
 from app.services.scheduler import CollectionScheduler, SentimentScanner
@@ -261,6 +261,8 @@ def make_app() -> tornado.web.Application:
             (r"/api/chat/conversation/messages", UserConversationMessagesHandler),
             # TTS 语音合成（Edge TTS）
             (r"/api/chat/tts", UserChatTTSHandler),
+            # 浏览器定位反查城市（手势天气）
+            (r"/api/location/reverse", UserLocationReverseHandler),
         ],
         template_path=_template_dir,
         static_path=_static_dir,
