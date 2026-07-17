@@ -114,8 +114,8 @@
 | TC-MODEL-05 | Token统计 | 多次对话 | total_tokens累计增长 |
 | TC-MODEL-06 | 审计日志 | 发送对话消息 | audit_logs表新增USER_CHAT记录 |
 | TC-MODEL-07 | 快速配置 Key 回显 | 打开 `/admin/model/config` | API Key 在密码框中回显，默认隐藏，可点击显示/隐藏 |
-| TC-MODEL-08 | 快速配置测试连接 | 填写 API Base/API Key/Model Name 后点击测试连接 | 返回 HTTP 状态、耗时与成功/失败提示，不展示或记录密钥 |
-| TC-MODEL-09 | 变更接口地址防误发 Key | 修改 API Base 后继续使用已保存 Key | 页面显示“复用当前密钥”确认区；未勾选时拒绝保存/测试，勾选后允许复用 |
+| TC-MODEL-08 | 快速配置测试连接 | 从 Provider 白名单下拉选择 API Base，填写 API Key/Model Name 后点击测试连接 | 返回 HTTP 状态、耗时与成功/失败提示，不展示或记录密钥；非白名单 API Base 被后端拒绝 |
+| TC-MODEL-09 | 变更接口地址防误发 Key | 修改 Provider 或 API Base 后继续使用已保存 Key | 页面显示“复用当前密钥”确认区；未勾选时拒绝保存/测试，勾选后允许复用；API Base 只能从所选厂商白名单中选择 |
 | TC-MODEL-10 | 模型分组隔离 | 管理员模型、Alice 用户模型、Bob 用户模型同时存在 | 管理员页只显示 admin 组；Alice 只能选择自己的 user 模型和 admin 模型，不能访问 Bob 模型 |
 | TC-MODEL-11 | Chat 模型分组展示 | 用户拥有至少一个我的模型配置并打开 `/chat` | 模型下拉按“我的模型配置 / 管理员提供模型”分组展示 |
 

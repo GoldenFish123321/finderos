@@ -136,7 +136,7 @@
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | name | TEXT NOT NULL | 模型名称 |
-| provider | TEXT DEFAULT 'openai' | 提供商（openai/deepseek/zhipu/baidu/custom） |
+| provider | TEXT DEFAULT 'openai' | 提供商（openai/deepseek/zhipu/baidu/siliconflow/moonshot/aliyun/minimax/custom） |
 | api_base | TEXT DEFAULT '' | API Base URL |
 | api_key | TEXT DEFAULT '' | API密钥（Fernet 对称加密存储） |
 | model_name | TEXT DEFAULT '' | 模型标识 |

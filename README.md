@@ -784,7 +784,11 @@ HTTP API 型 MCP 工具支持在 URL 中使用 `{参数名}` 占位符；GET 请
 | DeepSeek | `deepseek` | OpenAI 兼容 |
 | 智谱 AI | `zhipu` | OpenAI 兼容 |
 | 百度文心 | `baidu` | OpenAI 兼容 |
-| 自定义 | `custom` | OpenAI 兼容（任意兼容端点） |
+| 硅基流动 | `siliconflow` | OpenAI 兼容 |
+| Moonshot / Kimi | `moonshot` | OpenAI 兼容 |
+| 阿里 DashScope | `aliyun` | OpenAI 兼容 |
+| MiniMax | `minimax` | OpenAI 兼容 |
+| 自定义 / 预留 | `custom` | 需管理员维护白名单后使用 |
 
 支持的模型分类（6 种）：
 
@@ -1127,8 +1131,8 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/admin/model` | 管理员提供模型列表（`?page=&category=`） |
-| GET/POST | `/admin/model/config` | 我的模型 API 快速配置（普通用户默认权限，按当前用户隔离，API Key 密码框回显且可显示/隐藏） |
-| POST | `/admin/model/config/test` | 测试模型 API 配置连通性（保存前可验证 API Base/API Key/Model Name） |
+| GET/POST | `/admin/model/config` | 我的模型 API 快速配置（普通用户默认权限，按当前用户隔离，API Key 密码框回显且可显示/隐藏，API Base 按提供商白名单下拉选择） |
+| POST | `/admin/model/config/test` | 测试模型 API 配置连通性（保存前可验证白名单 API Base/API Key/Model Name） |
 | GET | `/admin/model/add` | 新增模型页面 |
 | POST | `/admin/model/add` | 提交新增模型 |
 | GET | `/admin/model/edit` | 编辑模型页面（`?id=`） |
@@ -1138,7 +1142,7 @@ v0.9 新增的 **Edge TTS 语音合成播报**功能，为每条 AI 回复消息
 | POST | `/admin/model/default` | 设为默认模型 |
 | GET | `/admin/api/model/list` | 模型 JSON API（返回已启用模型列表） |
 
-> 模型 API 快速配置页仅管理当前用户的 `user` 模型分组，会回显已保存 API Key（默认密码框隐藏，可手动显示）。当 Provider、API Base 或 Model Name 改变且仍在使用已保存密钥时，页面会显示醒目的“复用当前密钥”确认区；用户可重新输入新 Key，或勾选确认后继续复用当前密钥。
+> 模型 API 快速配置页仅管理当前用户的 `user` 模型分组，会回显已保存 API Key（默认密码框隐藏，可手动显示）。API Base URL 由系统按 Provider 维护白名单，用户选择厂商后只能从该厂商可用地址中下拉选择，保存和测试都会做后端白名单校验。当 Provider、API Base 或 Model Name 改变且仍在使用已保存密钥时，页面会显示醒目的“复用当前密钥”确认区；用户可重新输入新 Key，或勾选确认后继续复用当前密钥。
 
 #### 管理侧会话管理（Issue #17）
 | 方法 | 路径 | 说明 |
