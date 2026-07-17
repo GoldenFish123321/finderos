@@ -914,7 +914,8 @@ function switchModel() {
 // 重置聊天区到欢迎界面（保留/重建欢迎 div，仅清除消息气泡）
 function resetChatToWelcome() {
     const container = document.getElementById('chat-messages');
-    // 移除所有消息气泡
+    // 先清理图表资源防止内存泄漏，再移除所有消息气泡
+    if (container) _cleanupChartContainers(container);
     container.querySelectorAll('.chat-msg').forEach(function(el) { el.remove(); });
     // 显示或重建欢迎页
     var welcome = document.getElementById('chat-welcome');
@@ -976,8 +977,9 @@ function loadConversation(cid) {
     var taskItem = document.querySelector('.task-item[data-cid="' + cid + '"]');
     if (taskItem) taskItem.classList.add('active');
 
-    // 清除现有消息气泡
+    // 清除现有消息气泡（先清理图表资源防止内存泄漏）
     var container = document.getElementById('chat-messages');
+    if (container) _cleanupChartContainers(container);
     container.querySelectorAll('.chat-msg').forEach(function(el) { el.remove(); });
 
     fetch('/api/chat/conversation/messages?id=' + cid + '&_xsrf=' + XSRF)
@@ -986,7 +988,14 @@ function loadConversation(cid) {
             if (d.code === 0) {
                 d.items.forEach(function(msg) {
                     // 历史消息：传递 token_count，不显示耗时（elapsed=null）
-                    appendMessage(msg.role, msg.content, msg.token_count || 0, null);
+                    var msgDiv = appendMessage(msg.role, msg.content, msg.token_count || 0, null);
+                    // 对 AI 消息渲染图表和表格（修复切换历史对话图表不显示的问题）
+                    if (msg.role === 'assistant' && msg.content) {
+                        var contentDiv = msgDiv.querySelector('.bubble-content');
+                        if (contentDiv) {
+                            detectAndRenderChart(contentDiv, msg.content);
+                        }
+                    }
                 });
                 scrollToBottom();
             }
@@ -1423,6 +1432,24 @@ function appendMessage(role, content, tokens, elapsed, isPlaceholder) {
 // ECharts 图表检测与渲染（支持多图表 + 表格）
 // ============================================================
 
+// 全局图表计数器，确保每次渲染的 chart ID 唯一（避免多条 AI 消息图表 ID 冲突）
+var _chartIdCounter = 0;
+
+// 清理指定容器内所有图表资源（ECharts 实例 + ResizeObserver），防止内存泄漏
+function _cleanupChartContainers(container) {
+    if (!container) return;
+    container.querySelectorAll('.chart-container').forEach(function(node) {
+        if (node._resizeObserver) {
+            node._resizeObserver.disconnect();
+            delete node._resizeObserver;
+        }
+        if (typeof echarts !== 'undefined') {
+            var oldChart = echarts.getInstanceByDom(node);
+            if (oldChart) oldChart.dispose();
+        }
+    });
+}
+
 // 从文本中提取 [CHART:...] 和 [TABLE:...] 标记（括号计数法，支持任意嵌套）
 function extractMarkupBlocks(text, tag) {
     var results = [];
@@ -1467,13 +1494,8 @@ function extractMarkupBlocks(text, tag) {
 function detectAndRenderChart(aiContent, totalContent) {
     var html = totalContent;
 
-    aiContent.querySelectorAll('.chart-container').forEach(function(node) {
-        if (node._resizeObserver) node._resizeObserver.disconnect();
-        if (typeof echarts !== 'undefined') {
-            var oldChart = echarts.getInstanceByDom(node);
-            if (oldChart) oldChart.dispose();
-        }
-    });
+    // 清理当前容器内已有图表（流式更新时可能重复渲染同一内容）
+    _cleanupChartContainers(aiContent);
 
     // 1. 检测 [TABLE:...] 标记 — 渲染为 HTML 表格
     var tableBlocks = extractMarkupBlocks(html, 'TABLE');
@@ -1503,12 +1525,11 @@ function detectAndRenderChart(aiContent, totalContent) {
     // 2. 检测 [CHART:...] 标记 — 渲染为 ECharts 图表
     var chartBlocks = extractMarkupBlocks(html, 'CHART');
     var chartIds = [];
-    var chartIndex = 0;
 
     for (var ci = 0; ci < chartBlocks.length; ci++) {
         try {
             var chartConfig = JSON.parse(chartBlocks[ci].json);
-            var chartId = 'chart-' + Date.now() + '-' + (chartIndex++);
+            var chartId = 'chart-' + Date.now() + '-' + (_chartIdCounter++);
             chartIds.push({id: chartId, config: chartConfig});
             html = html.replace(chartBlocks[ci].full,
                 '<div class="chart-container" id="' + chartId + '"></div>');
