@@ -1182,7 +1182,7 @@ def _seed_default_employees():
             conn.execute(
                 "INSERT INTO digital_employees (id, name, employee_type, description, "
                 "api_url, api_method, api_headers, api_params_template, response_render_template, "
-                "api_interface_id, mcp_tool_id, is_enabled) "
+                "api_interface_id, mcp_tool_ids, is_enabled) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     8, "随机音乐", "api",
@@ -1193,7 +1193,7 @@ def _seed_default_employees():
                     "",  # api_params_template — 工具无需额外参数
                     "",  # response_render_template — 由 _build_employee_card 自动识别音乐数据构建卡片
                     None,  # api_interface_id
-                    music_tool_id,  # 绑定 MCP 工具 get_random_music
+                    json.dumps([music_tool_id] if music_tool_id else [], ensure_ascii=False),  # mcp_tool_ids
                     1,
                 ),
             )
@@ -1406,7 +1406,7 @@ def _seed_script_tools():
             },
             # ── 音乐 script 型工具 ──
             {
-                "name": "music_script",
+                "name": "get_random_music",
                 "display_name": "随机音乐推荐 (脚本)",
                 "description": "从网易云音乐热歌榜随机推荐一首歌曲。脚本型工具。",
                 "category": "entertainment",
