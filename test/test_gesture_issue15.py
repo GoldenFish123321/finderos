@@ -176,6 +176,26 @@ class TestGestureTemplate:
         assert "weatherCityCache" in content, "定位城市应短期缓存，避免重复请求"
         assert "@天气 [当前城市]" in content, "手势说明应标明天气使用当前城市"
 
+    def test_gesture_weather_prefetches_city_on_camera_start(self):
+        """打开手势摄像头后应预解析城市，降低首次剪刀手触发延迟。"""
+        with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        assert "weatherCityPromise" in content, "应复用正在进行的定位 Promise"
+        assert "function prefetchCurrentWeatherCity" in content, \
+            "缺少天气城市预取函数"
+        camera_start = content.index("gestureDetector.start();")
+        prefetch_call = content.index("prefetchCurrentWeatherCity();", camera_start)
+        assert prefetch_call > camera_start, "摄像头启动后应立即预取城市"
+
+    def test_gesture_ui_does_not_show_default_city_fallback_copy(self):
+        """用户界面不展示“定位失败默认成都”等兜底实现细节。"""
+        with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        for forbidden in ("定位失败默认成都", "失败默认成都", "系统定位，失败"):
+            assert forbidden not in content, f"手势 UI 不应展示兜底文案: {forbidden}"
+
     def test_gesture_help_documents_mapping(self):
         """用户侧手势说明应明确展示手势到数字员工的映射。"""
         with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:

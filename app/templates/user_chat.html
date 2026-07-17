@@ -821,7 +821,7 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
                 <div class="gesture-guide-title">手势识别说明</div>
                 <div>打开摄像头后，系统会识别连续稳定的手势，并自动在输入框中触发对应数字员工。触发后有短暂冷却时间，避免重复发送。</div>
                 <div class="gesture-guide-list">
-                    <div class="gesture-guide-item"><strong>✌️ 剪刀手</strong>@天气 [当前城市]（定位失败默认成都）</div>
+                    <div class="gesture-guide-item"><strong>✌️ 剪刀手</strong>@天气 [当前城市]</div>
                     <div class="gesture-guide-item"><strong>✊ 握拳</strong>@随机音乐 推荐一首歌</div>
                     <div class="gesture-guide-item"><strong>✋ 手掌</strong>@新闻聚合 获取最新新闻</div>
                 </div>
@@ -1893,13 +1893,14 @@ var gestureHintTimer = null;
 var gestureWeatherPending = false;
 var DEFAULT_WEATHER_CITY = {% raw json_encode(settings.DEFAULT_WEATHER_CITY) %};
 var weatherCityCache = { city: '', expiresAt: 0 };
+var weatherCityPromise = null;
 
 function showGestureHelp() {
     var helpHtml =
         '<div style="line-height:1.8;color:#cbd5e1;">' +
         '<p style="margin:0 0 8px;">打开“手势”后，浏览器会请求摄像头权限。识别到连续稳定手势后，系统会自动填入并发送对应数字员工指令。</p>' +
         '<ul style="padding-left:18px;margin:0 0 8px;">' +
-        '<li>✌️ 剪刀手：@天气 [当前城市]（系统定位，失败默认成都）</li>' +
+        '<li>✌️ 剪刀手：@天气 [当前城市]</li>' +
         '<li>✊ 握拳：@随机音乐 推荐一首歌</li>' +
         '<li>✋ 手掌：@新闻聚合 获取最新新闻</li>' +
         '</ul>' +
@@ -1909,7 +1910,7 @@ function showGestureHelp() {
         layui.use(['layer'], function() {
             var layer = layui.layer;
             if (!layer || !layer.open) {
-                alert('手势识别说明\\n\\n✌️ 剪刀手：@天气 [当前城市]（系统定位，失败默认成都）\\n✊ 握拳：@随机音乐 推荐一首歌\\n✋ 手掌：@新闻聚合 获取最新新闻\\n\\n触发后会冷却约 2.5 秒。');
+                alert('手势识别说明\\n\\n✌️ 剪刀手：@天气 [当前城市]\\n✊ 握拳：@随机音乐 推荐一首歌\\n✋ 手掌：@新闻聚合 获取最新新闻\\n\\n触发后会冷却约 2.5 秒。');
                 return;
             }
             layer.open({
@@ -1921,7 +1922,7 @@ function showGestureHelp() {
             });
         });
     } else {
-        alert('手势识别说明\\n\\n✌️ 剪刀手：@天气 [当前城市]（系统定位，失败默认成都）\\n✊ 握拳：@随机音乐 推荐一首歌\\n✋ 手掌：@新闻聚合 获取最新新闻\\n\\n触发后会冷却约 2.5 秒。');
+        alert('手势识别说明\\n\\n✌️ 剪刀手：@天气 [当前城市]\\n✊ 握拳：@随机音乐 推荐一首歌\\n✋ 手掌：@新闻聚合 获取最新新闻\\n\\n触发后会冷却约 2.5 秒。');
     }
 }
 
@@ -1965,6 +1966,7 @@ function toggleCamera() {
             btn.textContent = '📷 手势开';
             gestureCamActive = true;
             gestureDetector.start();
+            prefetchCurrentWeatherCity();
         })
         .catch(function(err) {
             console.error('[手势] 初始化失败:', err);
@@ -2011,8 +2013,11 @@ function resolveCurrentWeatherCity() {
     if (!navigator.geolocation || typeof fetch !== 'function') {
         return Promise.resolve(DEFAULT_WEATHER_CITY || '成都');
     }
+    if (weatherCityPromise) {
+        return weatherCityPromise;
+    }
 
-    return new Promise(function(resolve) {
+    weatherCityPromise = new Promise(function(resolve) {
         var settled = false;
         function finish(city) {
             if (settled) return;
@@ -2020,6 +2025,7 @@ function resolveCurrentWeatherCity() {
             city = normalizeWeatherCityName(city);
             weatherCityCache.city = city;
             weatherCityCache.expiresAt = Date.now() + 10 * 60 * 1000;
+            weatherCityPromise = null;
             resolve(city);
         }
 
@@ -2045,10 +2051,16 @@ function resolveCurrentWeatherCity() {
             finish(DEFAULT_WEATHER_CITY);
         }, {
             enableHighAccuracy: false,
-            timeout: 4500,
+            timeout: 3000,
             maximumAge: 10 * 60 * 1000
         });
     });
+    return weatherCityPromise;
+}
+
+function prefetchCurrentWeatherCity() {
+    // 摄像头启动后先后台解析城市，避免首次剪刀手识别后才开始定位造成等待。
+    resolveCurrentWeatherCity().catch(function() {});
 }
 
 function handleGesture(gesture) {
@@ -2059,7 +2071,7 @@ function handleGesture(gesture) {
     if (gesture === 'VICTORY') {
         msg = '';
         icon = '✌️';
-        label = '剪刀手 → 定位天气';
+        label = '剪刀手 → 查天气';
     } else if (gesture === 'FIST') {
         msg = '@随机音乐 推荐一首歌';
         icon = '✊';
