@@ -7,18 +7,27 @@
 /* ====== 大屏全局 ====== */
 body.dark-theme {
     background: #05071a !important;
-    overflow: hidden !important;
+    overflow: auto !important;
+}
+.admin-body-dark {
+    padding: 0 !important;
+    overflow: auto;
+}
+.theme-toggle-btn {
+    display: none !important;
 }
 .dashboard-wrap {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
+    position: relative;
+    min-height: calc(100vh - 60px);
+    box-sizing: border-box;
     background:
-        radial-gradient(ellipse at 20% 50%, rgba(30,60,180,0.08) 0%, transparent 60%),
-        radial-gradient(ellipse at 80% 30%, rgba(100,30,180,0.06) 0%, transparent 50%),
-        radial-gradient(ellipse at 50% 80%, rgba(0,150,255,0.04) 0%, transparent 50%);
+        radial-gradient(ellipse at 18% 18%, rgba(59,130,246,0.18) 0%, transparent 42%),
+        radial-gradient(ellipse at 82% 24%, rgba(14,165,233,0.12) 0%, transparent 40%),
+        linear-gradient(135deg, #08111f 0%, #0f172a 48%, #111827 100%);
     z-index: 0;
-    overflow-y: auto;
+    overflow-y: visible;
     overflow-x: hidden;
+    padding-bottom: 16px;
 }
 
 /* ====== 顶部标题栏 ====== */
@@ -77,21 +86,21 @@ body.dark-theme {
 /* ====== 网格布局 ====== */
 .dash-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 14px;
     padding: 16px 20px 10px;
     position: relative; z-index: 1;
 }
 .dash-grid-2 {
     display: grid;
-    grid-template-columns: 3fr 2fr;
+    grid-template-columns: minmax(520px, 1.55fr) minmax(340px, .9fr);
     gap: 14px;
     padding: 0 20px 14px;
     position: relative; z-index: 1;
 }
 .dash-grid-3 {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1.2fr .95fr .85fr;
     gap: 14px;
     padding: 0 20px 14px;
     position: relative; z-index: 1;
@@ -163,12 +172,12 @@ body.dark-theme {
 
 /* ====== 词云容器 ====== */
 #chart-wordcloud {
-    height: 280px;
+    height: 210px;
 }
 
 /* ====== 3D地球容器 ====== */
 #chart-globe {
-    height: 480px;
+    height: clamp(360px, 52vh, 620px);
     width: 100%;
 }
 
@@ -202,11 +211,68 @@ body.dark-theme {
     font-size: 11px;
     color: rgba(255,255,255,0.3);
 }
-/* Enterprise visual override: restrained surfaces, no neon gradients/glow. */
-.dashboard-wrap { background: #111827; }
-.dashboard-header h1, .stat-number { background: none !important; color: #e5e7eb !important; -webkit-text-fill-color: initial !important; }
-.dashboard-header::after { background: #2563eb; }
-.dash-stat, .dash-panel { background: #182233 !important; box-shadow: none !important; border-color: #334155 !important; }
+.source-list, .recent-list {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+.source-item, .recent-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 12px;
+}
+.source-item:last-child, .recent-item:last-child { border-bottom: none; }
+.source-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #38bdf8;
+    box-shadow: 0 0 16px rgba(56,189,248,.7);
+}
+.source-name, .recent-title {
+    min-width: 0;
+    color: rgba(255,255,255,0.82);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.source-meta, .recent-meta {
+    color: rgba(255,255,255,0.35);
+    font-size: 11px;
+    white-space: nowrap;
+}
+.recent-item { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.recent-title { margin-bottom: 3px; }
+.recent-badge {
+    border-radius: 999px;
+    padding: 2px 7px;
+    font-size: 10px;
+    color: #86efac;
+    background: rgba(34,197,94,.12);
+    border: 1px solid rgba(34,197,94,.20);
+}
+.dash-empty {
+    color: rgba(255,255,255,0.32);
+    text-align: center;
+    padding: 22px 8px;
+    font-size: 12px;
+}
+@media (max-width: 1500px) {
+    .dash-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 1180px) {
+    .dash-grid-2, .dash-grid-3 { grid-template-columns: 1fr; }
+    #chart-globe { height: 430px; }
+}
+@media (max-width: 760px) {
+    .dashboard-header { align-items: flex-start; flex-direction: column; }
+    .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; }
+    .dash-grid-2, .dash-grid-3 { padding-left: 12px; padding-right: 12px; }
+    #chart-globe { height: 340px; }
+}
 </style>
 
 <div class="dashboard-wrap">
@@ -242,6 +308,16 @@ body.dark-theme {
             <div class="stat-number" id="stat-sources" style="background:linear-gradient(135deg,#f97316,#fbbf24);-webkit-background-clip:text;background-clip:text;">{{ stats['source_count'] }}</div>
             <div class="stat-sub">最多: <span id="stat-top-source">{{ stats['top_source'] }}</span></div>
         </div>
+        <div class="dash-stat">
+            <div class="stat-label">🛰️ 启用瞭源</div>
+            <div class="stat-number" id="stat-enabled-sources">{{ stats.get('enabled_source_count', 0) }}</div>
+            <div class="stat-sub">定时源 <span id="stat-scheduled-sources">{{ stats.get('scheduled_source_count', 0) }}</span> 个</div>
+        </div>
+        <div class="dash-stat">
+            <div class="stat-label">✅ 采集成功率</div>
+            <div class="stat-number" id="stat-success-rate">{{ stats.get('success_rate', 0) }}%</div>
+            <div class="stat-sub">平均响应 <span id="stat-avg-size">{{ stats.get('avg_response_kb', 0) }}</span> KB</div>
+        </div>
     </div>
 
     <!-- 3D 地球 + 词云 -->
@@ -271,6 +347,14 @@ body.dark-theme {
                     </li>
                     {% end %}
                 </ul>
+            </div>
+            <div class="dash-panel" style="flex:1;">
+                <div class="dash-panel-title">📍 来源点位 Top 8 <span class="badge">地球标注</span></div>
+                <ul class="source-list" id="source-list"></ul>
+            </div>
+            <div class="dash-panel" style="flex:1;">
+                <div class="dash-panel-title">🕘 最新入库动态 <span class="badge">运营</span></div>
+                <ul class="recent-list" id="recent-list"></ul>
             </div>
         </div>
     </div>
@@ -308,9 +392,13 @@ body.dark-theme {
     }
 
     function observeResize(dom, chart) {
-        var obs = new ResizeObserver(function() { chart.resize(); });
-        obs.observe(dom);
-        chartObservers[dom.id] = obs;
+        if (typeof ResizeObserver !== 'undefined') {
+            var obs = new ResizeObserver(function() { chart.resize(); });
+            obs.observe(dom);
+            chartObservers[dom.id] = obs;
+        } else {
+            window.addEventListener('resize', function() { chart.resize(); });
+        }
     }
 
     function updateStatCards(stats) {
@@ -321,6 +409,59 @@ body.dark-theme {
         if (el('stat-deep-pct')) el('stat-deep-pct').textContent = stats.deep_pct;
         if (el('stat-sources')) el('stat-sources').textContent = stats.source_count;
         if (el('stat-top-source')) el('stat-top-source').textContent = stats.top_source;
+        if (el('stat-enabled-sources')) el('stat-enabled-sources').textContent = stats.enabled_source_count || 0;
+        if (el('stat-scheduled-sources')) el('stat-scheduled-sources').textContent = stats.scheduled_source_count || 0;
+        if (el('stat-success-rate')) el('stat-success-rate').textContent = (stats.success_rate || 0) + '%';
+        if (el('stat-avg-size')) el('stat-avg-size').textContent = stats.avg_response_kb || 0;
+    }
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, function(ch) {
+            return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch];
+        });
+    }
+
+    function formatNumber(value) {
+        var num = Number(value || 0);
+        if (num >= 10000) return (num / 10000).toFixed(1).replace(/\.0$/, '') + 'w';
+        return String(num);
+    }
+
+    function renderSourceList(sourceGeoData) {
+        var list = document.getElementById('source-list');
+        if (!list) return;
+        sourceGeoData = sourceGeoData || [];
+        if (!sourceGeoData.length) {
+            list.innerHTML = '<li class="dash-empty">暂无来源点位，完成采集入库后将显示来源、城市和数量。</li>';
+            return;
+        }
+        list.innerHTML = sourceGeoData.slice(0, 8).map(function(item) {
+            return '<li class="source-item">' +
+                '<span class="source-dot"></span>' +
+                '<span class="source-name" title="' + escapeHtml(item.name) + '">' + escapeHtml(item.name) +
+                '<span class="source-meta"> · ' + escapeHtml(item.city || '未知') + '</span></span>' +
+                '<span class="source-meta">' + formatNumber(item.value) + ' 条</span>' +
+                '</li>';
+        }).join('');
+    }
+
+    function renderRecentList(items) {
+        var list = document.getElementById('recent-list');
+        if (!list) return;
+        items = items || [];
+        if (!items.length) {
+            list.innerHTML = '<li class="dash-empty">暂无入库动态，可从“瞭望采集”或“数据仓库”添加数据。</li>';
+            return;
+        }
+        list.innerHTML = items.map(function(item) {
+            return '<li class="recent-item">' +
+                '<div><div class="recent-title" title="' + escapeHtml(item.title) + '">' + escapeHtml(item.title) + '</div>' +
+                '<div class="recent-meta">' + escapeHtml(item.source || '未知来源') +
+                (item.keyword ? ' · #' + escapeHtml(item.keyword) : '') +
+                (item.created_at ? ' · ' + escapeHtml(item.created_at) : '') + '</div></div>' +
+                (item.is_deep_collected ? '<span class="recent-badge">深采</span>' : '<span class="source-meta">普通</span>') +
+                '</li>';
+        }).join('');
     }
 
     function initCharts() {
@@ -330,15 +471,19 @@ body.dark-theme {
         // 获取后端数据
         var statsData = {% raw json_encode(stats) %};
         var sourceData = {% raw json_encode(source_distribution) %};
+        var sourceGeoData = {% raw json_encode(source_geo) %};
         var trendData = {% raw json_encode(trend) %};
         var keywordData = {% raw json_encode(keywords) %};
+        var recentItems = {% raw json_encode(recent_items) %};
 
         // 更新时间
         document.getElementById('dash-update-time').textContent =
             '🕐 ' + new Date().toLocaleString('zh-CN');
 
         // 1. 3D 地球（ECharts-GL）
-        initGlobe('chart-globe', sourceData, keywordData);
+        initGlobe('chart-globe', sourceGeoData);
+        renderSourceList(sourceGeoData);
+        renderRecentList(recentItems);
 
         // 2. 词云
         initWordCloud('chart-wordcloud', keywordData);
@@ -354,84 +499,97 @@ body.dark-theme {
     }
 
     // ── 3D 地球 ──
-    function initGlobe(domId, sourceData, keywordData) {
+    function initGlobe(domId, sourceGeoData) {
         var dom = document.getElementById(domId);
         if (!dom) return;
         var chart = echarts.init(dom, 'dark');
         charts[domId] = chart;
 
-        // 生成模拟全球坐标点（基于来源分布随机分布）
-        var cities = [
-            {name: '北京', coord: [116.4, 39.9]}, {name: '上海', coord: [121.5, 31.2]},
-            {name: '广州', coord: [113.3, 23.1]}, {name: '深圳', coord: [114.1, 22.5]},
-            {name: '成都', coord: [104.1, 30.6]}, {name: '杭州', coord: [120.2, 30.3]},
-            {name: '武汉', coord: [114.3, 30.6]}, {name: '南京', coord: [118.8, 32.1]},
-            {name: '重庆', coord: [106.5, 29.6]}, {name: '西安', coord: [108.9, 34.3]},
-            {name: 'Tokyo', coord: [139.7, 35.7]}, {name: 'Seoul', coord: [127.0, 37.6]},
-            {name: 'Singapore', coord: [103.8, 1.4]}, {name: 'London', coord: [-0.1, 51.5]},
-            {name: 'New York', coord: [-74.0, 40.7]}, {name: 'San Francisco', coord: [-122.4, 37.8]},
-            {name: 'Sydney', coord: [151.2, -33.9]}, {name: 'Berlin', coord: [13.4, 52.5]},
-            {name: 'Paris', coord: [2.3, 48.9]}, {name: 'Moscow', coord: [37.6, 55.8]},
-        ];
-
-        // 根据关键词词频生成数据点密度
-        var scatterData = [];
-        cities.forEach(function(c, idx) {
-            var count = Math.max(1, Math.round((keywordData.length - idx) / keywordData.length * 20));
-            for (var i = 0; i < count; i++) {
-                scatterData.push({
-                    name: c.name,
-                    value: [
-                        c.coord[0] + (Math.random() - 0.5) * 8,
-                        c.coord[1] + (Math.random() - 0.5) * 5,
-                        Math.round(Math.random() * 100)
-                    ],
-                });
-            }
+        sourceGeoData = (sourceGeoData || []).filter(function(item) {
+            return item.coord && item.coord.length >= 2;
+        });
+        var maxValue = Math.max.apply(null, sourceGeoData.map(function(item) {
+            return Number(item.value || 0);
+        }).concat([1]));
+        var pointData = sourceGeoData.map(function(item) {
+            return {
+                name: item.name,
+                source: item,
+                value: [Number(item.coord[0]), Number(item.coord[1]), Number(item.value || 0)]
+            };
+        });
+        var hub = [116.4074, 39.9042];
+        var lineData = pointData.map(function(item) {
+            return { coords: [hub, [item.value[0], item.value[1]]] };
         });
 
         chart.setOption({
             backgroundColor: 'transparent',
+            tooltip: {
+                formatter: function(params) {
+                    var item = params.data && params.data.source;
+                    if (!item) return '';
+                    return '<b>' + escapeHtml(item.name) + '</b><br>' +
+                        '城市：' + escapeHtml(item.city || '未知') + '<br>' +
+                        '数量：' + formatNumber(item.value) + ' 条<br>' +
+                        '今日：' + formatNumber(item.today_count) + ' 条 · 深采：' + formatNumber(item.deep_count) + ' 条<br>' +
+                        '域名：' + escapeHtml(item.domain || '未知');
+                }
+            },
             globe: {
                 baseTexture: 'https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/asset/earth/world.topo.bathy.200401.jpg',
                 heightTexture: 'https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/asset/earth/bathymetry_bw_composite_4k.jpg',
                 shading: 'realistic',
-                realisticMaterial: {
-                    roughness: 0.5,
-                    metalness: 0.1,
-                },
-                postEffect: {
-                    enable: true,
-                    bloom: { enable: true, intensity: 0.2 },
-                },
+                realisticMaterial: { roughness: 0.65, metalness: 0.08 },
+                postEffect: { enable: true, bloom: { enable: true, intensity: 0.12 } },
                 light: {
-                    main: { intensity: 2, shadow: true },
-                    ambient: { intensity: 0.5 },
+                    main: { intensity: 1.75, shadow: true },
+                    ambient: { intensity: 0.45 },
                     ambientCubemap: {
                         texture: 'https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/asset/cube/SwedishRoyalCastle/',
-                        exposure: 0.8,
-                        diffuseIntensity: 0.5,
-                        specularIntensity: 0.3,
+                        exposure: 0.65,
+                        diffuseIntensity: 0.45,
+                        specularIntensity: 0.20
                     }
                 },
                 viewControl: {
                     autoRotate: true,
-                    autoRotateSpeed: 5,
-                    distance: 250,
-                    minDistance: 100,
-                    maxDistance: 400,
-                },
+                    autoRotateAfterStill: 2,
+                    autoRotateSpeed: 3.2,
+                    distance: 230,
+                    minDistance: 120,
+                    maxDistance: 360,
+                    alpha: 28,
+                    beta: 120
+                }
             },
+            graphic: sourceGeoData.length ? [] : [{
+                type: 'text', left: 'center', top: 'middle',
+                style: { text: '暂无来源点位：采集入库后将按来源名称/域名标注数量', fill: '#64748b', fontSize: 13 }
+            }],
             series: [{
+                type: 'lines3D',
+                coordinateSystem: 'globe',
+                data: lineData,
+                effect: { show: true, trailWidth: 1.4, trailLength: 0.16, trailOpacity: 0.55, trailColor: '#38bdf8' },
+                lineStyle: { width: 1, color: '#38bdf8', opacity: 0.18 }
+            }, {
                 type: 'scatter3D',
                 coordinateSystem: 'globe',
-                data: scatterData,
-                symbolSize: function(val) { return Math.max(3, val[2] / 8); },
-                blendMode: 'lighter',
-                itemStyle: {
-                    color: '#5ea3ff',
-                    opacity: 0.7,
+                data: pointData,
+                symbol: 'circle',
+                symbolSize: function(val) { return 7 + Math.sqrt(Math.max(val[2], 1) / maxValue) * 18; },
+                label: {
+                    show: true,
+                    distance: 6,
+                    formatter: function(params) {
+                        var item = params.data.source;
+                        return item.name + '\n' + formatNumber(item.value) + '条';
+                    },
+                    textStyle: { color: '#e0f2fe', fontSize: 11, backgroundColor: 'rgba(15,23,42,0.60)', borderRadius: 4, padding: [3, 5] }
                 },
+                itemStyle: { color: '#38bdf8', opacity: 0.92, borderWidth: 1, borderColor: '#e0f2fe' },
+                emphasis: { label: { show: true } }
             }]
         });
 
@@ -610,7 +768,9 @@ body.dark-theme {
                     updateStatCards(data.stats);
                     var stats = data.stats;
                     // 重新初始化所有图表
-                    initGlobe('chart-globe', data.source_distribution, data.keywords);
+                    initGlobe('chart-globe', data.source_geo || []);
+                    renderSourceList(data.source_geo || []);
+                    renderRecentList(data.recent_items || []);
                     initWordCloud('chart-wordcloud', data.keywords);
                     initTrendChart('chart-trend', data.trend);
                     initSourcePie('chart-source', data.source_distribution);
@@ -618,14 +778,16 @@ body.dark-theme {
 
                     // 更新关键词列表
                     var kl = document.getElementById('keyword-list');
-                    if (data.keywords.length > 0) {
+                    if (data.keywords && data.keywords.length > 0) {
                         kl.innerHTML = data.keywords.slice(0, 10).map(function(kw, i) {
                             var rankClass = i < 3 ? 'rank-' + (i + 1) : 'rank-n';
                             return '<li class="keyword-item">' +
                                 '<span class="rank ' + rankClass + '">' + (i + 1) + '</span>' +
                                 '<span class="kw-name">' + escapeHtml(kw.name) + '</span>' +
-                                '<span class="kw-count">' + kw.value + ' 次</span></li>';
+                                '<span class="kw-count">' + formatNumber(kw.value) + ' 次</span></li>';
                         }).join('');
+                    } else {
+                        kl.innerHTML = '<li class="dash-empty">暂无关键词</li>';
                     }
                 }
             })
