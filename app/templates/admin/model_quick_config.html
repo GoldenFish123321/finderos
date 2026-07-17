@@ -108,6 +108,22 @@
     color:var(--text-muted);
     font-size:12px;
 }
+.api-base-whitelist-tip {
+    margin-top:6px;
+    color:var(--text-muted);
+    font-size:12px;
+    line-height:1.6;
+}
+.api-base-legacy-warning {
+    display:none;
+    margin-top:8px;
+    color:#f59e0b;
+    font-size:12px;
+    line-height:1.6;
+}
+.api-base-legacy-warning.is-visible {
+    display:block;
+}
 </style>
 
 <div class="layui-card">
@@ -123,6 +139,7 @@
             该页面面向普通用户开放，只管理“我的模型配置”分组，不会修改管理员提供的全局模型；
             管理员模型和用户模型会在聊天页分组展示，避免多用户互相覆盖 API 配置。
             API Key 默认以密码形式隐藏但会回显，点击“显示”可明文确认；保存前可点击“测试连接”验证配置是否可用。
+            API Base URL 由系统按提供商维护白名单，选择提供商后会自动列出该厂商可用接口地址，减少输错和误填风险。
             如果修改提供商、API Base 或 Model Name，页面会显示“复用当前密钥”的确认区；
             你可以重新输入新密钥，或勾选确认继续使用已保存密钥。
         </div>
@@ -183,9 +200,15 @@
             <div class="layui-form-item">
                 <label class="layui-form-label">API Base URL</label>
                 <div class="layui-input-block">
-                    <input type="text" name="api_base" class="layui-input"
-                           value="{{ model['api_base'] if model else '' }}"
-                           placeholder="https://api.openai.com/v1">
+                    <select name="api_base" id="api-base-select" lay-filter="quick-api-base"
+                            data-current="{{ model['api_base'] if model else '' }}">
+                    </select>
+                    <div class="api-base-whitelist-tip" id="api-base-whitelist-tip">
+                        请先选择提供商，系统会显示该厂商白名单中的可用 API 地址。
+                    </div>
+                    <div class="api-base-legacy-warning" id="api-base-legacy-warning">
+                        当前已保存 API Base 不在所选提供商白名单中，请从下拉列表重新选择后再保存或测试。
+                    </div>
                 </div>
             </div>
 
@@ -291,13 +314,75 @@ layui.use('form', function(){
     var reuseCheck = document.getElementById('confirm-reuse-key');
     var providerInput = form ? form.querySelector('[name="provider"]') : null;
     var apiBaseInput = form ? form.querySelector('[name="api_base"]') : null;
+    var apiBaseTip = document.getElementById('api-base-whitelist-tip');
+    var apiBaseLegacyWarning = document.getElementById('api-base-legacy-warning');
     var modelNameInput = form ? form.querySelector('[name="model_name"]') : null;
     var clearKeyInput = form ? form.querySelector('[name="clear_key"]') : null;
+    var providerApiBases = {% raw json_encode(provider_api_bases) %};
     var hasSavedKey = {% raw json_encode(True if model and model.get('api_key') else False) %};
     var initialProvider = {% raw json_encode(model['provider'] if model else '') %};
     var initialApiBase = {% raw json_encode(model['api_base'] if model else '') %};
     var initialModelName = {% raw json_encode(model['model_name'] if model else '') %};
     var initialApiKey = keyInput ? keyInput.value : '';
+
+    function normalizeApiBase(value) {
+        return String(value || '').trim().replace(/\/+$/, '');
+    }
+
+    function getProviderApiBaseChoices(provider) {
+        return providerApiBases[String(provider || '').trim()] || [];
+    }
+
+    function renderApiBaseOptions(provider, preferredValue, keepLegacy) {
+        if (!apiBaseInput) {
+            return;
+        }
+        var choices = getProviderApiBaseChoices(provider);
+        var preferred = normalizeApiBase(preferredValue || apiBaseInput.value || '');
+        var hasPreferred = choices.some(function(item) {
+            return normalizeApiBase(item.value) === preferred;
+        });
+        var selectedValue = '';
+        if (preferred && hasPreferred) {
+            selectedValue = preferred;
+        } else if (choices.length) {
+            selectedValue = normalizeApiBase(choices[0].value);
+        }
+
+        var html = choices.map(function(item) {
+            var value = normalizeApiBase(item.value);
+            var selected = value === selectedValue ? ' selected' : '';
+            return '<option value="' + value.replace(/"/g, '&quot;') + '"' + selected + '>' +
+                String(item.name || value).replace(/[&<>"']/g, function(ch) {
+                    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+                }) + ' · ' + value + '</option>';
+        }).join('');
+
+        if (preferred && !hasPreferred && keepLegacy) {
+            html = '<option value="' + preferred.replace(/"/g, '&quot;') +
+                '" selected data-legacy="1">当前已保存地址（不在白名单，请重新选择） · ' +
+                preferred + '</option>' + html;
+        }
+        if (!html) {
+            html = '<option value="">当前提供商暂无可用 API Base</option>';
+        }
+        apiBaseInput.innerHTML = html;
+        if (apiBaseTip) {
+            apiBaseTip.textContent = choices.length
+                ? '已按当前提供商加载 ' + choices.length + ' 个白名单 API 地址，请从下拉列表选择。'
+                : '当前提供商暂无 API Base 白名单，请联系管理员维护。';
+        }
+        if (apiBaseLegacyWarning) {
+            var selectedOption = apiBaseInput.options[apiBaseInput.selectedIndex];
+            apiBaseLegacyWarning.classList.toggle(
+                'is-visible',
+                !!(selectedOption && selectedOption.getAttribute('data-legacy') === '1')
+            );
+        }
+        layui.use('form', function(){
+            layui.form.render('select');
+        });
+    }
 
     if (toggleBtn && keyInput) {
         toggleBtn.addEventListener('click', function(){
@@ -327,7 +412,7 @@ layui.use('form', function(){
             return false;
         }
         return providerInput.value !== initialProvider ||
-            apiBaseInput.value.trim() !== initialApiBase ||
+            normalizeApiBase(apiBaseInput.value) !== normalizeApiBase(initialApiBase) ||
             modelNameInput.value.trim() !== initialModelName;
     }
 
@@ -371,8 +456,13 @@ layui.use('form', function(){
         }
     });
     layui.use('form', function(){
-        layui.form.on('select(quick-provider)', syncReuseConfirm);
+        layui.form.on('select(quick-provider)', function(data){
+            renderApiBaseOptions(data.value, '', false);
+            syncReuseConfirm();
+        });
+        layui.form.on('select(quick-api-base)', syncReuseConfirm);
     });
+    renderApiBaseOptions(providerInput ? providerInput.value : initialProvider || 'openai', initialApiBase, true);
     if (reuseCheck) {
         reuseCheck.addEventListener('change', function(){
             if (reuseCheck.checked && reuseBox) {

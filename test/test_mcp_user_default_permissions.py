@@ -200,8 +200,15 @@ def test_model_quick_config_template_key_echo_and_test_ui():
     assert "confirm_reuse_key" in source
     assert 'id="confirm-reuse-key"' in source
     assert 'lay-filter="quick-provider"' in source
+    assert 'id="api-base-select"' in source
+    assert 'lay-filter="quick-api-base"' in source
+    assert "providerApiBases" in source
+    assert "renderApiBaseOptions" in source
+    assert "api-base-legacy-warning" in source
+    assert 'name="api_base" class="layui-input"' not in source
     assert "clearKeySelected()" in source
     assert "select(quick-provider)" in source
+    assert "select(quick-api-base)" in source
     assert "连接信息已变更" in source
     assert "connectionChanged()" in source
     assert "requireReuseConfirm" in source
@@ -229,6 +236,33 @@ def test_model_quick_config_handlers_use_confirm_reuse_flag():
         assert "_get_target_model" in handler_source
     assert "owner_username" in save_handler
     assert 'model_scope="user"' in save_handler
+    assert "_validate_quick_config_api_base(provider, api_base)" in save_handler
+    assert "_validate_quick_config_api_base(provider, api_base)" in test_handler
+
+
+def test_model_quick_config_api_base_whitelist():
+    from app.models.ai_model import (
+        PROVIDER_API_BASES,
+        is_provider_api_base_allowed,
+        normalize_api_base,
+    )
+    from app.controllers.admin_model import _validate_quick_config_api_base
+
+    assert PROVIDER_API_BASES["openai"][0]["value"] == "https://api.openai.com/v1"
+    assert PROVIDER_API_BASES["siliconflow"][0]["value"] == "https://api.siliconflow.cn/v1"
+    assert PROVIDER_API_BASES["custom"] == []
+    assert normalize_api_base("https://api.openai.com/v1/") == "https://api.openai.com/v1"
+    assert is_provider_api_base_allowed("openai", "https://api.openai.com/v1/")
+    assert is_provider_api_base_allowed("deepseek", "https://api.deepseek.com")
+    assert is_provider_api_base_allowed("moonshot", "https://api.moonshot.cn/v1")
+    assert not is_provider_api_base_allowed("openai", "https://evil.example/v1")
+    assert _validate_quick_config_api_base("openai", "https://api.openai.com/v1/") == (
+        "https://api.openai.com/v1",
+        "",
+    )
+    normalized, err = _validate_quick_config_api_base("openai", "https://evil.example/v1")
+    assert normalized == ""
+    assert "白名单" in err
 
 
 def test_model_quick_config_test_redacts_key_and_reports_success():
