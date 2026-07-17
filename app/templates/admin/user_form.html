@@ -24,7 +24,8 @@
                 <label class="layui-form-label">密码</label>
                 <div class="layui-input-block">
                     <input type="password" name="password" id="password-input" 
-                           placeholder="{{ '留空则不修改' if user else '请输入密码' }}" class="layui-input"
+                           placeholder="{{ '留空则不修改；新密码至少8位且包含两类字符' if user else '至少8位，包含至少两类字符' }}"
+                           minlength="8" class="layui-input"
                            {{ '' if user else 'required' }}>
                 </div>
             </div>
