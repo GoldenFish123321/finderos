@@ -765,15 +765,36 @@ body.dark-theme {
         });
 
         var landPolygons = [
-            [[-168,72],[-140,62],[-125,50],[-116,33],[-100,20],[-86,15],[-78,24],[-82,45],[-96,58],[-122,72]],
-            [[-82,12],[-70,4],[-58,-8],[-52,-24],[-61,-44],[-73,-55],[-80,-35],[-76,-12]],
-            [[-17,35],[5,50],[34,57],[70,55],[105,50],[135,42],[145,30],[118,18],[82,22],[48,13],[33,0],[28,-25],[18,-35],[5,-28],[-5,-4],[-14,18]],
-            [[35,30],[50,22],[62,10],[54,-5],[43,-17],[32,-30],[22,-34],[14,-24],[18,-4],[28,12]],
-            [[96,20],[110,10],[122,0],[116,-8],[102,-2],[92,8]],
-            [[112,-10],[154,-18],[150,-38],[126,-44],[113,-32]],
-            [[-8,58],[8,62],[25,68],[40,64],[28,55],[10,52]],
-            [[138,46],[146,42],[144,34],[136,33],[132,39]],
-            [[-52,72],[-30,75],[-22,66],[-42,60],[-56,63]]
+            // North America
+            [[-168,72],[-150,70],[-135,66],[-122,58],[-124,49],[-117,43],[-124,38],[-118,32],[-110,28],[-105,23],[-97,18],[-88,18],[-82,25],[-75,31],[-69,42],[-61,47],[-65,55],[-78,58],[-92,57],[-105,61],[-117,66],[-137,72]],
+            // Central America
+            [[-104,22],[-96,18],[-91,16],[-86,13],[-82,10],[-80,8],[-84,8],[-90,12],[-97,15],[-104,18]],
+            // South America
+            [[-82,12],[-74,8],[-66,2],[-60,-8],[-54,-18],[-49,-26],[-52,-36],[-59,-47],[-67,-55],[-73,-52],[-72,-40],[-78,-28],[-75,-15],[-81,-4],[-79,6]],
+            // Eurasia
+            [[-11,36],[-2,44],[10,51],[25,58],[43,61],[60,58],[76,56],[92,54],[108,50],[123,45],[137,42],[146,35],[140,25],[124,21],[108,19],[94,22],[79,18],[66,24],[52,21],[42,14],[35,6],[28,0],[21,6],[15,20],[5,35]],
+            // Europe detail
+            [[-10,58],[2,61],[16,67],[31,69],[44,64],[35,57],[22,54],[10,50],[-4,51]],
+            // Africa
+            [[-17,33],[-5,31],[9,24],[21,14],[30,2],[34,-12],[31,-25],[22,-35],[12,-34],[4,-25],[-4,-12],[-12,4],[-16,18]],
+            // Arabia / India / Southeast Asia
+            [[36,31],[49,25],[58,16],[56,8],[48,12],[43,21]],
+            [[68,23],[78,22],[86,15],[84,7],[78,6],[72,14]],
+            [[95,20],[107,13],[119,6],[124,-2],[118,-8],[106,-4],[98,7]],
+            // Australia
+            [[112,-11],[126,-14],[143,-18],[154,-28],[149,-38],[134,-43],[120,-36],[113,-24]],
+            // Greenland / Arctic
+            [[-54,74],[-37,78],[-21,73],[-28,63],[-43,60],[-57,65]],
+            // Japan / islands
+            [[137,45],[144,42],[146,36],[141,33],[136,36]],
+            [[121,24],[123,22],[122,20],[120,21]],
+            [[47,-13],[50,-18],[49,-24],[45,-25],[44,-18]]
+        ];
+        var cloudBands = [
+            {lat: 22, amp: 7, width: 1.0, alpha: .18},
+            {lat: 5, amp: 5, width: 1.2, alpha: .14},
+            {lat: -28, amp: 8, width: 1.0, alpha: .13},
+            {lat: 48, amp: 5, width: .8, alpha: .10}
         ];
 
         var state = {
@@ -790,6 +811,8 @@ body.dark-theme {
             lastY: 0,
             hoverIndex: -1,
             animationId: null,
+            stars: [],
+            cloudOffset: 0,
             disposed: false
         };
 
@@ -806,10 +829,29 @@ body.dark-theme {
             state.cx = state.width * 0.50;
             state.cy = state.height * 0.50;
             state.radius = Math.max(110, Math.min(state.width * 0.38, state.height * 0.43));
+            state.stars = buildStars(Math.round(Math.min(180, Math.max(80, state.width * state.height / 4200))));
             draw();
         }
 
         function degToRad(deg) { return deg * Math.PI / 180; }
+
+        function seededNoise(n) {
+            var x = Math.sin(n * 12.9898) * 43758.5453;
+            return x - Math.floor(x);
+        }
+
+        function buildStars(count) {
+            var stars = [];
+            for (var i = 0; i < count; i++) {
+                stars.push({
+                    x: seededNoise(i + 3) * state.width,
+                    y: seededNoise(i + 71) * state.height,
+                    r: .45 + seededNoise(i + 131) * 1.35,
+                    a: .22 + seededNoise(i + 197) * .70
+                });
+            }
+            return stars;
+        }
 
         function project(lon, lat, extraRotation) {
             var lambda = degToRad(lon) + state.rotation + (extraRotation || 0);
@@ -830,7 +872,49 @@ body.dark-theme {
             };
         }
 
+        function drawSpaceBackdrop() {
+            var bg = ctx.createRadialGradient(state.cx, state.cy, state.radius * .20, state.cx, state.cy, Math.max(state.width, state.height) * .72);
+            bg.addColorStop(0, 'rgba(13, 50, 98, .28)');
+            bg.addColorStop(.45, 'rgba(15, 23, 42, .78)');
+            bg.addColorStop(1, 'rgba(2, 6, 23, .96)');
+            ctx.fillStyle = bg;
+            ctx.fillRect(0, 0, state.width, state.height);
+
+            ctx.save();
+            state.stars.forEach(function(star, i) {
+                var twinkle = .65 + Math.sin(performance.now() / 900 + i) * .25;
+                ctx.globalAlpha = star.a * twinkle;
+                ctx.fillStyle = i % 7 === 0 ? '#bae6fd' : '#e0f2fe';
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.restore();
+
+            ctx.save();
+            ctx.globalAlpha = .22;
+            var nebula = ctx.createRadialGradient(state.width * .18, state.height * .20, 0, state.width * .18, state.height * .20, state.radius * 1.8);
+            nebula.addColorStop(0, 'rgba(59,130,246,.32)');
+            nebula.addColorStop(1, 'rgba(59,130,246,0)');
+            ctx.fillStyle = nebula;
+            ctx.fillRect(0, 0, state.width, state.height);
+            ctx.restore();
+        }
+
+        function drawAtmosphereBack() {
+            ctx.save();
+            ctx.shadowColor = 'rgba(56,189,248,.72)';
+            ctx.shadowBlur = 34;
+            ctx.strokeStyle = 'rgba(125,211,252,.20)';
+            ctx.lineWidth = 14;
+            ctx.beginPath();
+            ctx.arc(state.cx, state.cy, state.radius + 3, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+
         function drawSphere() {
+            drawAtmosphereBack();
             ctx.save();
             ctx.beginPath();
             ctx.arc(state.cx, state.cy, state.radius, 0, Math.PI * 2);
@@ -847,8 +931,10 @@ body.dark-theme {
             ctx.fillStyle = ocean;
             ctx.fillRect(state.cx - state.radius, state.cy - state.radius, state.radius * 2, state.radius * 2);
 
+            drawOceanTexture();
             drawLand();
             drawGrid();
+            drawCloudLayer();
             drawSourceArcs();
             drawSourcePoints();
 
@@ -874,6 +960,30 @@ body.dark-theme {
             ctx.strokeStyle = 'rgba(56,189,248,.18)';
             ctx.lineWidth = 8;
             ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawOceanTexture() {
+            ctx.save();
+            for (var lat = -75; lat <= 75; lat += 15) {
+                var coords = [];
+                for (var lon = -180; lon <= 180; lon += 6) {
+                    coords.push([lon, lat + Math.sin(degToRad(lon * 2 + lat * 3)) * 1.4]);
+                }
+                drawGridLine(coords, 'rgba(125,211,252,.055)', .55);
+            }
+            for (var i = 0; i < 42; i++) {
+                var lon0 = -180 + i * 9;
+                var lat0 = -58 + seededNoise(i + 11) * 116;
+                var p = project(lon0, lat0, state.cloudOffset * .12);
+                if (p.z > .02) {
+                    ctx.globalAlpha = .045 + seededNoise(i + 21) * .04;
+                    ctx.fillStyle = '#dbeafe';
+                    ctx.beginPath();
+                    ctx.ellipse(p.x, p.y, 8 + seededNoise(i + 31) * 18, 1.8, degToRad(lon0), 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
             ctx.restore();
         }
 
@@ -912,9 +1022,6 @@ body.dark-theme {
         }
 
         function drawLand() {
-            ctx.fillStyle = 'rgba(34,197,94,.28)';
-            ctx.strokeStyle = 'rgba(134,239,172,.25)';
-            ctx.lineWidth = 0.8;
             landPolygons.forEach(function(poly) {
                 var started = false;
                 ctx.beginPath();
@@ -927,10 +1034,62 @@ body.dark-theme {
                 });
                 if (started) {
                     ctx.closePath();
+                    var land = ctx.createLinearGradient(state.cx - state.radius, state.cy - state.radius, state.cx + state.radius, state.cy + state.radius);
+                    land.addColorStop(0, 'rgba(88,166,118,.50)');
+                    land.addColorStop(.45, 'rgba(41,121,91,.56)');
+                    land.addColorStop(1, 'rgba(22,78,99,.44)');
+                    ctx.fillStyle = land;
                     ctx.fill();
+                    ctx.strokeStyle = 'rgba(190,242,100,.20)';
+                    ctx.lineWidth = 1.0;
+                    ctx.stroke();
+                    ctx.save();
+                    ctx.globalAlpha = .18;
+                    ctx.strokeStyle = 'rgba(240,253,244,.60)';
+                    ctx.lineWidth = .55;
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            });
+        }
+
+        function drawCloudLayer() {
+            ctx.save();
+            ctx.lineCap = 'round';
+            cloudBands.forEach(function(band, bandIndex) {
+                for (var pass = 0; pass < 2; pass++) {
+                    ctx.beginPath();
+                    var drawing = false;
+                    for (var lon = -190; lon <= 190; lon += 4) {
+                        var wave = Math.sin(degToRad(lon * 1.8 + bandIndex * 73)) * band.amp +
+                            Math.sin(degToRad(lon * 4.1 + bandIndex * 37)) * (band.amp * .28);
+                        var p = project(lon, band.lat + wave + pass * 2.2, state.cloudOffset);
+                        if (p.z > -0.05) {
+                            if (!drawing) { ctx.moveTo(p.x, p.y); drawing = true; }
+                            else { ctx.lineTo(p.x, p.y); }
+                        } else {
+                            drawing = false;
+                        }
+                    }
+                    ctx.strokeStyle = 'rgba(226,242,255,' + (band.alpha - pass * .04) + ')';
+                    ctx.lineWidth = Math.max(.8, state.radius * .010 * band.width);
                     ctx.stroke();
                 }
             });
+
+            for (var i = 0; i < 24; i++) {
+                var lon0 = -180 + i * 15 + seededNoise(i + 55) * 10;
+                var lat0 = -55 + seededNoise(i + 89) * 110;
+                var p0 = project(lon0, lat0, state.cloudOffset * .85);
+                if (p0.z > .05) {
+                    ctx.globalAlpha = .05 + seededNoise(i + 144) * .08;
+                    ctx.fillStyle = '#f8fafc';
+                    ctx.beginPath();
+                    ctx.ellipse(p0.x, p0.y, 14 + seededNoise(i + 233) * 24, 4 + seededNoise(i + 377) * 8, degToRad(lon0), 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            ctx.restore();
         }
 
         function interpolateLonLat(a, b, t) {
@@ -943,11 +1102,15 @@ body.dark-theme {
 
         function drawSourceArcs() {
             var hub = [116.4074, 39.9042];
+            ctx.save();
+            ctx.shadowColor = 'rgba(56,189,248,.42)';
+            ctx.shadowBlur = 10;
             points.forEach(function(point) {
                 var coords = [];
                 for (var i = 0; i <= 40; i++) coords.push(interpolateLonLat(hub, [point.lon, point.lat], i / 40));
-                drawGridLine(coords, 'rgba(56,189,248,.24)', 1.1);
+                drawGridLine(coords, 'rgba(56,189,248,.30)', 1.15);
             });
+            ctx.restore();
         }
 
         function drawSourcePoints() {
@@ -962,6 +1125,8 @@ body.dark-theme {
 
                 ctx.save();
                 ctx.globalAlpha = Math.max(.30, p.z);
+                ctx.shadowColor = 'rgba(56,189,248,.72)';
+                ctx.shadowBlur = 16;
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, radius * 1.9 * pulse, 0, Math.PI * 2);
                 ctx.strokeStyle = 'rgba(125,211,252,.32)';
@@ -979,6 +1144,7 @@ body.dark-theme {
                 ctx.strokeStyle = 'rgba(224,242,254,.82)';
                 ctx.lineWidth = 1;
                 ctx.stroke();
+                ctx.shadowBlur = 0;
 
                 if (p.z > .15) {
                     var label = String(point.source.name || '未知来源') + ' ' + formatNumber(point.value) + '条';
@@ -1019,6 +1185,7 @@ body.dark-theme {
 
         function draw() {
             ctx.clearRect(0, 0, state.width, state.height);
+            drawSpaceBackdrop();
             drawSphere();
             if (!points.length) drawEmptyState();
         }
@@ -1026,6 +1193,7 @@ body.dark-theme {
         function tick() {
             if (state.disposed) return;
             if (!state.dragging && state.hoverIndex < 0) state.rotation += 0.0022;
+            state.cloudOffset += 0.0009;
             draw();
             state.animationId = requestAnimationFrame(tick);
         }

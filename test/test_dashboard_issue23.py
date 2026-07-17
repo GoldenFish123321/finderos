@@ -65,6 +65,10 @@ class TestDashboardTemplate:
             content = f.read()
         assert "globe-canvas" in content, "缺少原生 Canvas 地球容器"
         assert "requestAnimationFrame" in content, "原生 3D 地球应具备动画渲染"
+        assert "drawSpaceBackdrop" in content, "3D 地球应内置星空背景"
+        assert "drawAtmosphereBack" in content, "3D 地球应内置大气辉光"
+        assert "drawCloudLayer" in content, "3D 地球应内置云层效果"
+        assert "landPolygons" in content, "3D 地球应内置陆地轮廓"
         assert "initCharts();" in content, "3D 地球初始化不能等待外部 ECharts CDN"
         assert "ECharts 加载超时" not in content, "不能因 ECharts 加载失败跳过地球初始化"
         assert "echarts-gl" not in content, "3D 地球不能依赖 echarts-gl CDN"
