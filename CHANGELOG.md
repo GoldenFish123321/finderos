@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## [1.10.2-beta] — 2026-07-17
+
+### 修复
+
+- **LLM/MCP 采集工具自动入库**
+  - 修复 LLM 调用 `collect_web_data` 采集新闻仅保存到 `watch_results` 而不写入 `data_warehouse` 的问题
+  - MCP 采集工具和定时调度器采集后自动将结果写入数据仓库（与 Web UI "💾 保存到数据仓库" 按钮行为一致）
+  - `create_if_not_exists` 重复 URL 时返回已有记录 ID（而非 0），支持正确关联数据仓库外键
+  - 自动保存后同步标记 `watch_results` 为 `SAVED:` 前缀，保持跨路径 UI 一致性
+  - 修复 `link` 空值时 data_warehouse 与 watch_results 回退 URL 不一致的问题
+  - 新增 `test_collect_auto_warehouse.py` 测试覆盖（4 个用例）
+
 ## [1.10.1-beta] — 2026-07-17
 
 ### 修复
