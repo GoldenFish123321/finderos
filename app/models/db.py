@@ -2201,6 +2201,35 @@ def _seed_script_tools():
             }, ensure_ascii=False), "search_warehouse_fulltext")
         )
 
+        # ── 修复仓库类工具的 input_schema，防止 LLM 传入 null 导致 datatype mismatch ──
+        _warehouse_schemas = {
+            "get_recent_warehouse_data": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "返回记录数上限", "default": 10}
+                },
+                "required": []
+            },
+            "search_warehouse": {
+                "type": "object",
+                "properties": {
+                    "keyword": {"type": "string", "description": "搜索关键词"},
+                    "limit": {"type": "integer", "description": "返回记录数上限", "default": 10}
+                },
+                "required": ["keyword"]
+            },
+            "get_warehouse_stats": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            },
+        }
+        for _tool_name, _schema in _warehouse_schemas.items():
+            conn.execute(
+                "UPDATE mcp_tools SET input_schema = ? WHERE name = ?",
+                (json.dumps(_schema, ensure_ascii=False), _tool_name),
+            )
+
 
 def _synchronize_default_capabilities(skills_created: bool, employees_created: bool):
     """Resolve default Skill and employee tool grants by stable names."""

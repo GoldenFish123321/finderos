@@ -75,7 +75,7 @@ def _build_script_tool(row: Dict[str, Any]) -> Optional[MCPTool]:
             mapped_params = {}
             props = input_schema.get("properties", {})
             for tool_param, iface_param in param_mapping.items():
-                if tool_param in kwargs:
+                if tool_param in kwargs and kwargs[tool_param] is not None:
                     mapped_params[iface_param] = kwargs[tool_param]
                 else:
                     default = props.get(tool_param, {}).get("default")

@@ -81,8 +81,9 @@ def _search_warehouse_fulltext(query: str, limit: int = 10) -> Dict[str, Any]:
     
     如果 FTS5 不可用，回退到普通搜索。
     """
-    from app.models.data_warehouse import DataWarehouseRepository
+    from app.models.data_warehouse import DataWarehouseRepository, _sanitize_limit
     from app.models.db import get_db
+    limit = _sanitize_limit(limit)
     try:
         # 尝试 FTS5 搜索
         with get_db() as conn:

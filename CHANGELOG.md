@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## [1.10.1-beta] — 2026-07-17
+
+### 修复
+
+- **数据仓库 `datatype mismatch` 错误修复**
+  - 修复 LLM 调用 `get_recent_warehouse_data` 时传入 `limit: null` 导致 SQLite `IntegrityError: datatype mismatch` 的问题
+  - 新增 `_sanitize_limit()` 辅助函数，统一规范化所有数据仓库查询的 `limit` 参数（处理 None / 负数 / 字符串 / float('inf') 等边界情况）
+  - 为 `get_recent`、`search`、`get_source_distribution`、`get_dashboard_source_geo`、`get_keyword_frequency`、`get_recent_dashboard_items` 和 `_search_warehouse_fulltext` 添加参数清理
+  - 修复 `mcp_tools` 表中 `get_recent_warehouse_data`、`search_warehouse`、`get_warehouse_stats` 的 `input_schema` 为空的问题，补全参数类型和默认值定义，帮助 LLM 正确传参
+  - 修复 `registry.py` 中参数映射时 `None` 值直接透传的问题，改为回退到 schema 默认值
+  - 修复 `user_chat.py` 中工具调用失败时错误被静默吞掉的问题，现在会向用户显示具体错误信息
+
 ## [1.10.0-beta] — 2026-07-17
 
 ### 新功能

@@ -1311,6 +1311,10 @@ class UserChatStreamHandler(BaseHandler):
             return "\n".join(lines)
 
         if tool_name == "search_warehouse":
+            # 检查工具调用是否出错
+            if isinstance(result, dict) and result.get("success") is False:
+                error_msg = result.get("error", "未知错误")
+                return f"⚠️ 数据仓库搜索失败: {error_msg}\n\n💡 建议：稍后重试，或联系管理员检查系统状态。"
             items = result.get("items", []) if isinstance(result, dict) else []
             total = result.get("total", len(items)) if isinstance(result, dict) else len(items)
             kw = arguments.get("keyword", user_message)
@@ -1340,6 +1344,10 @@ class UserChatStreamHandler(BaseHandler):
             return "\n".join(lines)
 
         elif tool_name == "get_recent_warehouse_data":
+            # 检查工具调用是否出错
+            if isinstance(result, dict) and result.get("success") is False:
+                error_msg = result.get("error", "未知错误")
+                return f"⚠️ 获取数据仓库最新数据失败: {error_msg}\n\n💡 建议：稍后重试，或联系管理员检查系统状态。"
             items = result.get("items", []) if isinstance(result, dict) else []
             total = result.get("total", len(items)) if isinstance(result, dict) else len(items)
             if not items:
@@ -1361,6 +1369,10 @@ class UserChatStreamHandler(BaseHandler):
             return "\n".join(lines)
 
         elif tool_name == "get_warehouse_stats":
+            # 检查工具调用是否出错
+            if isinstance(result, dict) and result.get("success") is False:
+                error_msg = result.get("error", "未知错误")
+                return f"⚠️ 获取数据仓库统计失败: {error_msg}\n\n💡 建议：稍后重试，或联系管理员检查系统状态。"
             if isinstance(result, dict):
                 total = result.get("total", 0)
                 deep = result.get("deep_collected", 0)

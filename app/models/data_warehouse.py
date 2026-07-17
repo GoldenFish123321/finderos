@@ -23,6 +23,24 @@ from app.models.db import get_db
 
 logger = logging.getLogger(__name__)
 
+# ── 默认查询上限 ──
+_DEFAULT_LIMIT = 10
+
+
+def _sanitize_limit(limit, default: int = _DEFAULT_LIMIT) -> int:
+    """将 limit 参数规范化为安全整数，防止 None / 空字符串 / 负数传入 SQLite 导致 datatype mismatch。"""
+    if limit is None:
+        return default
+    try:
+        limit = int(limit)
+        if limit <= 0:
+            return default
+        if limit > 1000:          # 硬上限，避免一次拉取过多数据
+            return 1000
+        return limit
+    except (ValueError, TypeError, OverflowError):
+        return default
+
 
 _SOURCE_LOCATION_HINTS = (
     ("baidu", "北京", [116.4074, 39.9042]),
@@ -317,6 +335,7 @@ class DataWarehouseRepository:
     @staticmethod
     def get_recent(limit: int = 10) -> list:
         """获取数据仓库最新记录。"""
+        limit = _sanitize_limit(limit)
         with get_db() as conn:
             rows = conn.execute(
                 "SELECT * FROM data_warehouse ORDER BY id DESC LIMIT ?",
@@ -335,6 +354,7 @@ class DataWarehouseRepository:
         """
         if not keyword or not keyword.strip():
             return []
+        limit = _sanitize_limit(limit)
         kw = keyword.strip()
         with get_db() as conn:
             # Exact substring matching is deterministic for Chinese text and avoids
@@ -374,6 +394,7 @@ class DataWarehouseRepository:
     @staticmethod
     def get_source_distribution(limit: int = 10) -> list:
         """获取数据仓库来源分布。"""
+        limit = _sanitize_limit(limit)
         from app.utils.security import sanitize_html
         with get_db() as conn:
             rows = conn.execute(
@@ -393,6 +414,7 @@ class DataWarehouseRepository:
         返回真实采集来源的聚合数量、深采数量、今日新增和推断坐标，前端据此渲染
         scatter3D 标签，不再生成随机点。
         """
+        limit = _sanitize_limit(limit, default=12)
         from app.utils.security import sanitize_html
 
         with get_db() as conn:
@@ -469,6 +491,7 @@ class DataWarehouseRepository:
 
         使用简单分词策略：去除常见停用词后统计词频。
         """
+        limit = _sanitize_limit(limit, default=50)
         import re
         with get_db() as conn:
             rows = conn.execute(
@@ -607,6 +630,7 @@ class DataWarehouseRepository:
     @staticmethod
     def get_recent_dashboard_items(limit: int = 8) -> list:
         """获取大屏右侧最新入库动态。"""
+        limit = _sanitize_limit(limit, default=8)
         from app.utils.security import sanitize_html
 
         with get_db() as conn:
