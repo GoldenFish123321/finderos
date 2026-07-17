@@ -8,6 +8,7 @@ from tornado.template import Loader
 
 class _Settings:
     SYSTEM_NAME = "FinderOS"
+    DEFAULT_WEATHER_CITY = "成都"
 
 
 def _static_url(path: str) -> str:

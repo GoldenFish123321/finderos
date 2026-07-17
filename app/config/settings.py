@@ -39,6 +39,9 @@ class Settings:
     AI_DEFAULT_MAX_TOKENS = 4096
     """AI 默认最大输出 Token 数。"""
 
+    DEFAULT_WEATHER_CITY = os.environ.get("DEFAULT_WEATHER_CITY", "成都")
+    """定位失败或用户拒绝定位时，手势天气查询使用的默认城市。"""
+
     # === 备份配置（#99） ===
     DB_BACKUP_PATH = "backups/"
     """数据库备份文件存放路径（相对于项目根目录）。"""
@@ -101,7 +104,7 @@ class Settings:
         "X-XSS-Protection": "1; mode=block",
         "Referrer-Policy": "strict-origin-when-cross-origin",
         # Issue #15: 允许摄像头以供手势识别
-        "Permissions-Policy": "camera=(self), microphone=(), geolocation=()",
+        "Permissions-Policy": "camera=(self), microphone=(), geolocation=(self)",
         # 严格化 CSP（借鉴陈子墨）：移除 unsafe-eval，收窄 connect-src，增加 frame-ancestors/base-uri/form-action
         # Issue #15: 添加 blob: 以允许 MediaPipe Hands WASM Worker
         # Dashboard: 允许 jsdelivr 加载 Three.js/ECharts 脚本，img-src https: 覆盖地球纹理；无需浏览器插件

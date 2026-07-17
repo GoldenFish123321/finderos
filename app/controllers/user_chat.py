@@ -16,8 +16,10 @@ import json
 import logging
 import os
 import re
+import urllib.parse
 import tornado.web
 
+from app.config.settings import settings
 from app.controllers.base import BaseHandler
 from app.models.ai_model import AiModelRepository
 from app.models.api_interface import normalize_api_method, normalize_headers
@@ -70,6 +72,26 @@ _MEDIA_INSTRUCTION = _load_prompt('media_instruction.txt')
 # ============================================================
 # 辅助函数
 # ============================================================
+
+def _extract_city_from_reverse_geocode(data: dict) -> str:
+    """从反向地理编码响应中尽量提取城市名称。"""
+    if not isinstance(data, dict):
+        return ""
+
+    address = data.get("address") if isinstance(data.get("address"), dict) else {}
+    for key in (
+        "city", "town", "village", "municipality", "county",
+        "state_district", "state",
+    ):
+        value = address.get(key) or data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    display_name = data.get("display_name")
+    if isinstance(display_name, str) and display_name.strip():
+        return display_name.split(",", 1)[0].strip()
+    name = data.get("name")
+    return name.strip() if isinstance(name, str) else ""
 
 def _build_system_prompt(custom_prompt: str = "") -> str:
     """构建完整的 system prompt。"""
@@ -621,6 +643,78 @@ class UserChatPageHandler(BaseHandler):
                 else self.xsrf_token
             ),
         )
+
+
+# ============================================================
+# API: 浏览器定位反查城市（手势天气使用）
+# ============================================================
+
+class UserLocationReverseHandler(BaseHandler):
+    """将浏览器定位坐标反查为城市名，失败时返回系统默认城市。"""
+
+    @tornado.web.authenticated
+    def get(self):
+        default_city = getattr(settings, "DEFAULT_WEATHER_CITY", "成都") or "成都"
+        try:
+            lat = float(self.get_argument("lat", ""))
+            lng = float(
+                self.get_argument(
+                    "lng",
+                    self.get_argument("lon", ""),
+                )
+            )
+            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                raise ValueError("坐标范围非法")
+        except Exception:
+            self.write({
+                "code": 0,
+                "city": default_city,
+                "default_city": default_city,
+                "source": "default",
+                "msg": "定位坐标无效，已使用默认城市",
+            })
+            return
+
+        query = urllib.parse.urlencode({
+            "format": "jsonv2",
+            "lat": f"{lat:.6f}",
+            "lon": f"{lng:.6f}",
+            "zoom": "10",
+            "addressdetails": "1",
+            "accept-language": "zh-CN",
+        })
+        url = f"https://nominatim.openstreetmap.org/reverse?{query}"
+
+        try:
+            resp = safe_http_request(
+                url,
+                headers={
+                    "Accept": "application/json",
+                    "User-Agent": f"DataFinderAgentOS/{settings.VERSION} reverse-geocode",
+                },
+                timeout=4,
+                max_bytes=64 * 1024,
+            )
+            if resp.status >= 400:
+                raise SafeHttpError(f"HTTP {resp.status}")
+            payload = json.loads(resp.body.decode("utf-8", errors="replace"))
+            resolved_city = _extract_city_from_reverse_geocode(payload)
+            city = resolved_city or default_city
+            self.write({
+                "code": 0,
+                "city": city,
+                "default_city": default_city,
+                "source": "geocode" if resolved_city else "default",
+            })
+        except Exception as exc:
+            logger.info("反向地理编码失败，使用默认城市: %s", exc)
+            self.write({
+                "code": 0,
+                "city": default_city,
+                "default_city": default_city,
+                "source": "default",
+                "msg": "定位城市解析失败，已使用默认城市",
+            })
 
 
 # ============================================================

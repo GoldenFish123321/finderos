@@ -153,13 +153,28 @@ class TestGestureTemplate:
         with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
             content = f.read()
 
-        # 核心修复：消息必须包含具体内容，不能只是 @员工 空消息
-        assert "查看当前天气" in content or "@天气 查看" in content, \
-            "剪刀手消息应包含具体查询内容"
+        # 剪刀手天气应解析当前城市后发送 @天气 城市，不能只是 @天气 空消息
+        assert "resolveCurrentWeatherCity" in content, "剪刀手天气应先解析当前城市"
+        assert "msg = '@天气 ' + normalizeWeatherCityName(city)" in content, \
+            "剪刀手消息应发送 @天气 当前城市"
+        assert "DEFAULT_WEATHER_CITY" in content and "成都" in content, \
+            "定位失败时应使用默认城市成都"
         assert "推荐一首歌" in content or "@随机音乐 推荐" in content, \
             "握拳消息应包含具体查询内容"
         assert "获取最新新闻" in content or "@新闻聚合 获取" in content, \
             "手掌消息应包含具体查询内容"
+
+    def test_gesture_weather_uses_browser_location(self):
+        """剪刀手天气应使用浏览器系统定位反查城市，并走本地后端代理。"""
+        with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        assert "navigator.geolocation.getCurrentPosition" in content, \
+            "缺少浏览器系统定位调用"
+        assert "/api/location/reverse?lat=" in content, \
+            "前端应调用本地反查城市接口"
+        assert "weatherCityCache" in content, "定位城市应短期缓存，避免重复请求"
+        assert "@天气 [当前城市]" in content, "手势说明应标明天气使用当前城市"
 
     def test_gesture_help_documents_mapping(self):
         """用户侧手势说明应明确展示手势到数字员工的映射。"""
@@ -315,6 +330,31 @@ class TestCSPConfig:
 
         assert "camera=(self)" in content, "Permissions-Policy 应允许 camera=(self)"
         assert "camera=()" not in content, "Permissions-Policy 不应完全禁用摄像头"
+
+    def test_geolocation_permissions_policy(self):
+        """Permissions-Policy 允许同源页面读取系统定位，用于手势天气。"""
+        with open(self.SETTINGS_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        assert "geolocation=(self)" in content, \
+            "Permissions-Policy 应允许同源 geolocation=(self)"
+        assert "geolocation=()" not in content, \
+            "Permissions-Policy 不应完全禁用定位"
+
+    def test_location_reverse_route_registered(self):
+        """手势天气城市反查 API 已注册。"""
+        root = os.path.dirname(os.path.dirname(__file__))
+        main_path = os.path.join(root, "main.py")
+        controller_path = os.path.join(root, "app", "controllers", "user_chat.py")
+        with open(main_path, "r", encoding="utf-8") as f:
+            main_content = f.read()
+        with open(controller_path, "r", encoding="utf-8") as f:
+            controller_content = f.read()
+
+        assert "/api/location/reverse" in main_content
+        assert "UserLocationReverseHandler" in main_content
+        assert "class UserLocationReverseHandler" in controller_content
+        assert "nominatim.openstreetmap.org/reverse" in controller_content
 
     def test_connect_src_tightened(self):
         """connect-src 已收紧到特定 CDN 而非通配 https:"""
