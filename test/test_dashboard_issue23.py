@@ -59,11 +59,16 @@ class TestDashboardTemplate:
         """dashbaord.html 文件存在"""
         assert os.path.exists(self.TEMPLATE_PATH), "dashboard.html 不存在"
 
-    def test_cdn_echarts_gl_loaded(self):
-        """模板加载了 ECharts-GL CDN"""
+    def test_native_canvas_globe_no_echarts_gl_dependency(self):
+        """3D 地球使用原生 Canvas，不依赖 ECharts-GL 插件或外部地球纹理。"""
         with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
             content = f.read()
-        assert "echarts-gl" in content, "缺少 echarts-gl CDN"
+        assert "globe-canvas" in content, "缺少原生 Canvas 地球容器"
+        assert "requestAnimationFrame" in content, "原生 3D 地球应具备动画渲染"
+        assert "initCharts();" in content, "3D 地球初始化不能等待外部 ECharts CDN"
+        assert "ECharts 加载超时" not in content, "不能因 ECharts 加载失败跳过地球初始化"
+        assert "echarts-gl" not in content, "3D 地球不能依赖 echarts-gl CDN"
+        assert "baseTexture" not in content, "3D 地球不能依赖外部纹理"
         assert "echarts-wordcloud" in content, "缺少 echarts-wordcloud CDN"
 
     def test_all_chart_containers_exist(self):
@@ -119,13 +124,38 @@ class TestDashboardTemplate:
                 "deep_pct": 0, "source_count": 1, "top_source": "测试",
             },
             source_distribution=[{"name": "测试", "value": 1}],
+            source_geo=[{
+                "name": "测试", "value": 1, "deep_count": 0, "today_count": 1,
+                "domain": "example.test", "city": "北京", "coord": [116.4, 39.9],
+            }],
             trend={"dates": ["2026-07-16"], "counts": [1]},
             keywords=[{"name": "天气", "value": 3}, {"name": "音乐", "value": 2}],
+            recent_items=[{
+                "title": "测试记录", "source": "测试", "created_at": "2026-07-16",
+                "is_deep_collected": 0, "keyword": "天气",
+            }],
         ).decode("utf-8")
 
         assert "rank-1" in html
         assert "天气" in html
+        assert "source_geo" in html
+        assert "recent_items" in html
+        assert "来源点位预览" in html
+        assert "最新入库动态" in html
         assert "loop.index" not in html
+
+    def test_dashboard_template_uses_real_source_geo_not_random_points(self):
+        """地球点位应来自后端 source_geo，不再按关键词随机生成城市散点。"""
+        with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+        assert "source_geo" in content
+        assert "renderSourceList" in content
+        assert "chart-fallback" in content
+        assert "safeChart" in content
+        assert "setChartFallback" in content
+        assert "原生 Canvas" in content
+        assert "根据关键词词频生成数据点密度" not in content
+        assert "sourceGeoData" in content
 
     def test_refresh_button(self):
         """模板包含刷新按钮"""
@@ -196,9 +226,64 @@ class TestDataWarehouseStats:
         """get_dashboard_stats 返回正确结构"""
         from app.models.data_warehouse import DataWarehouseRepository
         stats = DataWarehouseRepository.get_dashboard_stats()
-        required_keys = ["total", "deep_collected", "today_count", "source_count", "top_source", "top_source_count"]
+        required_keys = [
+            "total", "deep_collected", "today_count", "source_count",
+            "top_source", "top_source_count", "enabled_source_count",
+            "scheduled_source_count", "success_rate", "avg_response_kb",
+            "latest_record_at",
+        ]
         for k in required_keys:
             assert k in stats, f"缺少统计字段 {k}"
+
+    def test_dashboard_source_geo_aggregates_real_sources(self):
+        """来源地球数据应聚合各种真实来源数量、深采数量和地理标注。"""
+        from app.models.db import get_db
+        from app.models.data_warehouse import DataWarehouseRepository
+
+        with get_db() as conn:
+            cursor = conn.execute(
+                "INSERT INTO watch_results (source_id, keyword, request_url, response_status, response_size) "
+                "VALUES (1, '天气', 'https://www.baidu.com/s?word=天气', 200, 2048)"
+            )
+            result_id = cursor.lastrowid
+            conn.execute(
+                "INSERT INTO data_warehouse "
+                "(result_id, title, link, summary, source_name, is_deep_collected) "
+                "VALUES (?, '成都天气新闻', 'https://www.baidu.com/item/1', '天气摘要', '百度新闻', 1)",
+                (result_id,),
+            )
+            cursor = conn.execute(
+                "INSERT INTO watch_sources (name, url_template, is_enabled) "
+                "VALUES ('GitHub Trending', 'https://github.com/trending/{keyword}', 1)"
+            )
+            github_source_id = cursor.lastrowid
+            cursor = conn.execute(
+                "INSERT INTO watch_results (source_id, keyword, request_url, response_status, response_size) "
+                "VALUES (?, 'AI', 'https://github.com/trending/python', 200, 4096)",
+                (github_source_id,),
+            )
+            github_result_id = cursor.lastrowid
+            conn.execute(
+                "INSERT INTO data_warehouse "
+                "(result_id, title, link, summary, source_name, is_deep_collected) "
+                "VALUES (?, 'GitHub AI 项目趋势', 'https://github.com/example/repo', '开源项目摘要', 'GitHub Trending', 0)",
+                (github_result_id,),
+            )
+            conn.execute(
+                "INSERT INTO data_warehouse "
+                "(title, link, summary, source_name, is_deep_collected) "
+                "VALUES ('自定义接口数据', 'https://custom.example.test/item/1', '自定义来源摘要', '自定义接口源', 0)"
+            )
+
+        points = DataWarehouseRepository.get_dashboard_source_geo(5)
+        by_name = {p["name"]: p for p in points}
+        assert {"百度新闻", "GitHub Trending", "自定义接口源"} <= set(by_name)
+        assert by_name["百度新闻"]["value"] == 1
+        assert by_name["百度新闻"]["deep_count"] == 1
+        assert by_name["百度新闻"]["city"] == "北京"
+        assert by_name["GitHub Trending"]["city"] == "San Francisco"
+        assert by_name["自定义接口源"]["location_source"] == "fallback"
+        assert all(len(p["coord"]) == 2 for p in points)
 
     def test_trend_data_structure(self):
         """get_trend_data 返回 dates 和 counts"""

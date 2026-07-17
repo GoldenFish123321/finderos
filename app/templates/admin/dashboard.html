@@ -7,18 +7,27 @@
 /* ====== 大屏全局 ====== */
 body.dark-theme {
     background: #05071a !important;
-    overflow: hidden !important;
+    overflow: auto !important;
+}
+.admin-body-dark {
+    padding: 0 !important;
+    overflow: auto;
+}
+.theme-toggle-btn {
+    display: none !important;
 }
 .dashboard-wrap {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
+    position: relative;
+    min-height: calc(100vh - 60px);
+    box-sizing: border-box;
     background:
-        radial-gradient(ellipse at 20% 50%, rgba(30,60,180,0.08) 0%, transparent 60%),
-        radial-gradient(ellipse at 80% 30%, rgba(100,30,180,0.06) 0%, transparent 50%),
-        radial-gradient(ellipse at 50% 80%, rgba(0,150,255,0.04) 0%, transparent 50%);
+        radial-gradient(ellipse at 18% 18%, rgba(59,130,246,0.18) 0%, transparent 42%),
+        radial-gradient(ellipse at 82% 24%, rgba(14,165,233,0.12) 0%, transparent 40%),
+        linear-gradient(135deg, #08111f 0%, #0f172a 48%, #111827 100%);
     z-index: 0;
-    overflow-y: auto;
+    overflow-y: visible;
     overflow-x: hidden;
+    padding-bottom: 16px;
 }
 
 /* ====== 顶部标题栏 ====== */
@@ -77,21 +86,21 @@ body.dark-theme {
 /* ====== 网格布局 ====== */
 .dash-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 14px;
     padding: 16px 20px 10px;
     position: relative; z-index: 1;
 }
 .dash-grid-2 {
     display: grid;
-    grid-template-columns: 3fr 2fr;
+    grid-template-columns: minmax(520px, 1.55fr) minmax(340px, .9fr);
     gap: 14px;
     padding: 0 20px 14px;
     position: relative; z-index: 1;
 }
 .dash-grid-3 {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1.2fr .95fr .85fr;
     gap: 14px;
     padding: 0 20px 14px;
     position: relative; z-index: 1;
@@ -163,13 +172,53 @@ body.dark-theme {
 
 /* ====== 词云容器 ====== */
 #chart-wordcloud {
-    height: 280px;
+    height: 210px;
 }
 
 /* ====== 3D地球容器 ====== */
 #chart-globe {
-    height: 480px;
+    position: relative;
+    height: clamp(360px, 52vh, 620px);
     width: 100%;
+    overflow: hidden;
+}
+.globe-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+.globe-tooltip {
+    position: absolute;
+    z-index: 3;
+    pointer-events: none;
+    min-width: 180px;
+    max-width: 260px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(2, 6, 23, .86);
+    border: 1px solid rgba(125,211,252,.26);
+    box-shadow: 0 14px 36px rgba(2,6,23,.35);
+    color: #e0f2fe;
+    font-size: 12px;
+    line-height: 1.65;
+    opacity: 0;
+    transform: translate(-50%, -112%);
+    transition: opacity .12s ease;
+}
+.globe-tooltip strong {
+    color: #fff;
+}
+.globe-hint {
+    position: absolute;
+    left: 16px;
+    bottom: 14px;
+    z-index: 2;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(15,23,42,.62);
+    border: 1px solid rgba(148,163,184,.16);
+    color: rgba(203,213,225,.76);
+    font-size: 11px;
 }
 
 /* ====== 排行榜 ====== */
@@ -202,11 +251,124 @@ body.dark-theme {
     font-size: 11px;
     color: rgba(255,255,255,0.3);
 }
-/* Enterprise visual override: restrained surfaces, no neon gradients/glow. */
-.dashboard-wrap { background: #111827; }
-.dashboard-header h1, .stat-number { background: none !important; color: #e5e7eb !important; -webkit-text-fill-color: initial !important; }
-.dashboard-header::after { background: #2563eb; }
-.dash-stat, .dash-panel { background: #182233 !important; box-shadow: none !important; border-color: #334155 !important; }
+.source-list, .recent-list {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+.source-item, .recent-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 12px;
+}
+.source-item:last-child, .recent-item:last-child { border-bottom: none; }
+.source-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #38bdf8;
+    box-shadow: 0 0 16px rgba(56,189,248,.7);
+}
+.source-name, .recent-title {
+    min-width: 0;
+    color: rgba(255,255,255,0.82);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.source-meta, .recent-meta {
+    color: rgba(255,255,255,0.35);
+    font-size: 11px;
+    white-space: nowrap;
+}
+.recent-item { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.recent-title { margin-bottom: 3px; }
+.recent-badge {
+    border-radius: 999px;
+    padding: 2px 7px;
+    font-size: 10px;
+    color: #86efac;
+    background: rgba(34,197,94,.12);
+    border: 1px solid rgba(34,197,94,.20);
+}
+.dash-empty {
+    color: rgba(255,255,255,0.32);
+    text-align: center;
+    padding: 22px 8px;
+    font-size: 12px;
+}
+.chart-fallback {
+    height: 100%;
+    min-height: 120px;
+    box-sizing: border-box;
+    padding: 14px 16px;
+    color: rgba(226,232,240,.82);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    justify-content: center;
+}
+.chart-fallback-title {
+    color: rgba(125,211,252,.9);
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+.fallback-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    font-size: 12px;
+}
+.fallback-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.fallback-bar {
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(148,163,184,.16);
+    overflow: hidden;
+    margin-top: 4px;
+}
+.fallback-fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg,#38bdf8,#818cf8);
+}
+.fallback-chip-wrap {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.fallback-chip {
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: rgba(59,130,246,.12);
+    border: 1px solid rgba(125,211,252,.16);
+    color: #bfdbfe;
+    font-size: 12px;
+}
+@media (max-width: 1500px) {
+    .dash-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 1180px) {
+    .dash-grid-2, .dash-grid-3 { grid-template-columns: 1fr; }
+    #chart-globe { height: 430px; }
+}
+@media (max-width: 760px) {
+    .dashboard-header { align-items: flex-start; flex-direction: column; }
+    .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; }
+    .dash-grid-2, .dash-grid-3 { padding-left: 12px; padding-right: 12px; }
+    #chart-globe { height: 340px; }
+}
 </style>
 
 <div class="dashboard-wrap">
@@ -242,18 +404,58 @@ body.dark-theme {
             <div class="stat-number" id="stat-sources" style="background:linear-gradient(135deg,#f97316,#fbbf24);-webkit-background-clip:text;background-clip:text;">{{ stats['source_count'] }}</div>
             <div class="stat-sub">最多: <span id="stat-top-source">{{ stats['top_source'] }}</span></div>
         </div>
+        <div class="dash-stat">
+            <div class="stat-label">🛰️ 启用瞭源</div>
+            <div class="stat-number" id="stat-enabled-sources">{{ stats.get('enabled_source_count', 0) }}</div>
+            <div class="stat-sub">定时源 <span id="stat-scheduled-sources">{{ stats.get('scheduled_source_count', 0) }}</span> 个</div>
+        </div>
+        <div class="dash-stat">
+            <div class="stat-label">✅ 采集成功率</div>
+            <div class="stat-number" id="stat-success-rate">{{ stats.get('success_rate', 0) }}%</div>
+            <div class="stat-sub">平均响应 <span id="stat-avg-size">{{ stats.get('avg_response_kb', 0) }}</span> KB</div>
+        </div>
     </div>
 
     <!-- 3D 地球 + 词云 -->
     <div class="dash-grid-2">
         <div class="dash-panel">
             <div class="dash-panel-title">🌍 全球数据采集分布 <span class="badge">3D 地球</span></div>
-            <div id="chart-globe"></div>
+            <div id="chart-globe">
+                <div class="chart-fallback">
+                    <div class="chart-fallback-title">来源点位预览</div>
+                    {% if source_geo %}
+                        {% for item in source_geo[:6] %}
+                        <div class="fallback-row">
+                            <div>
+                                <div class="fallback-name">{{ item['name'] }} · {{ item['city'] }}</div>
+                                <div class="fallback-bar"><span class="fallback-fill" style="width:{{ min(100, max(8, item['value'] * 100 / max(stats.get('total', 1), 1))) }}%;"></span></div>
+                            </div>
+                            <span class="source-meta">{{ item['value'] }} 条</span>
+                        </div>
+                        {% end %}
+                    {% else %}
+                        <div class="dash-empty">暂无来源点位，完成采集入库后会显示在 3D 地球上。</div>
+                    {% end %}
+                </div>
+            </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:14px;">
             <div class="dash-panel" style="flex:1;">
                 <div class="dash-panel-title">☁️ 关键词词云 <span class="badge">词频分析</span></div>
-                <div id="chart-wordcloud"></div>
+                <div id="chart-wordcloud">
+                    <div class="chart-fallback">
+                        <div class="chart-fallback-title">关键词预览</div>
+                        <div class="fallback-chip-wrap">
+                        {% if keywords %}
+                            {% for kw in keywords[:16] %}
+                            <span class="fallback-chip">{{ kw['name'] }} · {{ kw['value'] }}</span>
+                            {% end %}
+                        {% else %}
+                            <span class="source-meta">暂无关键词数据</span>
+                        {% end %}
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="dash-panel" style="flex:1;">
                 <div class="dash-panel-title">🏆 热门关键词 Top 10 <span class="badge">实时</span></div>
@@ -272,6 +474,44 @@ body.dark-theme {
                     {% end %}
                 </ul>
             </div>
+            <div class="dash-panel" style="flex:1;">
+                <div class="dash-panel-title">📍 来源点位 Top 8 <span class="badge">地球标注</span></div>
+                <ul class="source-list" id="source-list">
+                    {% if source_geo %}
+                        {% for item in source_geo[:8] %}
+                        <li class="source-item">
+                            <span class="source-dot"></span>
+                            <span class="source-name" title="{{ item['name'] }}">{{ item['name'] }}<span class="source-meta"> · {{ item['city'] }}</span></span>
+                            <span class="source-meta">{{ item['value'] }} 条</span>
+                        </li>
+                        {% end %}
+                    {% else %}
+                        <li class="dash-empty">暂无来源点位</li>
+                    {% end %}
+                </ul>
+            </div>
+            <div class="dash-panel" style="flex:1;">
+                <div class="dash-panel-title">🕘 最新入库动态 <span class="badge">运营</span></div>
+                <ul class="recent-list" id="recent-list">
+                    {% if recent_items %}
+                        {% for item in recent_items %}
+                        <li class="recent-item">
+                            <div>
+                                <div class="recent-title" title="{{ item['title'] }}">{{ item['title'] }}</div>
+                                <div class="recent-meta">{{ item['source'] }}{% if item.get('keyword') %} · #{{ item['keyword'] }}{% end %}{% if item.get('created_at') %} · {{ item['created_at'] }}{% end %}</div>
+                            </div>
+                            {% if item.get('is_deep_collected') %}
+                            <span class="recent-badge">深采</span>
+                            {% else %}
+                            <span class="source-meta">普通</span>
+                            {% end %}
+                        </li>
+                        {% end %}
+                    {% else %}
+                        <li class="dash-empty">暂无入库动态</li>
+                    {% end %}
+                </ul>
+            </div>
         </div>
     </div>
 
@@ -279,21 +519,51 @@ body.dark-theme {
     <div class="dash-grid-3">
         <div class="dash-panel">
             <div class="dash-panel-title">📈 近14天采集趋势</div>
-            <div id="chart-trend" style="height:200px;"></div>
+            <div id="chart-trend" style="height:200px;">
+                <div class="chart-fallback">
+                    <div class="chart-fallback-title">近14天采集趋势</div>
+                    {% for dt, cnt in zip(trend.get('dates', [])[-8:], trend.get('counts', [])[-8:]) %}
+                    <div class="fallback-row">
+                        <span>{{ dt }}</span>
+                        <span class="source-meta">{{ cnt }} 条</span>
+                    </div>
+                    {% end %}
+                    {% if not trend.get('dates') %}
+                    <div class="dash-empty">暂无趋势数据</div>
+                    {% end %}
+                </div>
+            </div>
         </div>
         <div class="dash-panel">
             <div class="dash-panel-title">🍩 数据来源分布</div>
-            <div id="chart-source" style="height:200px;"></div>
+            <div id="chart-source" style="height:200px;">
+                <div class="chart-fallback">
+                    <div class="chart-fallback-title">来源分布</div>
+                    {% if source_distribution %}
+                        {% for item in source_distribution[:6] %}
+                        <div class="fallback-row"><span class="fallback-name">{{ item['name'] }}</span><span class="source-meta">{{ item['value'] }} 条</span></div>
+                        {% end %}
+                    {% else %}
+                        <div class="dash-empty">暂无来源分布</div>
+                    {% end %}
+                </div>
+            </div>
         </div>
         <div class="dash-panel">
             <div class="dash-panel-title">🔬 深度采集占比</div>
-            <div id="chart-deep" style="height:200px;"></div>
+            <div id="chart-deep" style="height:200px;">
+                <div class="chart-fallback">
+                    <div class="chart-fallback-title">深采占比</div>
+                    <div class="fallback-row"><span>已深度采集</span><span class="source-meta">{{ stats.get('deep_collected', 0) }} 条</span></div>
+                    <div class="fallback-row"><span>待深采</span><span class="source-meta">{{ max(stats.get('total', 0) - stats.get('deep_collected', 0), 0) }} 条</span></div>
+                    <div class="fallback-bar"><span class="fallback-fill" style="width:{{ min(100, max(0, stats.get('deep_pct', 0))) }}%;"></span></div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/dist/echarts-gl.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
 <script>
 (function() {
@@ -308,9 +578,13 @@ body.dark-theme {
     }
 
     function observeResize(dom, chart) {
-        var obs = new ResizeObserver(function() { chart.resize(); });
-        obs.observe(dom);
-        chartObservers[dom.id] = obs;
+        if (typeof ResizeObserver !== 'undefined') {
+            var obs = new ResizeObserver(function() { chart.resize(); });
+            obs.observe(dom);
+            chartObservers[dom.id] = obs;
+        } else {
+            window.addEventListener('resize', function() { chart.resize(); });
+        }
     }
 
     function updateStatCards(stats) {
@@ -321,6 +595,92 @@ body.dark-theme {
         if (el('stat-deep-pct')) el('stat-deep-pct').textContent = stats.deep_pct;
         if (el('stat-sources')) el('stat-sources').textContent = stats.source_count;
         if (el('stat-top-source')) el('stat-top-source').textContent = stats.top_source;
+        if (el('stat-enabled-sources')) el('stat-enabled-sources').textContent = stats.enabled_source_count || 0;
+        if (el('stat-scheduled-sources')) el('stat-scheduled-sources').textContent = stats.scheduled_source_count || 0;
+        if (el('stat-success-rate')) el('stat-success-rate').textContent = (stats.success_rate || 0) + '%';
+        if (el('stat-avg-size')) el('stat-avg-size').textContent = stats.avg_response_kb || 0;
+    }
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, function(ch) {
+            return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch];
+        });
+    }
+
+    function formatNumber(value) {
+        var num = Number(value || 0);
+        if (num >= 10000) return (num / 10000).toFixed(1).replace(/\.0$/, '') + 'w';
+        return String(num);
+    }
+
+    function setChartFallback(domId, title, items, type) {
+        var dom = document.getElementById(domId);
+        if (!dom) return;
+        items = items || [];
+        var html = '<div class="chart-fallback"><div class="chart-fallback-title">' + escapeHtml(title) + '</div>';
+        if (!items.length) {
+            html += '<div class="dash-empty">暂无数据</div>';
+        } else if (type === 'chips') {
+            html += '<div class="fallback-chip-wrap">' + items.slice(0, 18).map(function(item) {
+                return '<span class="fallback-chip">' + escapeHtml(item.name) + ' · ' + formatNumber(item.value) + '</span>';
+            }).join('') + '</div>';
+        } else {
+            var maxValue = Math.max.apply(null, items.map(function(item) { return Number(item.value || item.count || 0); }).concat([1]));
+            html += items.slice(0, 10).map(function(item) {
+                var value = Number(item.value || item.count || 0);
+                var width = Math.max(6, Math.round(value / maxValue * 100));
+                return '<div class="fallback-row"><div><div class="fallback-name">' + escapeHtml(item.name || item.label || '未命名') +
+                    '</div><div class="fallback-bar"><span class="fallback-fill" style="width:' + width + '%"></span></div></div>' +
+                    '<span class="source-meta">' + formatNumber(value) + ' 条</span></div>';
+            }).join('');
+        }
+        dom.innerHTML = html + '</div>';
+    }
+
+    function safeChart(label, render, fallback) {
+        try {
+            render();
+        } catch (err) {
+            console.error('Dashboard chart failed: ' + label, err);
+            if (fallback) fallback();
+        }
+    }
+
+    function renderSourceList(sourceGeoData) {
+        var list = document.getElementById('source-list');
+        if (!list) return;
+        sourceGeoData = sourceGeoData || [];
+        if (!sourceGeoData.length) {
+            list.innerHTML = '<li class="dash-empty">暂无来源点位，完成采集入库后将显示来源、城市和数量。</li>';
+            return;
+        }
+        list.innerHTML = sourceGeoData.slice(0, 8).map(function(item) {
+            return '<li class="source-item">' +
+                '<span class="source-dot"></span>' +
+                '<span class="source-name" title="' + escapeHtml(item.name) + '">' + escapeHtml(item.name) +
+                '<span class="source-meta"> · ' + escapeHtml(item.city || '未知') + '</span></span>' +
+                '<span class="source-meta">' + formatNumber(item.value) + ' 条</span>' +
+                '</li>';
+        }).join('');
+    }
+
+    function renderRecentList(items) {
+        var list = document.getElementById('recent-list');
+        if (!list) return;
+        items = items || [];
+        if (!items.length) {
+            list.innerHTML = '<li class="dash-empty">暂无入库动态，可从“瞭望采集”或“数据仓库”添加数据。</li>';
+            return;
+        }
+        list.innerHTML = items.map(function(item) {
+            return '<li class="recent-item">' +
+                '<div><div class="recent-title" title="' + escapeHtml(item.title) + '">' + escapeHtml(item.title) + '</div>' +
+                '<div class="recent-meta">' + escapeHtml(item.source || '未知来源') +
+                (item.keyword ? ' · #' + escapeHtml(item.keyword) : '') +
+                (item.created_at ? ' · ' + escapeHtml(item.created_at) : '') + '</div></div>' +
+                (item.is_deep_collected ? '<span class="recent-badge">深采</span>' : '<span class="source-meta">普通</span>') +
+                '</li>';
+        }).join('');
     }
 
     function initCharts() {
@@ -330,118 +690,457 @@ body.dark-theme {
         // 获取后端数据
         var statsData = {% raw json_encode(stats) %};
         var sourceData = {% raw json_encode(source_distribution) %};
+        var sourceGeoData = {% raw json_encode(source_geo) %};
         var trendData = {% raw json_encode(trend) %};
         var keywordData = {% raw json_encode(keywords) %};
+        var recentItems = {% raw json_encode(recent_items) %};
 
         // 更新时间
         document.getElementById('dash-update-time').textContent =
             '🕐 ' + new Date().toLocaleString('zh-CN');
 
-        // 1. 3D 地球（ECharts-GL）
-        initGlobe('chart-globe', sourceData, keywordData);
+        renderSourceList(sourceGeoData);
+        renderRecentList(recentItems);
+
+        // 1. 3D 地球（原生 Canvas，无 ECharts-GL/CDN 依赖）
+        safeChart('globe', function() { initGlobe('chart-globe', sourceGeoData); }, function() {
+            setChartFallback('chart-globe', '来源点位预览（Canvas 初始化失败时降级）', sourceGeoData, 'bars');
+        });
 
         // 2. 词云
-        initWordCloud('chart-wordcloud', keywordData);
+        safeChart('wordcloud', function() { initWordCloud('chart-wordcloud', keywordData); }, function() {
+            setChartFallback('chart-wordcloud', '关键词预览（词云插件不可用时降级）', keywordData, 'chips');
+        });
 
         // 3. 采集趋势
-        initTrendChart('chart-trend', trendData);
+        safeChart('trend', function() { initTrendChart('chart-trend', trendData); }, function() {
+            var trendItems = (trendData.dates || []).map(function(d, i) { return {name: d, value: (trendData.counts || [])[i] || 0}; });
+            setChartFallback('chart-trend', '近14天采集趋势', trendItems, 'bars');
+        });
 
         // 4. 来源分布
-        initSourcePie('chart-source', sourceData);
+        safeChart('source', function() { initSourcePie('chart-source', sourceData); }, function() {
+            setChartFallback('chart-source', '来源分布', sourceData, 'bars');
+        });
 
         // 5. 深度采集占比
-        initDeepPie('chart-deep', statsData);
+        safeChart('deep', function() { initDeepPie('chart-deep', statsData); }, function() {
+            setChartFallback('chart-deep', '深采占比', [
+                {name: '已深度采集', value: statsData.deep_collected || 0},
+                {name: '待深采', value: Math.max((statsData.total || 0) - (statsData.deep_collected || 0), 0)}
+            ], 'bars');
+        });
     }
 
-    // ── 3D 地球 ──
-    function initGlobe(domId, sourceData, keywordData) {
+    // ── 3D 地球：原生 Canvas 实现，不依赖 ECharts-GL/CDN/浏览器插件 ──
+    function initGlobe(domId, sourceGeoData) {
         var dom = document.getElementById(domId);
         if (!dom) return;
-        var chart = echarts.init(dom, 'dark');
-        charts[domId] = chart;
+        dom.innerHTML = '<canvas class="globe-canvas" aria-label="3D 数据来源地球"></canvas>' +
+            '<div class="globe-tooltip" role="tooltip"></div>' +
+            '<div class="globe-hint">拖动旋转 · 悬停查看来源详情</div>';
 
-        // 生成模拟全球坐标点（基于来源分布随机分布）
-        var cities = [
-            {name: '北京', coord: [116.4, 39.9]}, {name: '上海', coord: [121.5, 31.2]},
-            {name: '广州', coord: [113.3, 23.1]}, {name: '深圳', coord: [114.1, 22.5]},
-            {name: '成都', coord: [104.1, 30.6]}, {name: '杭州', coord: [120.2, 30.3]},
-            {name: '武汉', coord: [114.3, 30.6]}, {name: '南京', coord: [118.8, 32.1]},
-            {name: '重庆', coord: [106.5, 29.6]}, {name: '西安', coord: [108.9, 34.3]},
-            {name: 'Tokyo', coord: [139.7, 35.7]}, {name: 'Seoul', coord: [127.0, 37.6]},
-            {name: 'Singapore', coord: [103.8, 1.4]}, {name: 'London', coord: [-0.1, 51.5]},
-            {name: 'New York', coord: [-74.0, 40.7]}, {name: 'San Francisco', coord: [-122.4, 37.8]},
-            {name: 'Sydney', coord: [151.2, -33.9]}, {name: 'Berlin', coord: [13.4, 52.5]},
-            {name: 'Paris', coord: [2.3, 48.9]}, {name: 'Moscow', coord: [37.6, 55.8]},
+        var canvas = dom.querySelector('canvas');
+        var tooltip = dom.querySelector('.globe-tooltip');
+        var ctx = canvas.getContext && canvas.getContext('2d');
+        if (!ctx) {
+            setChartFallback(domId, '当前浏览器不支持 Canvas，显示来源点位列表', sourceGeoData || [], 'bars');
+            return;
+        }
+
+        sourceGeoData = (sourceGeoData || []).filter(function(item) {
+            return item.coord && item.coord.length >= 2;
+        });
+        var maxValue = Math.max.apply(null, sourceGeoData.map(function(item) {
+            return Number(item.value || 0);
+        }).concat([1]));
+        var points = sourceGeoData.map(function(item) {
+            return {
+                source: item,
+                lon: Number(item.coord[0]),
+                lat: Number(item.coord[1]),
+                value: Number(item.value || 0),
+                screen: null
+            };
+        });
+
+        var landPolygons = [
+            [[-168,72],[-140,62],[-125,50],[-116,33],[-100,20],[-86,15],[-78,24],[-82,45],[-96,58],[-122,72]],
+            [[-82,12],[-70,4],[-58,-8],[-52,-24],[-61,-44],[-73,-55],[-80,-35],[-76,-12]],
+            [[-17,35],[5,50],[34,57],[70,55],[105,50],[135,42],[145,30],[118,18],[82,22],[48,13],[33,0],[28,-25],[18,-35],[5,-28],[-5,-4],[-14,18]],
+            [[35,30],[50,22],[62,10],[54,-5],[43,-17],[32,-30],[22,-34],[14,-24],[18,-4],[28,12]],
+            [[96,20],[110,10],[122,0],[116,-8],[102,-2],[92,8]],
+            [[112,-10],[154,-18],[150,-38],[126,-44],[113,-32]],
+            [[-8,58],[8,62],[25,68],[40,64],[28,55],[10,52]],
+            [[138,46],[146,42],[144,34],[136,33],[132,39]],
+            [[-52,72],[-30,75],[-22,66],[-42,60],[-56,63]]
         ];
 
-        // 根据关键词词频生成数据点密度
-        var scatterData = [];
-        cities.forEach(function(c, idx) {
-            var count = Math.max(1, Math.round((keywordData.length - idx) / keywordData.length * 20));
-            for (var i = 0; i < count; i++) {
-                scatterData.push({
-                    name: c.name,
-                    value: [
-                        c.coord[0] + (Math.random() - 0.5) * 8,
-                        c.coord[1] + (Math.random() - 0.5) * 5,
-                        Math.round(Math.random() * 100)
-                    ],
-                });
-            }
-        });
+        var state = {
+            width: 0,
+            height: 0,
+            dpr: 1,
+            cx: 0,
+            cy: 0,
+            radius: 0,
+            rotation: -0.55,
+            tilt: -0.10,
+            dragging: false,
+            lastX: 0,
+            lastY: 0,
+            hoverIndex: -1,
+            animationId: null,
+            disposed: false
+        };
 
-        chart.setOption({
-            backgroundColor: 'transparent',
-            globe: {
-                baseTexture: 'https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/asset/earth/world.topo.bathy.200401.jpg',
-                heightTexture: 'https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/asset/earth/bathymetry_bw_composite_4k.jpg',
-                shading: 'realistic',
-                realisticMaterial: {
-                    roughness: 0.5,
-                    metalness: 0.1,
-                },
-                postEffect: {
-                    enable: true,
-                    bloom: { enable: true, intensity: 0.2 },
-                },
-                light: {
-                    main: { intensity: 2, shadow: true },
-                    ambient: { intensity: 0.5 },
-                    ambientCubemap: {
-                        texture: 'https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/asset/cube/SwedishRoyalCastle/',
-                        exposure: 0.8,
-                        diffuseIntensity: 0.5,
-                        specularIntensity: 0.3,
+        function resize() {
+            var rect = dom.getBoundingClientRect();
+            state.dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+            state.width = Math.max(320, rect.width || dom.clientWidth || 320);
+            state.height = Math.max(300, rect.height || dom.clientHeight || 300);
+            canvas.width = Math.round(state.width * state.dpr);
+            canvas.height = Math.round(state.height * state.dpr);
+            canvas.style.width = state.width + 'px';
+            canvas.style.height = state.height + 'px';
+            ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+            state.cx = state.width * 0.50;
+            state.cy = state.height * 0.50;
+            state.radius = Math.max(110, Math.min(state.width * 0.38, state.height * 0.43));
+            draw();
+        }
+
+        function degToRad(deg) { return deg * Math.PI / 180; }
+
+        function project(lon, lat, extraRotation) {
+            var lambda = degToRad(lon) + state.rotation + (extraRotation || 0);
+            var phi = degToRad(lat);
+            var cosPhi = Math.cos(phi);
+            var x = cosPhi * Math.sin(lambda);
+            var y = Math.sin(phi);
+            var z = cosPhi * Math.cos(lambda);
+            var tiltCos = Math.cos(state.tilt);
+            var tiltSin = Math.sin(state.tilt);
+            var y2 = y * tiltCos - z * tiltSin;
+            var z2 = y * tiltSin + z * tiltCos;
+            return {
+                x: state.cx + x * state.radius,
+                y: state.cy - y2 * state.radius,
+                z: z2,
+                scale: 0.64 + Math.max(z2, -0.35) * 0.36
+            };
+        }
+
+        function drawSphere() {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(state.cx, state.cy, state.radius, 0, Math.PI * 2);
+            ctx.clip();
+
+            var ocean = ctx.createRadialGradient(
+                state.cx - state.radius * .38, state.cy - state.radius * .42, state.radius * .08,
+                state.cx, state.cy, state.radius
+            );
+            ocean.addColorStop(0, '#1e6cc8');
+            ocean.addColorStop(.34, '#0c4a8a');
+            ocean.addColorStop(.72, '#082f61');
+            ocean.addColorStop(1, '#06192f');
+            ctx.fillStyle = ocean;
+            ctx.fillRect(state.cx - state.radius, state.cy - state.radius, state.radius * 2, state.radius * 2);
+
+            drawLand();
+            drawGrid();
+            drawSourceArcs();
+            drawSourcePoints();
+
+            var shade = ctx.createRadialGradient(
+                state.cx - state.radius * .35, state.cy - state.radius * .32, state.radius * .12,
+                state.cx + state.radius * .18, state.cy + state.radius * .10, state.radius * 1.14
+            );
+            shade.addColorStop(0, 'rgba(255,255,255,.18)');
+            shade.addColorStop(.50, 'rgba(255,255,255,0)');
+            shade.addColorStop(1, 'rgba(0,0,0,.42)');
+            ctx.fillStyle = shade;
+            ctx.fillRect(state.cx - state.radius, state.cy - state.radius, state.radius * 2, state.radius * 2);
+            ctx.restore();
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(state.cx, state.cy, state.radius, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(125,211,252,.40)';
+            ctx.lineWidth = 1.4;
+            ctx.stroke();
+            ctx.shadowColor = 'rgba(56,189,248,.45)';
+            ctx.shadowBlur = 22;
+            ctx.strokeStyle = 'rgba(56,189,248,.18)';
+            ctx.lineWidth = 8;
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawGridLine(coords, color, width) {
+            var drawing = false;
+            ctx.beginPath();
+            coords.forEach(function(c) {
+                var p = project(c[0], c[1]);
+                if (p.z > -0.08) {
+                    if (!drawing) {
+                        ctx.moveTo(p.x, p.y);
+                        drawing = true;
+                    } else {
+                        ctx.lineTo(p.x, p.y);
                     }
-                },
-                viewControl: {
-                    autoRotate: true,
-                    autoRotateSpeed: 5,
-                    distance: 250,
-                    minDistance: 100,
-                    maxDistance: 400,
-                },
-            },
-            series: [{
-                type: 'scatter3D',
-                coordinateSystem: 'globe',
-                data: scatterData,
-                symbolSize: function(val) { return Math.max(3, val[2] / 8); },
-                blendMode: 'lighter',
-                itemStyle: {
-                    color: '#5ea3ff',
-                    opacity: 0.7,
-                },
-            }]
-        });
+                } else {
+                    drawing = false;
+                }
+            });
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            ctx.stroke();
+        }
 
-        observeResize(dom, chart);
+        function drawGrid() {
+            for (var lat = -60; lat <= 60; lat += 30) {
+                var latCoords = [];
+                for (var lon = -180; lon <= 180; lon += 4) latCoords.push([lon, lat]);
+                drawGridLine(latCoords, 'rgba(147,197,253,.20)', 0.8);
+            }
+            for (var lon2 = -150; lon2 <= 180; lon2 += 30) {
+                var lonCoords = [];
+                for (var lat2 = -80; lat2 <= 80; lat2 += 4) lonCoords.push([lon2, lat2]);
+                drawGridLine(lonCoords, 'rgba(147,197,253,.14)', 0.7);
+            }
+        }
+
+        function drawLand() {
+            ctx.fillStyle = 'rgba(34,197,94,.28)';
+            ctx.strokeStyle = 'rgba(134,239,172,.25)';
+            ctx.lineWidth = 0.8;
+            landPolygons.forEach(function(poly) {
+                var started = false;
+                ctx.beginPath();
+                poly.forEach(function(coord) {
+                    var p = project(coord[0], coord[1]);
+                    if (p.z > -0.16) {
+                        if (!started) { ctx.moveTo(p.x, p.y); started = true; }
+                        else { ctx.lineTo(p.x, p.y); }
+                    }
+                });
+                if (started) {
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                }
+            });
+        }
+
+        function interpolateLonLat(a, b, t) {
+            var lonDelta = b[0] - a[0];
+            if (lonDelta > 180) lonDelta -= 360;
+            if (lonDelta < -180) lonDelta += 360;
+            var height = Math.sin(Math.PI * t) * 16;
+            return [a[0] + lonDelta * t, a[1] + (b[1] - a[1]) * t + height];
+        }
+
+        function drawSourceArcs() {
+            var hub = [116.4074, 39.9042];
+            points.forEach(function(point) {
+                var coords = [];
+                for (var i = 0; i <= 40; i++) coords.push(interpolateLonLat(hub, [point.lon, point.lat], i / 40));
+                drawGridLine(coords, 'rgba(56,189,248,.24)', 1.1);
+            });
+        }
+
+        function drawSourcePoints() {
+            var now = performance.now();
+            points.forEach(function(point, index) {
+                var p = project(point.lon, point.lat);
+                point.screen = p;
+                if (p.z <= -0.12) return;
+                var base = 5 + Math.sqrt(Math.max(point.value, 1) / maxValue) * 11;
+                var radius = base * Math.max(.65, p.scale);
+                var pulse = 1 + Math.sin(now / 520 + index) * .20;
+
+                ctx.save();
+                ctx.globalAlpha = Math.max(.30, p.z);
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, radius * 1.9 * pulse, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(125,211,252,.32)';
+                ctx.lineWidth = 1.2;
+                ctx.stroke();
+
+                var grad = ctx.createRadialGradient(p.x - radius * .3, p.y - radius * .3, 1, p.x, p.y, radius);
+                grad.addColorStop(0, '#f0f9ff');
+                grad.addColorStop(.35, '#38bdf8');
+                grad.addColorStop(1, '#2563eb');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(224,242,254,.82)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                if (p.z > .15) {
+                    var label = String(point.source.name || '未知来源') + ' ' + formatNumber(point.value) + '条';
+                    ctx.font = '600 12px Microsoft YaHei, sans-serif';
+                    var textWidth = ctx.measureText(label).width;
+                    var lx = p.x + radius + 8;
+                    var ly = p.y - radius - 4;
+                    ctx.fillStyle = 'rgba(15,23,42,.68)';
+                    ctx.strokeStyle = 'rgba(125,211,252,.22)';
+                    roundRect(ctx, lx - 5, ly - 15, textWidth + 10, 22, 6);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.fillStyle = '#e0f2fe';
+                    ctx.fillText(label, lx, ly);
+                }
+                ctx.restore();
+            });
+        }
+
+        function roundRect(context, x, y, w, h, r) {
+            context.beginPath();
+            context.moveTo(x + r, y);
+            context.arcTo(x + w, y, x + w, y + h, r);
+            context.arcTo(x + w, y + h, x, y + h, r);
+            context.arcTo(x, y + h, x, y, r);
+            context.arcTo(x, y, x + w, y, r);
+            context.closePath();
+        }
+
+        function drawEmptyState() {
+            ctx.save();
+            ctx.fillStyle = 'rgba(203,213,225,.72)';
+            ctx.font = '14px Microsoft YaHei, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('暂无来源点位，完成采集入库后会显示在 3D 地球上', state.cx, state.cy);
+            ctx.restore();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, state.width, state.height);
+            drawSphere();
+            if (!points.length) drawEmptyState();
+        }
+
+        function tick() {
+            if (state.disposed) return;
+            if (!state.dragging && state.hoverIndex < 0) state.rotation += 0.0022;
+            draw();
+            state.animationId = requestAnimationFrame(tick);
+        }
+
+        function getPointer(event) {
+            var rect = canvas.getBoundingClientRect();
+            var touch = event.touches && event.touches[0];
+            return { x: (touch ? touch.clientX : event.clientX) - rect.left, y: (touch ? touch.clientY : event.clientY) - rect.top };
+        }
+
+        function findHover(pos) {
+            var best = -1;
+            var bestDist = Infinity;
+            points.forEach(function(point, index) {
+                var p = point.screen;
+                if (!p || p.z <= -0.12) return;
+                var marker = 10 + Math.sqrt(Math.max(point.value, 1) / maxValue) * 12;
+                var dx = pos.x - p.x;
+                var dy = pos.y - p.y;
+                var dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < marker && dist < bestDist) { best = index; bestDist = dist; }
+            });
+            return best;
+        }
+
+        function showTooltip(index, pos) {
+            if (index < 0 || !tooltip) {
+                if (tooltip) tooltip.style.opacity = '0';
+                return;
+            }
+            var item = points[index].source;
+            tooltip.innerHTML = '<strong>' + escapeHtml(item.name || '未知来源') + '</strong><br>' +
+                '城市：' + escapeHtml(item.city || '未知') + '<br>' +
+                '数量：' + formatNumber(item.value) + ' 条<br>' +
+                '今日：' + formatNumber(item.today_count) + ' 条 · 深采：' + formatNumber(item.deep_count) + ' 条<br>' +
+                '域名：' + escapeHtml(item.domain || '未知');
+            tooltip.style.left = pos.x + 'px';
+            tooltip.style.top = pos.y + 'px';
+            tooltip.style.opacity = '1';
+        }
+
+        function onMove(event) {
+            var pos = getPointer(event);
+            if (state.dragging) {
+                var dx = pos.x - state.lastX;
+                var dy = pos.y - state.lastY;
+                state.rotation += dx * 0.006;
+                state.tilt = Math.max(-0.75, Math.min(0.75, state.tilt - dy * 0.004));
+                state.lastX = pos.x;
+                state.lastY = pos.y;
+                return;
+            }
+            state.hoverIndex = findHover(pos);
+            canvas.style.cursor = state.hoverIndex >= 0 ? 'pointer' : 'grab';
+            showTooltip(state.hoverIndex, pos);
+        }
+
+        function onDown(event) {
+            var pos = getPointer(event);
+            state.dragging = true;
+            state.lastX = pos.x;
+            state.lastY = pos.y;
+            canvas.style.cursor = 'grabbing';
+        }
+        function onUp() {
+            state.dragging = false;
+            canvas.style.cursor = 'grab';
+        }
+        function onLeave() {
+            state.hoverIndex = -1;
+            state.dragging = false;
+            showTooltip(-1, {x:0, y:0});
+        }
+
+        canvas.addEventListener('mousemove', onMove);
+        canvas.addEventListener('mousedown', onDown);
+        window.addEventListener('mouseup', onUp);
+        canvas.addEventListener('mouseleave', onLeave);
+        canvas.addEventListener('touchstart', onDown, {passive: true});
+        canvas.addEventListener('touchmove', onMove, {passive: true});
+        canvas.addEventListener('touchend', onUp);
+
+        var resizeObserver = null;
+        if (typeof ResizeObserver !== 'undefined') {
+            resizeObserver = new ResizeObserver(resize);
+            resizeObserver.observe(dom);
+        } else {
+            window.addEventListener('resize', resize);
+        }
+
+        resize();
+        state.animationId = requestAnimationFrame(tick);
+        charts[domId] = {
+            resize: resize,
+            dispose: function() {
+                state.disposed = true;
+                if (state.animationId) cancelAnimationFrame(state.animationId);
+                canvas.removeEventListener('mousemove', onMove);
+                canvas.removeEventListener('mousedown', onDown);
+                window.removeEventListener('mouseup', onUp);
+                canvas.removeEventListener('mouseleave', onLeave);
+                canvas.removeEventListener('touchstart', onDown);
+                canvas.removeEventListener('touchmove', onMove);
+                canvas.removeEventListener('touchend', onUp);
+                if (resizeObserver) resizeObserver.disconnect();
+                else window.removeEventListener('resize', resize);
+            }
+        };
     }
 
     // ── 词云 ──
     function initWordCloud(domId, keywordData) {
         var dom = document.getElementById(domId);
         if (!dom) return;
+        dom.innerHTML = '';
         var chart = echarts.init(dom, 'dark');
         charts[domId] = chart;
 
@@ -483,6 +1182,7 @@ body.dark-theme {
     function initTrendChart(domId, trendData) {
         var dom = document.getElementById(domId);
         if (!dom) return;
+        dom.innerHTML = '';
         var chart = echarts.init(dom, 'dark');
         charts[domId] = chart;
 
@@ -523,6 +1223,7 @@ body.dark-theme {
     function initSourcePie(domId, sourceData) {
         var dom = document.getElementById(domId);
         if (!dom) return;
+        dom.innerHTML = '';
         var chart = echarts.init(dom, 'dark');
         charts[domId] = chart;
 
@@ -558,6 +1259,7 @@ body.dark-theme {
     function initDeepPie(domId, statsData) {
         var dom = document.getElementById(domId);
         if (!dom) return;
+        dom.innerHTML = '';
         var chart = echarts.init(dom, 'dark');
         charts[domId] = chart;
 
@@ -609,23 +1311,43 @@ body.dark-theme {
                     // 更新统计卡片
                     updateStatCards(data.stats);
                     var stats = data.stats;
+                    renderSourceList(data.source_geo || []);
+                    renderRecentList(data.recent_items || []);
                     // 重新初始化所有图表
-                    initGlobe('chart-globe', data.source_distribution, data.keywords);
-                    initWordCloud('chart-wordcloud', data.keywords);
-                    initTrendChart('chart-trend', data.trend);
-                    initSourcePie('chart-source', data.source_distribution);
-                    initDeepPie('chart-deep', stats);
+                    safeChart('globe-refresh', function() { initGlobe('chart-globe', data.source_geo || []); }, function() {
+                        setChartFallback('chart-globe', '来源点位预览（Canvas 初始化失败时降级）', data.source_geo || [], 'bars');
+                    });
+                    safeChart('wordcloud-refresh', function() { initWordCloud('chart-wordcloud', data.keywords || []); }, function() {
+                        setChartFallback('chart-wordcloud', '关键词预览（词云插件不可用时降级）', data.keywords || [], 'chips');
+                    });
+                    safeChart('trend-refresh', function() { initTrendChart('chart-trend', data.trend || {}); }, function() {
+                        var trendItems = ((data.trend || {}).dates || []).map(function(d, i) {
+                            return {name: d, value: ((data.trend || {}).counts || [])[i] || 0};
+                        });
+                        setChartFallback('chart-trend', '近14天采集趋势', trendItems, 'bars');
+                    });
+                    safeChart('source-refresh', function() { initSourcePie('chart-source', data.source_distribution || []); }, function() {
+                        setChartFallback('chart-source', '来源分布', data.source_distribution || [], 'bars');
+                    });
+                    safeChart('deep-refresh', function() { initDeepPie('chart-deep', stats || {}); }, function() {
+                        setChartFallback('chart-deep', '深采占比', [
+                            {name: '已深度采集', value: (stats || {}).deep_collected || 0},
+                            {name: '待深采', value: Math.max(((stats || {}).total || 0) - ((stats || {}).deep_collected || 0), 0)}
+                        ], 'bars');
+                    });
 
                     // 更新关键词列表
                     var kl = document.getElementById('keyword-list');
-                    if (data.keywords.length > 0) {
+                    if (data.keywords && data.keywords.length > 0) {
                         kl.innerHTML = data.keywords.slice(0, 10).map(function(kw, i) {
                             var rankClass = i < 3 ? 'rank-' + (i + 1) : 'rank-n';
                             return '<li class="keyword-item">' +
                                 '<span class="rank ' + rankClass + '">' + (i + 1) + '</span>' +
                                 '<span class="kw-name">' + escapeHtml(kw.name) + '</span>' +
-                                '<span class="kw-count">' + kw.value + ' 次</span></li>';
+                                '<span class="kw-count">' + formatNumber(kw.value) + ' 次</span></li>';
                         }).join('');
+                    } else {
+                        kl.innerHTML = '<li class="dash-empty">暂无关键词</li>';
                     }
                 }
             })
@@ -635,17 +1357,8 @@ body.dark-theme {
             });
     };
 
-    // 初始化
-    var retries = 0;
-    var checkInterval = setInterval(function() {
-        if (typeof echarts !== 'undefined') {
-            clearInterval(checkInterval);
-            initCharts();
-        } else if (++retries > 30) {
-            clearInterval(checkInterval);
-            console.warn('ECharts 加载超时（6秒），大屏图表未初始化');
-        }
-    }, 200);
+    // 初始化：3D 地球不依赖 ECharts；其他图表若 ECharts/CDN 不可用会独立降级。
+    initCharts();
 })();
 </script>
 {% end %}

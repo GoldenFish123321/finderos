@@ -24,6 +24,106 @@ from app.models.db import get_db
 logger = logging.getLogger(__name__)
 
 
+_SOURCE_LOCATION_HINTS = (
+    ("baidu", "北京", [116.4074, 39.9042]),
+    ("百度", "北京", [116.4074, 39.9042]),
+    ("people", "北京", [116.4074, 39.9042]),
+    ("人民网", "北京", [116.4074, 39.9042]),
+    ("xinhuanet", "北京", [116.4074, 39.9042]),
+    ("新华", "北京", [116.4074, 39.9042]),
+    ("央视", "北京", [116.4074, 39.9042]),
+    ("cctv", "北京", [116.4074, 39.9042]),
+    ("weibo", "北京", [116.4074, 39.9042]),
+    ("微博", "北京", [116.4074, 39.9042]),
+    ("zhihu", "北京", [116.4074, 39.9042]),
+    ("知乎", "北京", [116.4074, 39.9042]),
+    ("36kr", "北京", [116.4074, 39.9042]),
+    ("36氪", "北京", [116.4074, 39.9042]),
+    ("huxiu", "北京", [116.4074, 39.9042]),
+    ("虎嗅", "北京", [116.4074, 39.9042]),
+    ("sina", "北京", [116.4074, 39.9042]),
+    ("新浪", "北京", [116.4074, 39.9042]),
+    ("sohu", "北京", [116.4074, 39.9042]),
+    ("搜狐", "北京", [116.4074, 39.9042]),
+    ("thepaper", "上海", [121.4737, 31.2304]),
+    ("澎湃", "上海", [121.4737, 31.2304]),
+    ("jiemian", "上海", [121.4737, 31.2304]),
+    ("界面", "上海", [121.4737, 31.2304]),
+    ("yicai", "上海", [121.4737, 31.2304]),
+    ("第一财经", "上海", [121.4737, 31.2304]),
+    ("eastmoney", "上海", [121.4737, 31.2304]),
+    ("东方财富", "上海", [121.4737, 31.2304]),
+    ("163", "杭州", [120.1551, 30.2741]),
+    ("netease", "杭州", [120.1551, 30.2741]),
+    ("网易", "杭州", [120.1551, 30.2741]),
+    ("alibaba", "杭州", [120.1551, 30.2741]),
+    ("阿里", "杭州", [120.1551, 30.2741]),
+    ("qq", "深圳", [114.0579, 22.5431]),
+    ("tencent", "深圳", [114.0579, 22.5431]),
+    ("腾讯", "深圳", [114.0579, 22.5431]),
+    ("微信", "深圳", [114.0579, 22.5431]),
+    ("douyin", "北京", [116.4074, 39.9042]),
+    ("抖音", "北京", [116.4074, 39.9042]),
+    ("toutiao", "北京", [116.4074, 39.9042]),
+    ("头条", "北京", [116.4074, 39.9042]),
+    ("bilibili", "上海", [121.4737, 31.2304]),
+    ("b站", "上海", [121.4737, 31.2304]),
+    ("github", "San Francisco", [-122.4194, 37.7749]),
+    ("openai", "San Francisco", [-122.4194, 37.7749]),
+    ("google", "Mountain View", [-122.0841, 37.4220]),
+    ("microsoft", "Redmond", [-122.1215, 47.6740]),
+)
+
+_SOURCE_FALLBACK_LOCATIONS = (
+    ("北京", [116.4074, 39.9042]),
+    ("上海", [121.4737, 31.2304]),
+    ("深圳", [114.0579, 22.5431]),
+    ("广州", [113.2644, 23.1291]),
+    ("成都", [104.0665, 30.5728]),
+    ("杭州", [120.1551, 30.2741]),
+    ("武汉", [114.3054, 30.5931]),
+    ("南京", [118.7969, 32.0603]),
+    ("西安", [108.9398, 34.3416]),
+    ("重庆", [106.5516, 29.5630]),
+)
+
+
+def _extract_domain(*urls: str) -> str:
+    """从 URL 或 URL 模板中提取域名，用于大屏来源识别。"""
+    from urllib.parse import urlparse
+
+    for url in urls:
+        if not url:
+            continue
+        candidate = str(url).strip()
+        if "://" not in candidate and "." in candidate:
+            candidate = "https://" + candidate
+        parsed = urlparse(candidate)
+        if parsed.netloc:
+            return parsed.netloc.lower()
+    return ""
+
+
+def _infer_source_location(source_name: str, *urls: str) -> tuple[str, list[float], str]:
+    """根据来源名称/域名推断稳定地理位置。
+
+    数据仓库当前没有经纬度字段，因此这里使用来源名称和域名的可解释映射；
+    未命中时使用稳定哈希落到国内运营节点，避免前端每次随机抖动。
+    """
+    import hashlib
+
+    domain = _extract_domain(*urls)
+    haystack = f"{source_name or ''} {domain} {' '.join(str(u or '') for u in urls)}".lower()
+    for token, city, coord in _SOURCE_LOCATION_HINTS:
+        if token.lower() in haystack:
+            return city, coord, "matched"
+
+    key = (source_name or domain or "unknown").encode("utf-8", errors="ignore")
+    digest = int(hashlib.sha1(key).hexdigest()[:8], 16) if key else 0
+    city, coord = _SOURCE_FALLBACK_LOCATIONS[digest % len(_SOURCE_FALLBACK_LOCATIONS)]
+    return city, coord, "fallback"
+
+
 class DataWarehouseRepository:
     """独立数据仓库数据访问类。"""
 
@@ -277,11 +377,72 @@ class DataWarehouseRepository:
         from app.utils.security import sanitize_html
         with get_db() as conn:
             rows = conn.execute(
-                "SELECT source_name, COUNT(*) as cnt FROM data_warehouse "
-                "WHERE source_name != '' GROUP BY source_name ORDER BY cnt DESC LIMIT ?",
+                "SELECT COALESCE(NULLIF(dw.source_name, ''), NULLIF(ws.name, ''), '未知来源') as source_label, "
+                "COUNT(*) as cnt FROM data_warehouse dw "
+                "LEFT JOIN watch_results wr ON dw.result_id = wr.id "
+                "LEFT JOIN watch_sources ws ON wr.source_id = ws.id "
+                "GROUP BY source_label ORDER BY cnt DESC LIMIT ?",
                 (limit,),
             ).fetchall()
-            return [{"name": sanitize_html(r["source_name"] or "未知"), "value": r["cnt"]} for r in rows]
+            return [{"name": sanitize_html(r["source_label"] or "未知"), "value": r["cnt"]} for r in rows]
+
+    @staticmethod
+    def get_dashboard_source_geo(limit: int = 12) -> list:
+        """获取大屏 3D 地球来源点位。
+
+        返回真实采集来源的聚合数量、深采数量、今日新增和推断坐标，前端据此渲染
+        scatter3D 标签，不再生成随机点。
+        """
+        from app.utils.security import sanitize_html
+
+        with get_db() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    COALESCE(NULLIF(dw.source_name, ''), NULLIF(ws.name, ''), '未知来源') as source_label,
+                    COUNT(*) as cnt,
+                    SUM(CASE WHEN dw.is_deep_collected = 1 THEN 1 ELSE 0 END) as deep_count,
+                    SUM(CASE WHEN DATE(dw.created_at) = DATE('now') THEN 1 ELSE 0 END) as today_count,
+                    MAX(dw.created_at) as latest_at,
+                    MAX(NULLIF(dw.link, '')) as sample_link,
+                    MAX(NULLIF(wr.request_url, '')) as sample_request_url,
+                    MAX(NULLIF(ws.url_template, '')) as source_url
+                FROM data_warehouse dw
+                LEFT JOIN watch_results wr ON dw.result_id = wr.id
+                LEFT JOIN watch_sources ws ON wr.source_id = ws.id
+                GROUP BY source_label
+                ORDER BY cnt DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+
+        result = []
+        for row in rows:
+            raw_name = row["source_label"] or "未知来源"
+            city, coord, location_source = _infer_source_location(
+                raw_name,
+                row["sample_link"] or "",
+                row["sample_request_url"] or "",
+                row["source_url"] or "",
+            )
+            domain = _extract_domain(
+                row["sample_link"] or "",
+                row["sample_request_url"] or "",
+                row["source_url"] or "",
+            )
+            result.append({
+                "name": sanitize_html(raw_name),
+                "value": int(row["cnt"] or 0),
+                "deep_count": int(row["deep_count"] or 0),
+                "today_count": int(row["today_count"] or 0),
+                "latest_at": row["latest_at"] or "",
+                "domain": sanitize_html(domain or "本地/未知"),
+                "city": city,
+                "coord": coord,
+                "location_source": location_source,
+            })
+        return result
 
     @staticmethod
     def get_trend_data(days: int = 14) -> dict:
@@ -310,8 +471,13 @@ class DataWarehouseRepository:
         """
         import re
         with get_db() as conn:
-            titles = conn.execute(
-                "SELECT title FROM data_warehouse WHERE title != '' AND title IS NOT NULL"
+            rows = conn.execute(
+                "SELECT dw.title, dw.summary, dw.source_name, wr.keyword "
+                "FROM data_warehouse dw "
+                "LEFT JOIN watch_results wr ON dw.result_id = wr.id "
+                "WHERE (dw.title != '' AND dw.title IS NOT NULL) "
+                "OR (dw.summary != '' AND dw.summary IS NOT NULL) "
+                "OR (wr.keyword != '' AND wr.keyword IS NOT NULL)"
             ).fetchall()
 
         # 常见停用词
@@ -327,23 +493,44 @@ class DataWarehouseRepository:
         }
 
         freq = {}
-        sep_re = re.compile(r'[][\s,，。、；：！？""''()【】/_—+-]+')
-        for row in titles:
-            title = row["title"]
-            if not title:
+        sep_re = re.compile(r"""[][\s,，。、；：！？"'()【】/_—+·|-]+""")
+
+        def add_word(word: str):
+            word = word.strip().lower()
+            if len(word) < 2 or len(word) > 8:
+                return
+            has_cjk = any('\u4e00' <= c <= '\u9fff' for c in word)
+            if not has_cjk and (len(word) < 3 or not word.isalnum()):
+                return
+            if word in stop_words:
+                return
+            freq[word] = freq.get(word, 0) + 1
+
+        for row in rows:
+            text = " ".join(
+                str(row[key] or "")
+                for key in ("keyword", "source_name", "title", "summary")
+                if row[key]
+            )
+            if not text:
                 continue
-            words = sep_re.split(title)
+            words = sep_re.split(text)
             for word in words:
-                word = word.strip().lower()
-                if len(word) < 2 or len(word) > 8:
+                if not word:
                     continue
-                # 至少包含一个中文字符或为纯英文数字词（长度>=3）
-                has_cjk = any('\u4e00' <= c <= '\u9fff' for c in word)
-                if not has_cjk and (len(word) < 3 or not word.isalnum()):
+                if len(word) <= 8:
+                    add_word(word)
                     continue
-                if word in stop_words:
-                    continue
-                freq[word] = freq.get(word, 0) + 1
+                # 中文标题常常没有空格；对长中文片段提取稳定短语，避免词云为空。
+                for seq in re.findall(r'[\u4e00-\u9fff]{2,}', word):
+                    if len(seq) <= 8:
+                        add_word(seq)
+                    else:
+                        for size in (4, 3, 2):
+                            for start in range(0, len(seq) - size + 1, size):
+                                add_word(seq[start:start + size])
+                for token in re.findall(r'[a-zA-Z0-9]{3,}', word):
+                    add_word(token)
 
         # 排序取 Top
         sorted_words = sorted(freq.items(), key=lambda x: -x[1])
@@ -362,13 +549,44 @@ class DataWarehouseRepository:
                 "WHERE DATE(created_at) = DATE('now')"
             ).fetchone()["cnt"]
             source_count = conn.execute(
-                "SELECT COUNT(DISTINCT source_name) as cnt FROM data_warehouse "
-                "WHERE source_name != ''"
+                "SELECT COUNT(DISTINCT COALESCE(NULLIF(dw.source_name, ''), NULLIF(ws.name, ''), '未知来源')) as cnt "
+                "FROM data_warehouse dw "
+                "LEFT JOIN watch_results wr ON dw.result_id = wr.id "
+                "LEFT JOIN watch_sources ws ON wr.source_id = ws.id"
             ).fetchone()["cnt"]
             top_source = conn.execute(
-                "SELECT source_name, COUNT(*) as cnt FROM data_warehouse "
-                "WHERE source_name != '' GROUP BY source_name ORDER BY cnt DESC LIMIT 1"
+                "SELECT COALESCE(NULLIF(dw.source_name, ''), NULLIF(ws.name, ''), '未知来源') as source_label, "
+                "COUNT(*) as cnt FROM data_warehouse dw "
+                "LEFT JOIN watch_results wr ON dw.result_id = wr.id "
+                "LEFT JOIN watch_sources ws ON wr.source_id = ws.id "
+                "GROUP BY source_label ORDER BY cnt DESC LIMIT 1"
             ).fetchone()
+            enabled_source_count = conn.execute(
+                "SELECT COUNT(*) as cnt FROM watch_sources WHERE is_enabled = 1"
+            ).fetchone()["cnt"]
+            scheduled_source_count = conn.execute(
+                "SELECT COUNT(*) as cnt FROM watch_sources WHERE is_enabled = 1 AND schedule_interval > 0"
+            ).fetchone()["cnt"]
+            active_source_count = conn.execute(
+                "SELECT COUNT(DISTINCT COALESCE(NULLIF(dw.source_name, ''), NULLIF(ws.name, ''), '未知来源')) as cnt "
+                "FROM data_warehouse dw "
+                "LEFT JOIN watch_results wr ON dw.result_id = wr.id "
+                "LEFT JOIN watch_sources ws ON wr.source_id = ws.id "
+                "WHERE dw.created_at >= DATETIME('now', '-7 days')"
+            ).fetchone()["cnt"]
+            latest = conn.execute(
+                "SELECT MAX(created_at) as latest_at FROM data_warehouse"
+            ).fetchone()["latest_at"]
+            req_stats = conn.execute(
+                "SELECT COUNT(*) as total_req, "
+                "SUM(CASE WHEN response_status BETWEEN 200 AND 399 THEN 1 ELSE 0 END) as ok_req, "
+                "AVG(CASE WHEN response_size > 0 THEN response_size ELSE NULL END) as avg_size "
+                "FROM watch_results"
+            ).fetchone()
+            total_req = req_stats["total_req"] or 0
+            ok_req = req_stats["ok_req"] or 0
+            success_rate = round(ok_req / max(total_req, 1) * 100, 1)
+            avg_response_kb = round((req_stats["avg_size"] or 0) / 1024, 1)
             deep_pct = round(deep / max(total, 1) * 100, 1)
             return {
                 "total": total,
@@ -376,9 +594,46 @@ class DataWarehouseRepository:
                 "deep_pct": deep_pct,
                 "today_count": today_count,
                 "source_count": source_count,
-                "top_source": top_source["source_name"] if top_source else "无",
+                "top_source": top_source["source_label"] if top_source else "无",
                 "top_source_count": top_source["cnt"] if top_source else 0,
+                "enabled_source_count": enabled_source_count,
+                "scheduled_source_count": scheduled_source_count,
+                "active_source_count": active_source_count,
+                "success_rate": success_rate,
+                "avg_response_kb": avg_response_kb,
+                "latest_record_at": latest or "",
             }
+
+    @staticmethod
+    def get_recent_dashboard_items(limit: int = 8) -> list:
+        """获取大屏右侧最新入库动态。"""
+        from app.utils.security import sanitize_html
+
+        with get_db() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    dw.title,
+                    COALESCE(NULLIF(dw.source_name, ''), NULLIF(ws.name, ''), '未知来源') as source_label,
+                    dw.created_at,
+                    dw.is_deep_collected,
+                    wr.keyword
+                FROM data_warehouse dw
+                LEFT JOIN watch_results wr ON dw.result_id = wr.id
+                LEFT JOIN watch_sources ws ON wr.source_id = ws.id
+                ORDER BY dw.id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+
+        return [{
+            "title": sanitize_html(row["title"] or "未命名记录"),
+            "source": sanitize_html(row["source_label"] or "未知来源"),
+            "created_at": row["created_at"] or "",
+            "is_deep_collected": int(row["is_deep_collected"] or 0),
+            "keyword": sanitize_html(row["keyword"] or ""),
+        } for row in rows]
 
     @staticmethod
     def get_stats() -> dict:
