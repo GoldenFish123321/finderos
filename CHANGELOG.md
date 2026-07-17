@@ -25,6 +25,10 @@
 
 ### 修复
 
+- **切换历史对话不渲染图表**
+  - `loadConversation` 加载历史消息时补充调用 `detectAndRenderChart`，确保 `[CHART:...]` / `[TABLE:...]` 标记正确渲染为 ECharts 图表和 HTML 表格
+  - 修复多条 AI 消息含图表时的 Chart ID 冲突（`chartIndex` 改为模块级全局计数器）
+  - 修复切换对话时未清理旧图表造成的 ECharts 实例和 ResizeObserver 内存泄漏（新增 `_cleanupChartContainers` 辅助函数）
 - **脚本编写指南移至正确位置**
   - 将"脚本编写指南"从系统设置页（`/admin/config`）移至 MCP 工具编辑页（`/admin/mcp/tool/edit`）的脚本工具配置区
   - 指南仅在 `tool_type=script` 时显示，与脚本编辑上下文一致
