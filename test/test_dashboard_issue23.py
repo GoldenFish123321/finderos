@@ -59,11 +59,19 @@ class TestDashboardTemplate:
         """dashbaord.html 文件存在"""
         assert os.path.exists(self.TEMPLATE_PATH), "dashboard.html 不存在"
 
-    def test_native_canvas_globe_no_echarts_gl_dependency(self):
-        """3D 地球使用原生 Canvas，不依赖 ECharts-GL 插件或外部地球纹理。"""
+    def test_three_globe_with_canvas_fallback_no_browser_plugin(self):
+        """3D 地球使用 Three.js 数字地球主实现，并保留 Canvas 兜底；不依赖 ECharts-GL 或浏览器插件。"""
         with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
             content = f.read()
-        assert "globe-canvas" in content, "缺少原生 Canvas 地球容器"
+        assert "three@0.132.2" in content, "缺少 Three.js CDN"
+        assert "OrbitControls" in content, "缺少 Three.js OrbitControls"
+        assert "initThreeGlobe" in content, "缺少 Three.js 数字地球初始化"
+        assert "THREE.WebGLRenderer" in content, "Three.js 地球应使用 WebGLRenderer"
+        assert "THREE_GLOBE_TEXTURES" in content, "缺少真实地球纹理配置"
+        assert "browserSupportsWebGL" in content, "缺少 WebGL 能力检测"
+        assert "three-globe-canvas" in content, "缺少 Three.js 地球 Canvas"
+        assert "initCanvasGlobe" in content, "缺少原生 Canvas 兜底"
+        assert "globe-canvas" in content, "缺少原生 Canvas 地球兜底容器"
         assert "requestAnimationFrame" in content, "原生 3D 地球应具备动画渲染"
         assert "drawSpaceBackdrop" in content, "3D 地球应内置星空背景"
         assert "drawAtmosphereBack" in content, "3D 地球应内置大气辉光"
@@ -72,7 +80,6 @@ class TestDashboardTemplate:
         assert "initCharts();" in content, "3D 地球初始化不能等待外部 ECharts CDN"
         assert "ECharts 加载超时" not in content, "不能因 ECharts 加载失败跳过地球初始化"
         assert "echarts-gl" not in content, "3D 地球不能依赖 echarts-gl CDN"
-        assert "baseTexture" not in content, "3D 地球不能依赖外部纹理"
         assert "echarts-wordcloud" in content, "缺少 echarts-wordcloud CDN"
 
     def test_all_chart_containers_exist(self):
@@ -157,7 +164,8 @@ class TestDashboardTemplate:
         assert "chart-fallback" in content
         assert "safeChart" in content
         assert "setChartFallback" in content
-        assert "原生 Canvas" in content
+        assert "Three.js 数字地球" in content
+        assert "Canvas 兜底" in content
         assert "根据关键词词频生成数据点密度" not in content
         assert "sourceGeoData" in content
 
@@ -174,6 +182,8 @@ class TestDashboardTemplate:
             content = f.read()
         functions = [
             "initGlobe",       # 3D地球
+            "initThreeGlobe",  # Three.js数字地球
+            "initCanvasGlobe", # Canvas兜底
             "initWordCloud",   # 词云
             "initTrendChart",  # 趋势
             "initSourcePie",   # 来源
@@ -344,12 +354,14 @@ class TestCSPForDashboard:
         "app", "config", "settings.py"
     )
 
-    def test_connect_src_allows_jsdelivr(self):
-        """CSP connect-src 允许 jsdelivr.net 加载纹理"""
+    def test_csp_allows_jsdelivr_for_dashboard_assets(self):
+        """CSP 允许从 jsdelivr 加载 Three.js、ECharts 和地球纹理资源。"""
         with open(self.SETTINGS_PATH, "r", encoding="utf-8") as f:
             content = f.read()
         # 检查连接源允许 jsdelivr.net
         assert "jsdelivr.net" in content, "CSP 应允许 jsdelivr.net"
+        assert "script-src" in content and "https://cdn.jsdelivr.net" in content
+        assert "img-src" in content and "https:" in content
 
 
 class TestEdgeCases:

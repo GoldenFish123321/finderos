@@ -104,6 +104,7 @@ class Settings:
         "Permissions-Policy": "camera=(self), microphone=(), geolocation=()",
         # 严格化 CSP（借鉴陈子墨）：移除 unsafe-eval，收窄 connect-src，增加 frame-ancestors/base-uri/form-action
         # Issue #15: 添加 blob: 以允许 MediaPipe Hands WASM Worker
+        # Dashboard: 允许 jsdelivr 加载 Three.js/ECharts 脚本，img-src https: 覆盖地球纹理；无需浏览器插件
         "Content-Security-Policy": (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; "

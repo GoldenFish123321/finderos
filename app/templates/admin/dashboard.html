@@ -187,6 +187,25 @@ body.dark-theme {
     width: 100%;
     height: 100%;
 }
+.three-globe-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    outline: none;
+}
+.globe-engine-badge {
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    z-index: 2;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(14, 165, 233, .14);
+    border: 1px solid rgba(125, 211, 252, .18);
+    color: rgba(224, 242, 254, .78);
+    font-size: 11px;
+    pointer-events: none;
+}
 .globe-tooltip {
     position: absolute;
     z-index: 3;
@@ -565,6 +584,8 @@ body.dark-theme {
 
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
 <script>
 (function() {
     var isDark = true;
@@ -702,9 +723,9 @@ body.dark-theme {
         renderSourceList(sourceGeoData);
         renderRecentList(recentItems);
 
-        // 1. 3D 地球（原生 Canvas，无 ECharts-GL/CDN 依赖）
+        // 1. 3D 地球（Three.js 数字地球优先；无需浏览器插件，失败时回退 Canvas）
         safeChart('globe', function() { initGlobe('chart-globe', sourceGeoData); }, function() {
-            setChartFallback('chart-globe', '来源点位预览（Canvas 初始化失败时降级）', sourceGeoData, 'bars');
+            setChartFallback('chart-globe', '来源点位预览（3D 地球初始化失败时降级）', sourceGeoData, 'bars');
         });
 
         // 2. 词云
@@ -732,8 +753,518 @@ body.dark-theme {
         });
     }
 
-    // ── 3D 地球：原生 Canvas 实现，不依赖 ECharts-GL/CDN/浏览器插件 ──
+    // ── 3D 地球：Three.js 数字地球主实现；不要求用户安装浏览器插件，失败自动回退 Canvas ──
     function initGlobe(domId, sourceGeoData) {
+        disposeChart(domId);
+        try {
+            initThreeGlobe(domId, sourceGeoData);
+        } catch (err) {
+            console.warn('Three.js globe unavailable, fallback to Canvas globe:', err);
+            initCanvasGlobe(domId, sourceGeoData);
+        }
+    }
+
+    var THREE_GLOBE_TEXTURES = {
+        earth: 'https://raw.githubusercontent.com/mrdoob/three.js/r132/examples/textures/planets/earth_atmos_2048.jpg',
+        clouds: 'https://raw.githubusercontent.com/mrdoob/three.js/r132/examples/textures/planets/earth_clouds_1024.png',
+        specular: 'https://raw.githubusercontent.com/mrdoob/three.js/r132/examples/textures/planets/earth_specular_2048.jpg',
+        normal: 'https://raw.githubusercontent.com/mrdoob/three.js/r132/examples/textures/planets/earth_normal_2048.jpg'
+    };
+
+    function browserSupportsWebGL() {
+        try {
+            var canvas = document.createElement('canvas');
+            return !!(window.WebGLRenderingContext &&
+                (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+        } catch (err) {
+            return false;
+        }
+    }
+
+    function initThreeGlobe(domId, sourceGeoData) {
+        var dom = document.getElementById(domId);
+        if (!dom) return;
+        if (!window.THREE || !THREE.WebGLRenderer || !THREE.OrbitControls) {
+            throw new Error('Three.js 或 OrbitControls 未加载');
+        }
+        if (!browserSupportsWebGL()) {
+            throw new Error('当前浏览器不支持 WebGL');
+        }
+
+        sourceGeoData = (sourceGeoData || []).filter(function(item) {
+            return item.coord && item.coord.length >= 2;
+        });
+        var maxValue = Math.max.apply(null, sourceGeoData.map(function(item) {
+            return Number(item.value || 0);
+        }).concat([1]));
+
+        dom.innerHTML = '<canvas class="three-globe-canvas" aria-label="Three.js 3D 数据来源地球"></canvas>' +
+            '<div class="globe-tooltip" role="tooltip"></div>' +
+            '<div class="globe-hint">拖动旋转 · 悬停查看来源详情</div>' +
+            '<div class="globe-engine-badge">Three.js 数字地球 · Canvas 兜底</div>';
+
+        var canvas = dom.querySelector('canvas');
+        var tooltip = dom.querySelector('.globe-tooltip');
+        var scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x020617);
+        scene.fog = new THREE.FogExp2(0x020617, 0.0011);
+
+        var camera = new THREE.PerspectiveCamera(42, 1, 0.1, 4000);
+        camera.position.set(0, 12, 320);
+
+        var renderer = new THREE.WebGLRenderer({canvas: canvas, antialias: true, alpha: true});
+        renderer.setClearColor(0x020617, 0);
+        renderer.setPixelRatio(Math.max(1, Math.min(window.devicePixelRatio || 1, 2)));
+        if (THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
+
+        var controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.055;
+        controls.rotateSpeed = 0.42;
+        controls.enablePan = false;
+        controls.enableZoom = false;
+
+        var globeGroup = new THREE.Group();
+        scene.add(globeGroup);
+
+        createStarField(scene);
+
+        scene.add(new THREE.AmbientLight(0x93c5fd, 0.34));
+        var hemi = new THREE.HemisphereLight(0xbde6ff, 0x07111f, 0.62);
+        scene.add(hemi);
+        var sun = new THREE.DirectionalLight(0xffffff, 1.18);
+        sun.position.set(420, 180, 280);
+        scene.add(sun);
+        var rim = new THREE.DirectionalLight(0x38bdf8, 0.38);
+        rim.position.set(-260, 110, -220);
+        scene.add(rim);
+
+        var animationId = null;
+        var resizeObserver = null;
+        var threeDisposed = false;
+        var fallbackTriggered = false;
+        var textureLoader = new THREE.TextureLoader();
+        textureLoader.setCrossOrigin('anonymous');
+        var earthTexture = loadGlobeTexture(THREE_GLOBE_TEXTURES.earth, true, '地球纹理');
+        var cloudTexture = loadGlobeTexture(THREE_GLOBE_TEXTURES.clouds, false, '云层纹理');
+        var specularTexture = loadGlobeTexture(THREE_GLOBE_TEXTURES.specular, false, '海洋高光纹理');
+        var normalTexture = loadGlobeTexture(THREE_GLOBE_TEXTURES.normal, false, '地形法线纹理');
+
+        var earth = new THREE.Mesh(
+            new THREE.SphereGeometry(100, 96, 96),
+            new THREE.MeshPhongMaterial({
+                map: earthTexture,
+                specularMap: specularTexture,
+                normalMap: normalTexture,
+                normalScale: new THREE.Vector2(0.55, 0.55),
+                specular: new THREE.Color(0x1e293b),
+                shininess: 8
+            })
+        );
+        globeGroup.add(earth);
+
+        var clouds = new THREE.Mesh(
+            new THREE.SphereGeometry(101.4, 96, 96),
+            new THREE.MeshPhongMaterial({
+                map: cloudTexture,
+                transparent: true,
+                opacity: 0.42,
+                depthWrite: false
+            })
+        );
+        globeGroup.add(clouds);
+
+        var atmosphere = new THREE.Mesh(
+            new THREE.SphereGeometry(107, 96, 96),
+            new THREE.ShaderMaterial({
+                uniforms: {
+                    glowColor: {value: new THREE.Color(0x38bdf8)},
+                    viewVector: {value: camera.position}
+                },
+                vertexShader: [
+                    'uniform vec3 viewVector;',
+                    'varying float intensity;',
+                    'void main() {',
+                    '  vec3 vNormal = normalize(normalMatrix * normal);',
+                    '  vec3 vNormel = normalize(normalMatrix * viewVector);',
+                    '  intensity = pow(0.72 - dot(vNormal, vNormel), 3.0);',
+                    '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+                    '}'
+                ].join('\n'),
+                fragmentShader: [
+                    'uniform vec3 glowColor;',
+                    'varying float intensity;',
+                    'void main() {',
+                    '  gl_FragColor = vec4(glowColor, clamp(intensity, 0.0, 1.0) * 0.72);',
+                    '}'
+                ].join('\n'),
+                side: THREE.BackSide,
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+                depthWrite: false
+            })
+        );
+        scene.add(atmosphere);
+
+        var markerGroup = new THREE.Group();
+        globeGroup.add(markerGroup);
+        var markerMeshes = [];
+        var pulseRings = [];
+        var flightDots = [];
+        var sourceHub = lonLatToVector3(116.4074, 39.9042, 102.5);
+
+        var markerMaterial = new THREE.MeshPhongMaterial({
+            color: 0x38bdf8,
+            emissive: 0x0ea5e9,
+            emissiveIntensity: 0.9,
+            shininess: 24
+        });
+        var ringMaterial = new THREE.MeshBasicMaterial({
+            color: 0x7dd3fc,
+            transparent: true,
+            opacity: 0.36,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        });
+        var arcMaterial = new THREE.LineBasicMaterial({
+            color: 0x38bdf8,
+            transparent: true,
+            opacity: 0.25,
+            blending: THREE.AdditiveBlending
+        });
+        var flightMaterial = new THREE.MeshBasicMaterial({
+            color: 0xfacc15,
+            transparent: true,
+            opacity: 0.92,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        sourceGeoData.forEach(function(item, index) {
+            var lon = Number(item.coord[0]);
+            var lat = Number(item.coord[1]);
+            if (!isFinite(lon) || !isFinite(lat)) return;
+            var strength = Math.sqrt(Math.max(Number(item.value || 0), 1) / maxValue);
+            var markerSize = 2.0 + strength * 4.4;
+            var pos = lonLatToVector3(lon, lat, 104.2);
+            var normal = pos.clone().normalize();
+
+            var marker = new THREE.Mesh(
+                new THREE.SphereGeometry(markerSize, 18, 18),
+                markerMaterial.clone()
+            );
+            marker.position.copy(pos);
+            marker.userData = {source: item};
+            markerMeshes.push(marker);
+            markerGroup.add(marker);
+
+            var glow = new THREE.Sprite(new THREE.SpriteMaterial({
+                map: createGlowTexture(),
+                color: 0x38bdf8,
+                transparent: true,
+                opacity: 0.72,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            }));
+            glow.position.copy(normal.clone().multiplyScalar(106.4));
+            var glowSize = 13 + strength * 18;
+            glow.scale.set(glowSize, glowSize, 1);
+            markerGroup.add(glow);
+
+            var ring = new THREE.Mesh(
+                new THREE.RingGeometry(markerSize * 1.8, markerSize * 2.35, 40),
+                ringMaterial.clone()
+            );
+            ring.position.copy(normal.clone().multiplyScalar(105.1));
+            ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+            ring.userData = {baseScale: 1 + strength * 0.2, phase: index * 0.7};
+            pulseRings.push(ring);
+            markerGroup.add(ring);
+
+            var end = lonLatToVector3(lon, lat, 103.2);
+            if (end.distanceTo(sourceHub) > 3) {
+                var mid = sourceHub.clone().add(end).normalize().multiplyScalar(122 + strength * 34);
+                var curve = new THREE.QuadraticBezierCurve3(sourceHub.clone(), mid, end.clone());
+                var arc = new THREE.Line(
+                    new THREE.BufferGeometry().setFromPoints(curve.getPoints(54)),
+                    arcMaterial.clone()
+                );
+                markerGroup.add(arc);
+
+                var dot = new THREE.Mesh(new THREE.SphereGeometry(1.25 + strength * 1.4, 12, 12), flightMaterial.clone());
+                dot.userData = {curve: curve, speed: 0.10 + strength * 0.08, offset: index / Math.max(sourceGeoData.length, 1)};
+                flightDots.push(dot);
+                markerGroup.add(dot);
+            }
+
+            if (index < 6) {
+                var label = new THREE.Sprite(new THREE.SpriteMaterial({
+                    map: createLabelTexture(item.name || '未知来源', formatNumber(item.value || 0) + ' 条'),
+                    transparent: true,
+                    depthTest: false,
+                    depthWrite: false
+                }));
+                label.position.copy(normal.clone().multiplyScalar(126 + index % 2 * 4));
+                label.scale.set(52, 19, 1);
+                label.renderOrder = 20;
+                markerGroup.add(label);
+            }
+        });
+
+        if (!sourceGeoData.length) {
+            var emptyLabel = new THREE.Sprite(new THREE.SpriteMaterial({
+                map: createLabelTexture('暂无来源点位', '完成采集后自动标注'),
+                transparent: true,
+                depthTest: false,
+                depthWrite: false
+            }));
+            emptyLabel.position.set(0, -138, 0);
+            emptyLabel.scale.set(70, 24, 1);
+            scene.add(emptyLabel);
+        }
+
+        var raycaster = new THREE.Raycaster();
+        var mouse = new THREE.Vector2();
+        var pointerInside = false;
+        var dragging = false;
+        var clock = new THREE.Clock();
+
+        function loadGlobeTexture(url, required, label) {
+            return textureLoader.load(url, undefined, undefined, function(err) {
+                console.warn('Dashboard globe texture failed: ' + label, err);
+                if (required) {
+                    fallbackToCanvas(label + '加载失败');
+                }
+            });
+        }
+
+        function disposeMaterial(material) {
+            if (!material) return;
+            if (Array.isArray(material)) {
+                material.forEach(disposeMaterial);
+                return;
+            }
+            ['map', 'specularMap', 'normalMap', 'alphaMap', 'emissiveMap'].forEach(function(key) {
+                if (material[key] && material[key].dispose) material[key].dispose();
+            });
+            if (material.dispose) material.dispose();
+        }
+
+        function cleanupThreeGlobe() {
+            if (threeDisposed) return;
+            threeDisposed = true;
+            if (animationId) cancelAnimationFrame(animationId);
+            canvas.removeEventListener('mousemove', onPointerMove);
+            canvas.removeEventListener('mousedown', onPointerDown);
+            window.removeEventListener('mouseup', onPointerUp);
+            canvas.removeEventListener('mouseleave', onPointerLeave);
+            canvas.removeEventListener('touchstart', onPointerDown);
+            canvas.removeEventListener('touchend', onPointerUp);
+            if (resizeObserver) resizeObserver.disconnect();
+            else window.removeEventListener('resize', resize);
+            scene.traverse(function(obj) {
+                if (obj.geometry && obj.geometry.dispose) obj.geometry.dispose();
+                disposeMaterial(obj.material);
+            });
+            controls.dispose();
+            renderer.dispose();
+            if (renderer.forceContextLoss) renderer.forceContextLoss();
+        }
+
+        function fallbackToCanvas(reason) {
+            if (fallbackTriggered) return;
+            fallbackTriggered = true;
+            console.warn('Dashboard Three.js globe fallback to Canvas:', reason);
+            cleanupThreeGlobe();
+            initCanvasGlobe(domId, sourceGeoData);
+        }
+
+        function createStarField(targetScene) {
+            var count = 1400;
+            var positions = new Float32Array(count * 3);
+            for (var i = 0; i < count; i++) {
+                positions[i * 3] = THREE.MathUtils.randFloatSpread(1600);
+                positions[i * 3 + 1] = THREE.MathUtils.randFloatSpread(900);
+                positions[i * 3 + 2] = THREE.MathUtils.randFloatSpread(1600) - 160;
+            }
+            var stars = new THREE.BufferGeometry();
+            stars.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            targetScene.add(new THREE.Points(stars, new THREE.PointsMaterial({
+                color: 0xdbeafe,
+                size: 1.25,
+                transparent: true,
+                opacity: 0.78,
+                depthWrite: false
+            })));
+        }
+
+        function lonLatToVector3(lon, lat, radius) {
+            var phi = (90 - lat) * Math.PI / 180;
+            var theta = (lon + 180) * Math.PI / 180;
+            return new THREE.Vector3(
+                -radius * Math.sin(phi) * Math.cos(theta),
+                radius * Math.cos(phi),
+                radius * Math.sin(phi) * Math.sin(theta)
+            );
+        }
+
+        function createGlowTexture() {
+            var size = 96;
+            var c = document.createElement('canvas');
+            c.width = size;
+            c.height = size;
+            var g = c.getContext('2d');
+            var grad = g.createRadialGradient(size / 2, size / 2, 2, size / 2, size / 2, size / 2);
+            grad.addColorStop(0, 'rgba(255,255,255,1)');
+            grad.addColorStop(0.24, 'rgba(125,211,252,.88)');
+            grad.addColorStop(0.60, 'rgba(14,165,233,.28)');
+            grad.addColorStop(1, 'rgba(14,165,233,0)');
+            g.fillStyle = grad;
+            g.fillRect(0, 0, size, size);
+            var tex = new THREE.CanvasTexture(c);
+            tex.needsUpdate = true;
+            return tex;
+        }
+
+        function createLabelTexture(title, sub) {
+            var c = document.createElement('canvas');
+            c.width = 360;
+            c.height = 124;
+            var g = c.getContext('2d');
+            var grad = g.createLinearGradient(0, 0, c.width, c.height);
+            grad.addColorStop(0, 'rgba(15,23,42,.90)');
+            grad.addColorStop(1, 'rgba(8,47,73,.78)');
+            roundRect(g, 8, 10, 344, 92, 18);
+            g.fillStyle = grad;
+            g.fill();
+            g.strokeStyle = 'rgba(125,211,252,.42)';
+            g.lineWidth = 2;
+            g.stroke();
+            g.fillStyle = '#e0f2fe';
+            g.font = 'bold 30px Microsoft YaHei, Arial';
+            g.fillText(String(title).slice(0, 11), 28, 48);
+            g.fillStyle = 'rgba(186,230,253,.82)';
+            g.font = '24px Microsoft YaHei, Arial';
+            g.fillText(sub, 28, 82);
+            var tex = new THREE.CanvasTexture(c);
+            tex.needsUpdate = true;
+            return tex;
+        }
+
+        function roundRect(context, x, y, w, h, r) {
+            context.beginPath();
+            context.moveTo(x + r, y);
+            context.arcTo(x + w, y, x + w, y + h, r);
+            context.arcTo(x + w, y + h, x, y + h, r);
+            context.arcTo(x, y + h, x, y, r);
+            context.arcTo(x, y, x + w, y, r);
+            context.closePath();
+        }
+
+        function resize() {
+            var rect = dom.getBoundingClientRect();
+            var width = Math.max(320, rect.width || dom.clientWidth || 320);
+            var height = Math.max(300, rect.height || dom.clientHeight || 300);
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height, false);
+        }
+
+        function showTooltip(item, event) {
+            if (!tooltip || !item) {
+                if (tooltip) tooltip.style.opacity = '0';
+                return;
+            }
+            var rect = dom.getBoundingClientRect();
+            tooltip.innerHTML = '<strong>' + escapeHtml(item.name || '未知来源') + '</strong><br>' +
+                '城市：' + escapeHtml(item.city || '未知') + '<br>' +
+                '数量：' + formatNumber(item.value) + ' 条<br>' +
+                '今日：' + formatNumber(item.today_count) + ' 条 · 深采：' + formatNumber(item.deep_count) + ' 条<br>' +
+                '域名：' + escapeHtml(item.domain || '未知');
+            tooltip.style.left = (event.clientX - rect.left) + 'px';
+            tooltip.style.top = (event.clientY - rect.top) + 'px';
+            tooltip.style.opacity = '1';
+        }
+
+        function onPointerMove(event) {
+            var rect = renderer.domElement.getBoundingClientRect();
+            pointerInside = true;
+            mouse.x = ((event.clientX - rect.left) / Math.max(rect.width, 1)) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / Math.max(rect.height, 1)) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            var intersects = raycaster.intersectObjects(markerMeshes, false);
+            if (intersects.length) {
+                canvas.style.cursor = 'pointer';
+                showTooltip(intersects[0].object.userData.source, event);
+            } else {
+                canvas.style.cursor = dragging ? 'grabbing' : 'grab';
+                showTooltip(null);
+            }
+        }
+        function onPointerDown() {
+            dragging = true;
+            canvas.style.cursor = 'grabbing';
+        }
+        function onPointerUp() {
+            dragging = false;
+            canvas.style.cursor = pointerInside ? 'grab' : 'default';
+        }
+        function onPointerLeave() {
+            pointerInside = false;
+            dragging = false;
+            canvas.style.cursor = 'default';
+            showTooltip(null);
+        }
+
+        function animate() {
+            if (threeDisposed) return;
+            var elapsed = clock.getElapsedTime();
+            if (!dragging) {
+                globeGroup.rotation.y += 0.00135;
+            }
+            clouds.rotation.y += 0.00055;
+            pulseRings.forEach(function(ring) {
+                var pulse = 1 + Math.sin(elapsed * 2.1 + ring.userData.phase) * 0.18;
+                ring.scale.setScalar(ring.userData.baseScale * pulse);
+                ring.material.opacity = 0.26 + Math.sin(elapsed * 2.1 + ring.userData.phase) * 0.10;
+            });
+            flightDots.forEach(function(dot) {
+                var t = (elapsed * dot.userData.speed + dot.userData.offset) % 1;
+                dot.position.copy(dot.userData.curve.getPoint(t));
+                dot.material.opacity = 0.35 + Math.sin(Math.PI * t) * 0.55;
+            });
+            atmosphere.material.uniforms.viewVector.value.copy(camera.position);
+            controls.update();
+            renderer.render(scene, camera);
+            animationId = requestAnimationFrame(animate);
+        }
+
+        canvas.addEventListener('mousemove', onPointerMove);
+        canvas.addEventListener('mousedown', onPointerDown);
+        window.addEventListener('mouseup', onPointerUp);
+        canvas.addEventListener('mouseleave', onPointerLeave);
+        canvas.addEventListener('touchstart', onPointerDown, {passive: true});
+        canvas.addEventListener('touchend', onPointerUp);
+
+        if (typeof ResizeObserver !== 'undefined') {
+            resizeObserver = new ResizeObserver(resize);
+            resizeObserver.observe(dom);
+        } else {
+            window.addEventListener('resize', resize);
+        }
+        resize();
+        animate();
+
+        charts[domId] = {
+            resize: resize,
+            dispose: function() {
+                cleanupThreeGlobe();
+            }
+        };
+    }
+
+    function initCanvasGlobe(domId, sourceGeoData) {
         var dom = document.getElementById(domId);
         if (!dom) return;
         dom.innerHTML = '<canvas class="globe-canvas" aria-label="3D 数据来源地球"></canvas>' +
@@ -1483,7 +2014,7 @@ body.dark-theme {
                     renderRecentList(data.recent_items || []);
                     // 重新初始化所有图表
                     safeChart('globe-refresh', function() { initGlobe('chart-globe', data.source_geo || []); }, function() {
-                        setChartFallback('chart-globe', '来源点位预览（Canvas 初始化失败时降级）', data.source_geo || [], 'bars');
+                        setChartFallback('chart-globe', '来源点位预览（3D 地球初始化失败时降级）', data.source_geo || [], 'bars');
                     });
                     safeChart('wordcloud-refresh', function() { initWordCloud('chart-wordcloud', data.keywords || []); }, function() {
                         setChartFallback('chart-wordcloud', '关键词预览（词云插件不可用时降级）', data.keywords || [], 'chips');
@@ -1525,7 +2056,7 @@ body.dark-theme {
             });
     };
 
-    // 初始化：3D 地球不依赖 ECharts；其他图表若 ECharts/CDN 不可用会独立降级。
+    // 初始化：3D 地球使用 Three.js 主实现并内置 Canvas 兜底；其他图表若 ECharts/CDN 不可用会独立降级。
     initCharts();
 })();
 </script>
