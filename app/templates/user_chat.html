@@ -403,6 +403,7 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
     /* ====== 手势摄像头区域 ====== */
     .gesture-container {
         margin: 0 0 8px 0;
+        flex-shrink: 0;
         border-radius: var(--radius-md);
         overflow: hidden;
         background: rgba(0,0,0,0.3);
@@ -412,7 +413,7 @@ var isDarkTheme = document.body.classList.contains('dark-theme') ||
     .gesture-container.active { display: block; }
     .gesture-preview {
         position: relative;
-        width: min(100%, 640px, 60vh);
+        width: min(100%, 640px, calc(100vh - 268px));
         aspect-ratio: 4 / 3;
         margin: 0 auto;
         overflow: hidden;

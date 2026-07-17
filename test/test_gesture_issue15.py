@@ -137,7 +137,8 @@ class TestGestureTemplate:
         assert preview_end < guide_start
         assert ".gesture-preview canvas" in content
         assert ".gesture-container canvas" not in content
-        assert "width: min(100%, 640px, 60vh)" in content
+        assert "flex-shrink: 0" in content
+        assert "width: min(100%, 640px, calc(100vh - 268px))" in content
 
     def test_camera_button_in_header(self):
         """摄像头按钮在聊天头部区域"""
