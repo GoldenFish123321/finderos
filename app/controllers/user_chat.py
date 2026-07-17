@@ -33,15 +33,13 @@ from app.utils.safe_http import SafeHttpError, safe_http_request
 # ── MCP 模块（新增） ──
 from app.mcp.server import MCPServer
 from app.mcp.client import MCPClient, set_mcp_context, clear_mcp_context
-from app.mcp.tools import register_all_tools
-
 logger = logging.getLogger(__name__)
 
-# ── 全局初始化：MCP Server 单例 + 工具注册 ──
+# ── 全局初始化：MCP Server 单例 + 客户端 ──
+# 注意：工具注册在 main.py __main__ 块中 init_db() 之后统一执行，
+# 避免模块导入时数据库尚未初始化导致 "no such table: mcp_tools"。
 _mcp_server = MCPServer.get_instance()
-register_all_tools(_mcp_server)
 _mcp_client = MCPClient(_mcp_server)
-logger.info(f"MCP 模块已初始化，共 {_mcp_server.tool_count} 个工具可用: {_mcp_server.tool_names}")
 
 # ── 全局线程池 ──
 _user_chat_executor = concurrent.futures.ThreadPoolExecutor(
