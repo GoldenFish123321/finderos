@@ -93,6 +93,14 @@ class UserFormHandler(AdminBaseHandler):
 
         role_id = int(role_id_str) if role_id_str else None
 
+        if password:
+            valid, pwd_error = validate_password_strength(password)
+            if not valid:
+                self.write(
+                    f'<script>alert("{xhtml_escape(pwd_error)}");window.history.back();</script>'
+                )
+                return
+
         if user_id:  # 编辑
             user_id = int(user_id)
             existing = UserRepository.get_user_by_id(user_id)

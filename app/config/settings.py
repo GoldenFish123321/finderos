@@ -14,7 +14,7 @@ class Settings:
     """全局应用配置"""
 
     # === 应用版本（唯一硬编码位置） ===
-    VERSION = "1.9.8-beta"
+    VERSION = "1.9.9-beta"
     """应用版本号。项目中所有版本展示均由此处统一管理。"""
 
     # === UI 可配置项（默认值，启动后被 DB system_config 表覆盖） ===
@@ -109,7 +109,7 @@ class Settings:
             "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "img-src 'self' data: https: blob:; "
-            "media-src 'self' https:; "
+            "media-src 'self' blob: https:; "
             "font-src 'self' https://cdn.jsdelivr.net; "
             "connect-src 'self' https://cdn.jsdelivr.net blob: https://*.jsdelivr.net; "
             "worker-src 'self' blob:; "

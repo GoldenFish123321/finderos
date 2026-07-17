@@ -96,8 +96,10 @@ class AdminDashboardHandler(AdminBaseHandler):
     def get(self):
         stats = DataWarehouseRepository.get_dashboard_stats()
         source_dist = DataWarehouseRepository.get_source_distribution(8)
+        source_geo = DataWarehouseRepository.get_dashboard_source_geo(12)
         trend = DataWarehouseRepository.get_trend_data(14)
         keywords = DataWarehouseRepository.get_keyword_frequency(50)
+        recent_items = DataWarehouseRepository.get_recent_dashboard_items(8)
 
         self.render(
             "admin/dashboard.html",
@@ -106,8 +108,10 @@ class AdminDashboardHandler(AdminBaseHandler):
             xsrf_token=self.xsrf_token.decode() if isinstance(self.xsrf_token, bytes) else self.xsrf_token,
             stats=stats,
             source_distribution=source_dist,
+            source_geo=source_geo,
             trend=trend,
             keywords=keywords,
+            recent_items=recent_items,
         )
 
 
@@ -118,15 +122,19 @@ class AdminDashboardApiHandler(AdminBaseHandler):
     def get(self):
         stats = DataWarehouseRepository.get_dashboard_stats()
         source_dist = DataWarehouseRepository.get_source_distribution(8)
+        source_geo = DataWarehouseRepository.get_dashboard_source_geo(12)
         trend = DataWarehouseRepository.get_trend_data(14)
         keywords = DataWarehouseRepository.get_keyword_frequency(50)
+        recent_items = DataWarehouseRepository.get_recent_dashboard_items(8)
 
         self.write({
             "code": 0,
             "data": {
                 "stats": stats,
                 "source_distribution": source_dist,
+                "source_geo": source_geo,
                 "trend": trend,
                 "keywords": keywords,
+                "recent_items": recent_items,
             }
         })

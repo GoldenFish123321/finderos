@@ -419,6 +419,9 @@ class UserAccountHandler(BaseHandler):
                 return render_page(error="请填写所有密码字段")
             if new_password != confirm_password:
                 return render_page(error="两次输入的新密码不一致")
+            valid, pwd_error = validate_password_strength(new_password)
+            if not valid:
+                return render_page(error=pwd_error)
 
             user = UserRepository.get_user_by_username(self.current_user)
             success, msg = UserRepository.update_password(

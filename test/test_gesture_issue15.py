@@ -122,6 +122,24 @@ class TestGestureTemplate:
         assert 'id="btn-gesture-help"' in content, "缺少手势说明入口"
         assert 'id="gesture-guide"' in content, "缺少手势说明区域"
 
+    def test_camera_layers_are_scoped_to_preview(self):
+        """摄像头和骨架画布不能覆盖下方手势说明。"""
+        with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        preview_start = content.index('<div class="gesture-preview"')
+        preview_end = content.index('<div class="gesture-hint"', preview_start)
+        preview_html = content[preview_start:preview_end]
+        guide_start = content.index('<div class="gesture-guide"', preview_end)
+
+        assert 'id="gesture-video"' in preview_html
+        assert 'id="gesture-canvas"' in preview_html
+        assert preview_end < guide_start
+        assert ".gesture-preview canvas" in content
+        assert ".gesture-container canvas" not in content
+        assert "flex-shrink: 0" in content
+        assert "width: min(100%, 640px, calc(100vh - 268px))" in content
+
     def test_camera_button_in_header(self):
         """摄像头按钮在聊天头部区域"""
         with open(self.TEMPLATE_PATH, "r", encoding="utf-8") as f:

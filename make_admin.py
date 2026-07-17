@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.config.settings import settings
 from app.models.db import init_db, get_db
+from app.utils.security import validate_password_strength
 
 # 默认角色 ID：1=系统管理员, 2=普通用户
 DEFAULT_ADMIN_ROLE_ID = 1
@@ -150,6 +151,10 @@ def main():
 
     if len(password) < 8:
         print("错误: 密码长度至少 8 个字符")
+        sys.exit(1)
+    valid, password_error = validate_password_strength(password)
+    if not valid:
+        print(f"错误: {password_error}")
         sys.exit(1)
 
     create_admin(username, password, args.role_id)

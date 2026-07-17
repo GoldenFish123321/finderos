@@ -2,8 +2,9 @@
 face_auth.py — 人脸识别登录服务
 
 使用 OpenCV 提供人脸检测与识别功能。
-- 注册：检测人脸 → 提取人脸 ROI → 训练 LBPH 模型
+- 注册：检测人脸 → 提取人脸 ROI → 训练 LBPH 模型 → 人脸图像存入数据库 BLOB
 - 登录：检测人脸 → LBPH 预测 → 返回匹配用户
+- v1.9.0: 人脸图像从文件系统迁移到数据库存储，不再依赖 uploads/{username}.jpg
 """
 
 import json
@@ -14,6 +15,8 @@ import tempfile
 
 import cv2
 import numpy as np
+
+from app.models.db import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +231,10 @@ def _ensure_model():
 
 
 def _save_model():
-    """将所有已注册的人脸图像重新训练并保存模型。"""
+    """将所有已注册的人脸图像（从数据库 BLOB）重新训练并保存 LBPH 模型。
+
+    v1.9.0: 优先从数据库 face_image 列加载；若为空则回退到文件系统。
+    """
     global _model_loaded
     if not is_face_recognition_available():
         logger.warning("OpenCV contrib face module is unavailable; face model was not trained")
@@ -243,13 +249,19 @@ def _save_model():
     labels = []
     lid = 0
     new_map = {}
+
     for username in label_map:
-        face_path = os.path.join(UPLOAD_DIR, f"{username}.jpg")
-        img = _read_image_file(face_path, cv2.IMREAD_GRAYSCALE)
-        if img is not None:
-            if img.shape[:2] != _FACE_SIZE:
-                img = cv2.resize(img, _FACE_SIZE, interpolation=cv2.INTER_AREA)
-            faces.append(img)
+        face_img = _load_face_from_db(username)
+
+        # 回退：如果数据库中无数据，尝试从文件系统加载（兼容旧数据）
+        if face_img is None:
+            face_path = os.path.join(UPLOAD_DIR, f"{username}.jpg")
+            face_img = _read_image_file(face_path, cv2.IMREAD_GRAYSCALE)
+
+        if face_img is not None:
+            if face_img.shape[:2] != _FACE_SIZE:
+                face_img = cv2.resize(face_img, _FACE_SIZE, interpolation=cv2.INTER_AREA)
+            faces.append(face_img)
             labels.append(lid)
             new_map[username] = lid
             lid += 1
@@ -262,7 +274,7 @@ def _save_model():
         with open(_LABELS_PATH, "w", encoding="utf-8") as f:
             json.dump(new_map, f)
         _model_loaded = True
-        logger.info("Face model retrained with %d samples", len(faces))
+        logger.info("Face model retrained with %d samples (from DB)", len(faces))
         return True
     else:
         # 没有人脸数据时删除模型文件
@@ -272,6 +284,27 @@ def _save_model():
         with open(_LABELS_PATH, "w", encoding="utf-8") as f:
             json.dump({}, f)
         return False
+
+
+def _load_face_from_db(username: str):
+    """从数据库加载用户的人脸图像（100×100 灰度图）。
+
+    Returns:
+        numpy.ndarray | None: 灰度人脸图像，或 None 表示无数据
+    """
+    try:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT face_image FROM users WHERE username = ?", (username,)
+            ).fetchone()
+            if row and row.get("face_image") is not None:
+                blob = row["face_image"]
+                nparr = np.frombuffer(blob, np.uint8)
+                img = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
+                return img
+    except Exception as e:
+        logger.warning("Failed to load face from DB for %s: %s", username, e)
+    return None
 
 
 def detect_face(image_bytes: bytes):
@@ -308,7 +341,7 @@ def detect_face(image_bytes: bytes):
 def register_face(username: str, image_bytes: bytes) -> bool:
     """注册用户人脸。
 
-    检测人脸并保存到 uploads/{username}.jpg，然后重新训练 LBPH 模型。
+    检测人脸并保存归一化图像到数据库 BLOB，然后重新训练 LBPH 模型。
 
     Args:
         username: 用户名
@@ -321,17 +354,46 @@ def register_face(username: str, image_bytes: bytes) -> bool:
     if face is None:
         return False
 
-    # 保存人脸图像
-    face_path = os.path.join(UPLOAD_DIR, f"{username}.jpg")
-    previous_face_bytes = None
-    if os.path.exists(face_path):
-        try:
-            with open(face_path, "rb") as f:
-                previous_face_bytes = f.read()
-        except OSError:
-            previous_face_bytes = None
+    # 将归一化人脸图像编码为 JPEG 存入数据库 BLOB
+    ok, encoded_face = cv2.imencode(".jpg", face)
+    if not ok:
+        logger.error("Failed to encode face image for %s", username)
+        return False
+    face_blob = encoded_face.tobytes()
 
-    if not _write_image_file(face_path, face):
+    # 备份旧数据（用于回滚）
+    previous_blob = None
+    try:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT face_image FROM users WHERE username = ?", (username,)
+            ).fetchone()
+            if row:
+                previous_blob = row.get("face_image")
+    except Exception:
+        pass
+
+    # 保存人脸图像到数据库
+    try:
+        with get_db() as conn:
+            # 检查用户是否存在
+            existing = conn.execute(
+                "SELECT id FROM users WHERE username = ?", (username,)
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    "UPDATE users SET face_image = ? WHERE username = ?",
+                    (face_blob, username),
+                )
+            else:
+                # 用户不存在时创建一个最小记录（用于测试或边缘场景）
+                conn.execute(
+                    "INSERT INTO users (username, password_hash, salt, face_image) "
+                    "VALUES (?, ?, ?, ?)",
+                    (username, "", "", face_blob),
+                )
+    except Exception as e:
+        logger.error("Failed to save face image to DB for %s: %s", username, e)
         return False
 
     # 更新标签映射
@@ -349,12 +411,13 @@ def register_face(username: str, image_bytes: bytes) -> bool:
     # 重新训练模型
     if not _save_model():
         logger.error("Face model training failed after registering %s", username)
+        # 回滚：恢复旧的人脸数据和标签
         try:
-            if previous_face_bytes is not None:
-                with open(face_path, "wb") as f:
-                    f.write(previous_face_bytes)
-            elif os.path.exists(face_path):
-                os.remove(face_path)
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE users SET face_image = ? WHERE username = ?",
+                    (previous_blob, username),
+                )
             with open(_LABELS_PATH, "w", encoding="utf-8") as f:
                 json.dump(original_label_map, f)
         except Exception as e:
@@ -410,15 +473,37 @@ def recognize_face(image_bytes: bytes):
 
 
 def has_face(username: str) -> bool:
-    """检查用户是否已注册人脸。"""
-    return os.path.exists(os.path.join(UPLOAD_DIR, f"{username}.jpg"))
+    """检查用户是否已注册人脸（数据库中有 face_image BLOB）。"""
+    try:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT face_image FROM users WHERE username = ?", (username,)
+            ).fetchone()
+            return bool(row and row.get("face_image") is not None)
+    except Exception:
+        # 回退到文件检查（兼容旧数据）
+        return os.path.exists(os.path.join(UPLOAD_DIR, f"{username}.jpg"))
 
 
 def delete_face(username: str):
-    """删除用户注册的人脸。"""
+    """删除用户注册的人脸数据。"""
+    # 清除数据库中的 face_image
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE users SET face_image = NULL WHERE username = ?",
+                (username,),
+            )
+    except Exception as e:
+        logger.warning("Failed to clear face_image from DB for %s: %s", username, e)
+
+    # 同时清理可能存在的旧文件
     face_path = os.path.join(UPLOAD_DIR, f"{username}.jpg")
     if os.path.exists(face_path):
-        os.remove(face_path)
+        try:
+            os.remove(face_path)
+        except OSError:
+            pass
 
     # 更新标签映射
     if os.path.exists(_LABELS_PATH):

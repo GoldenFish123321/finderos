@@ -263,8 +263,11 @@ class UserRepository:
     @staticmethod
     def update_password(user_id: int, old_password: str, new_password: str) -> tuple:
         """更新用户密码。验证旧密码后更新为新密码。返回 (成功, 消息)。"""
-        if not new_password or len(new_password) < 6:
-            return False, "新密码长度不能少于6个字符"
+        from app.utils.security import validate_password_strength
+
+        valid, error = validate_password_strength(new_password)
+        if not valid:
+            return False, error
         with get_db() as conn:
             row = conn.execute(
                 "SELECT password_hash, salt, is_enabled FROM users WHERE id = ?",

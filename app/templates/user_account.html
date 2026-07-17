@@ -72,11 +72,13 @@
             </div>
             <div class="input-group">
                 <label>新密码</label>
-                <input type="password" name="new_password" required>
+                <input type="password" name="new_password" required minlength="8"
+                       placeholder="至少8位，包含至少两类字符">
             </div>
             <div class="input-group">
                 <label>确认新密码</label>
-                <input type="password" name="confirm_password" required>
+                <input type="password" name="confirm_password" required minlength="8"
+                       placeholder="再次输入新密码">
             </div>
             <div class="action-row">
                 <button class="btn btn-primary" type="submit">修改密码</button>
