@@ -67,7 +67,7 @@
 | 编号 | 描述 | 状态 | 修复版本 | 关键 Commit |
 |------|------|------|---------|------------|
 | LOW-001 | 默认端口 `10010` 非标准 | 📋 **低优先级** | v1.3.4-beta | `53406c6` — #83：PORT 加入系统配置映射 |
-| LOW-002 | Permissions-Policy 未限制剪贴板 | 📋 **低优先级** | — | 当前仅限制 camera/microphone/geolocation |
+| LOW-002 | Permissions-Policy 未限制剪贴板 | 📋 **低优先级** | — | 当前限制 camera/microphone；geolocation 仅允许同源用于手势天气定位 |
 | LOW-003 | Brotli 解压失败回退暴露原始二进制 | ✅ **已修复** | v1.3.4-beta | `53406c6` — #58：解压失败返回错误而非原始数据 |
 | LOW-004 | 内存中明文短暂存储 API 密钥 | ⚠️ **已接受** | — | 架构固有局限，加密前短暂存在于内存 |
 
@@ -170,7 +170,7 @@
 - CSP：`frame-ancestors 'none'` + `base-uri 'self'` + `form-action 'self'` + `worker-src blob:`（MediaPipe WASM）
 - ⚠️ `unsafe-inline` 仍存在于 script-src/style-src（Layui 遗留，已文档化）
 - `X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: strict-origin-when-cross-origin`
-- `Permissions-Policy: camera=(self), microphone=(), geolocation=()`
+- `Permissions-Policy: camera=(self), microphone=(), geolocation=(self)`
 - ❌ 缺少 `Strict-Transport-Security`（HSTS）— 待添加
 - ❌ 仍含已弃用的 `X-XSS-Protection: 1; mode=block` — 待移除
 

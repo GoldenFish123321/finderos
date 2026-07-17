@@ -15,7 +15,15 @@ import atexit
 import concurrent.futures
 import tornado.web
 from app.controllers.admin_base import AdminBaseHandler
-from app.models.ai_model import AiModelRepository, CATEGORIES, PROVIDERS
+from app.models.ai_model import (
+    AiModelRepository,
+    CATEGORIES,
+    PROVIDERS,
+    PROVIDER_API_BASES,
+    is_provider_api_base_allowed,
+    normalize_api_base,
+    provider_api_base_hint,
+)
 from app.utils.security import write_audit_log
 from app.utils.safe_http import SafeHttpError, safe_http_request
 
@@ -29,11 +37,25 @@ atexit.register(_model_api_test_executor.shutdown, wait=True)
 
 def _model_connection_changed(model: dict, provider: str, api_base: str, model_name: str) -> bool:
     """Return whether endpoint-related fields changed for a model."""
+    api_base = normalize_api_base(api_base)
     return any([
         (model.get("provider") or "") != provider,
-        (model.get("api_base") or "") != api_base,
+        normalize_api_base(model.get("api_base") or "") != api_base,
         (model.get("model_name") or "") != model_name,
     ])
+
+
+def _validate_quick_config_api_base(provider: str, api_base: str) -> tuple[str, str]:
+    """Validate and normalize API Base for user quick config against provider whitelist."""
+    normalized = normalize_api_base(api_base)
+    if not normalized:
+        return "", "请选择 API Base URL"
+    if not is_provider_api_base_allowed(provider, normalized):
+        return "", (
+            "API Base URL 不在当前提供商白名单中。"
+            f"请从页面下拉选项中选择：{provider_api_base_hint(provider)}"
+        )
+    return normalized, ""
 
 
 def _resolve_quick_config_api_key(
@@ -378,6 +400,7 @@ class ModelQuickConfigHandler(AdminBaseHandler):
             model_options=model_options,
             is_new=(model is None),
             providers=PROVIDERS,
+            provider_api_bases=PROVIDER_API_BASES,
             categories=CATEGORIES,
             msg=msg,
         )
@@ -402,6 +425,10 @@ class ModelQuickConfigHandler(AdminBaseHandler):
             return
         if provider not in {p["value"] for p in PROVIDERS}:
             self.write('<script>alert("无效的提供商");window.history.back();</script>')
+            return
+        api_base, api_base_error = _validate_quick_config_api_base(provider, api_base)
+        if api_base_error:
+            self.write(f'<script>alert("{api_base_error}");window.history.back();</script>')
             return
         if category not in {c["value"] for c in CATEGORIES}:
             self.write('<script>alert("无效的模型分类");window.history.back();</script>')
@@ -489,6 +516,10 @@ class ModelQuickConfigTestHandler(AdminBaseHandler):
 
         if provider not in {p["value"] for p in PROVIDERS}:
             self.write({"code": 1, "msg": "无效的提供商", "status": 0})
+            return
+        api_base, api_base_error = _validate_quick_config_api_base(provider, api_base)
+        if api_base_error:
+            self.write({"code": 1, "msg": api_base_error, "status": 0})
             return
 
         api_key_to_test, key_error = _resolve_quick_config_api_key(

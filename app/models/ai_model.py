@@ -14,8 +14,68 @@ PROVIDERS = [
     {"value": "deepseek", "name": "DeepSeek"},
     {"value": "zhipu", "name": "Zhipu AI"},
     {"value": "baidu", "name": "Baidu Wenxin"},
-    {"value": "custom", "name": "Custom"},
+    {"value": "siliconflow", "name": "SiliconFlow"},
+    {"value": "moonshot", "name": "Moonshot / Kimi"},
+    {"value": "aliyun", "name": "Alibaba DashScope"},
+    {"value": "minimax", "name": "MiniMax"},
+    {"value": "custom", "name": "Custom / 预留"},
 ]
+
+PROVIDER_API_BASES = {
+    "openai": [
+        {"value": "https://api.openai.com/v1", "name": "OpenAI 官方 API"},
+    ],
+    "deepseek": [
+        {"value": "https://api.deepseek.com", "name": "DeepSeek 官方 API"},
+        {"value": "https://api.deepseek.com/v1", "name": "DeepSeek OpenAI 兼容 v1"},
+    ],
+    "zhipu": [
+        {"value": "https://open.bigmodel.cn/api/paas/v4", "name": "智谱 BigModel 兼容 API"},
+    ],
+    "baidu": [
+        {"value": "https://qianfan.baidubce.com/v2", "name": "百度千帆 OpenAI 兼容 API"},
+    ],
+    "siliconflow": [
+        {"value": "https://api.siliconflow.cn/v1", "name": "硅基流动 SiliconFlow"},
+    ],
+    "moonshot": [
+        {"value": "https://api.moonshot.cn/v1", "name": "Moonshot / Kimi"},
+    ],
+    "aliyun": [
+        {"value": "https://dashscope.aliyuncs.com/compatible-mode/v1", "name": "阿里云 DashScope 兼容模式"},
+    ],
+    "minimax": [
+        {"value": "https://api.minimax.chat/v1", "name": "MiniMax 兼容 API"},
+    ],
+    "custom": [],
+}
+
+
+def normalize_api_base(api_base: str) -> str:
+    """Normalize an API Base URL before storing or comparing."""
+    return (api_base or "").strip().rstrip("/")
+
+
+def get_provider_api_bases(provider: str) -> list[dict]:
+    """Return whitelisted API Base choices for a provider."""
+    return list(PROVIDER_API_BASES.get((provider or "").strip(), []))
+
+
+def is_provider_api_base_allowed(provider: str, api_base: str) -> bool:
+    """Check whether api_base is in the selected provider's whitelist."""
+    normalized = normalize_api_base(api_base)
+    return any(
+        normalize_api_base(item.get("value", "")) == normalized
+        for item in get_provider_api_bases(provider)
+    )
+
+
+def provider_api_base_hint(provider: str) -> str:
+    """Human readable whitelist hint for validation messages."""
+    choices = get_provider_api_bases(provider)
+    if not choices:
+        return "当前提供商暂无可选 API Base，请联系管理员维护白名单"
+    return "、".join(item["value"] for item in choices)
 
 # Model categories (扩展到6种，借鉴冯凯乐/陈子墨)
 CATEGORIES = [

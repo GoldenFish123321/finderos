@@ -167,7 +167,7 @@ data: {"code":1,"msg":"请输入关键词"}
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/admin/model` | 管理员提供模型列表（?page=&category=） |
-| GET/POST | `/admin/model/config` | 我的模型 API 快速配置（普通用户默认权限，按当前用户隔离，API Key 密码框回显且可显示/隐藏） |
+| GET/POST | `/admin/model/config` | 我的模型 API 快速配置（普通用户默认权限，按当前用户隔离，API Key 密码框回显且可显示/隐藏，API Base 按 Provider 白名单下拉选择） |
 | POST | `/admin/model/config/test` | 测试模型 API 配置连通性；请求体同快速配置表单，返回 `code/msg/status/elapsed_ms` |
 | GET/POST | `/admin/model/add` | 新增模型 |
 | GET/POST | `/admin/model/edit` | 编辑模型 |
@@ -175,7 +175,7 @@ data: {"code":1,"msg":"请输入关键词"}
 | POST | `/admin/model/toggle` | 启用/禁用 |
 | POST | `/admin/model/default` | 设为默认模型 |
 
-> 分组约束：`/admin/model` 仅管理 `model_scope=admin` 的管理员提供模型；`/admin/model/config` 仅管理当前用户 `model_scope=user + owner_username=<当前用户>` 的我的模型配置，避免多用户互相覆盖。安全约束：快速配置页修改 Provider、API Base 或 Model Name 且仍在使用已保存 API Key 时，页面会显示“复用当前密钥”确认区；用户必须重新输入新 Key，或显式勾选确认复用当前密钥，避免旧密钥被误发送到新的接口地址。
+> 分组约束：`/admin/model` 仅管理 `model_scope=admin` 的管理员提供模型；`/admin/model/config` 仅管理当前用户 `model_scope=user + owner_username=<当前用户>` 的我的模型配置，避免多用户互相覆盖。安全约束：快速配置页的 API Base 由 Provider 白名单驱动，用户选择厂商后从该厂商可用地址中下拉选择，保存和测试接口都会拒绝非白名单地址；修改 Provider、API Base 或 Model Name 且仍在使用已保存 API Key 时，页面会显示“复用当前密钥”确认区；用户必须重新输入新 Key，或显式勾选确认复用当前密钥，避免旧密钥被误发送到新的接口地址。
 
 ### 4.2 模型对话 (SSE) — ⚠️ 已废弃
 
