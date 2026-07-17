@@ -196,9 +196,13 @@
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | conversation_id | INTEGER FK | 所属对话（CASCADE 删除） |
-| role | TEXT NOT NULL | 角色（user/assistant/system） |
+| role | TEXT NOT NULL | 角色（user/assistant/tool） |
 | content | TEXT DEFAULT '' | 消息内容 |
 | token_count | INTEGER DEFAULT 0 | Token 消耗 |
+| tool_calls | TEXT DEFAULT NULL | assistant 消息中的工具调用 JSON 数组（v1.6.1+） |
+| tool_call_id | TEXT DEFAULT NULL | tool 消息对应的工具调用 ID（v1.6.1+） |
+| is_sensitive | INTEGER DEFAULT 0 | 敏感内容标记（Issue #18） |
+| review_status | TEXT DEFAULT 'pending' | 审核状态（Issue #18） |
 | created_at | TIMESTAMP | 创建时间 |
 
 ### api_interfaces 表（接口管理，Issue #26）

@@ -121,7 +121,8 @@ audit_logs (独立审计)
 用户消息 → POST /chat/stream
   → 有 API Key → 构建 messages + MCP tools (OpenAI Function Calling 格式)
       → LLM 返回 tool_calls 或 content
-      ├─ tool_calls → MCP Server.call_tool() → 结果追加 → 继续 LLM
+      ├─ tool_calls → MCP Server.call_tool() → 结果追加 → 继续 LLM (最多3轮)
+      │   └─ v1.6.1: 每轮工具调用持久化到 conversation_messages (tool_calls/tool_call_id)
       └─ content → SSE 流式输出
   → 无 API Key → MCP Client 语义匹配
       → 基于工具描述多维评分 → 执行最佳匹配工具

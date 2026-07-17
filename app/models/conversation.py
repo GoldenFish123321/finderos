@@ -170,8 +170,12 @@ class ConversationRepository:
             return cur.rowcount > 0
 
     @staticmethod
-    def add_message(conv_id: int, role: str, content: str, token_count: int = 0):
-        """向对话中添加一条消息；对话不存在时不再隐式复活。"""
+    def add_message(conv_id: int, role: str, content: str, token_count: int = 0,
+                    tool_calls: str = None, tool_call_id: str = None):
+        """向对话中添加一条消息；对话不存在时不再隐式复活。
+
+        v1.6.1: 新增 tool_calls / tool_call_id 参数，支持多轮工具调用持久化。
+        """
         with get_db() as conn:
             # 防御性检查：确保 conversation 存在
             exists = conn.execute(
@@ -184,9 +188,10 @@ class ConversationRepository:
                 )
                 return False
             conn.execute(
-                "INSERT INTO conversation_messages (conversation_id, role, content, token_count) "
-                "VALUES (?, ?, ?, ?)",
-                (conv_id, role, content, token_count),
+                "INSERT INTO conversation_messages "
+                "(conversation_id, role, content, token_count, tool_calls, tool_call_id) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (conv_id, role, content, token_count, tool_calls, tool_call_id),
             )
             # 同时更新对话时间戳
             conn.execute(
@@ -211,9 +216,27 @@ class ConversationRepository:
 
     @staticmethod
     def get_recent_messages(conv_id: int, limit: int = 10) -> list:
-        """获取对话最近 N 条消息，返回 (role, content) 列表。"""
+        """获取对话最近 N 条消息，返回 LLM API 兼容格式。
+
+        v1.6.1: 工具调用持久化支持 — 还原 tool_calls 和 tool_call_id 字段，
+        确保多轮对话中 LLM 能获取完整的工具调用上下文。
+        """
+        import json as _json
         messages = ConversationRepository.get_messages(conv_id, limit)
-        return [{"role": m["role"], "content": m["content"]} for m in messages]
+        result = []
+        for m in messages:
+            msg = {"role": m["role"], "content": m["content"]}
+            # 还原 assistant 消息中的 tool_calls 数组
+            if m.get("tool_calls"):
+                try:
+                    msg["tool_calls"] = _json.loads(m["tool_calls"])
+                except (_json.JSONDecodeError, TypeError):
+                    pass
+            # 还原 tool 消息中的 tool_call_id
+            if m.get("tool_call_id"):
+                msg["tool_call_id"] = m["tool_call_id"]
+            result.append(msg)
+        return result
 
     # ════════════════════════════════════════════════════════════
     # Issue #18: 独立消息管理（管理员逐条管理跨会话消息）

@@ -466,6 +466,13 @@ def init_db():
             if "review_status" not in cols:
                 conn.execute("ALTER TABLE conversation_messages ADD COLUMN review_status TEXT DEFAULT 'pending'")
                 logger.info("Database migration: added review_status column to conversation_messages")
+            # v1.6.1: 多轮工具调用持久化 — 添加 tool_calls / tool_call_id 列
+            if "tool_calls" not in cols:
+                conn.execute("ALTER TABLE conversation_messages ADD COLUMN tool_calls TEXT DEFAULT NULL")
+                logger.info("Database migration: added tool_calls column to conversation_messages")
+            if "tool_call_id" not in cols:
+                conn.execute("ALTER TABLE conversation_messages ADD COLUMN tool_call_id TEXT DEFAULT NULL")
+                logger.info("Database migration: added tool_call_id column to conversation_messages")
         except Exception as e:
             logger.error(f"Database migration failed (conversation_messages): {e}", exc_info=True)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_msgs_sensitive ON conversation_messages(is_sensitive)")

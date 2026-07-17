@@ -21,6 +21,7 @@ migrate_db.py — 数据库迁移脚本
   v0.10 — 添加 skills.mcp_tool_id / digital_employees.mcp_tool_ids
   v0.11 — 迁移旧 crawl4ai_enabled=1 员工的权限到 mcp_tool_ids
   v1.3.5 — 为 conversation_messages 添加 is_sensitive / review_status 列（Issue #18）
+  v1.6.1 — 为 conversation_messages 添加 tool_calls / tool_call_id 列（多轮工具调用持久化）
 
 Usage:
   python migrate_db.py              # 执行待处理迁移

@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## [1.10.3-beta] — 2026-07-17
+
+### 修复
+
+- **多轮工具调用持久化**
+  - 修复多轮工具调用时工具上下文丢失的问题：工具调用（`tool_calls`）和工具结果（`role=tool`）现在会持久化到数据库
+  - 数据库迁移：为 `conversation_messages` 表添加 `tool_calls`（TEXT）和 `tool_call_id`（TEXT）列
+  - `ConversationRepository.add_message()` 新增可选参数 `tool_calls` 和 `tool_call_id`
+  - `ConversationRepository.get_recent_messages()` 正确还原 `tool_calls` 数组和 `tool_call_id`，确保 LLM 能获取完整的多轮工具调用上下文
+  - 合并 `_chat_with_llm_tools` 中重复的工具执行代码（~45行去重），统一工具调用分支
+  - 新增智能截断：根据当前上下文大小动态调整工具结果长度（`max(2000, min(12000, 60000 - current_chars))`），防止上下文溢出
+  - 修复消息存储顺序：用户消息现在在工具调用前持久化，确保 DB 中消息按正确时间顺序排列
+
+### 重构
+
+- `_chat_with_llm_tools` 新增 `conv_id` 参数，支持方法内部直接持久化工具消息
+- 移除 `user_chat.py` 循环内部的 `from app.utils.security import sanitize_untrusted_llm_context` 重复导入，统一到文件顶部
+
 ## [1.10.2-beta] — 2026-07-17
 
 ### 修复
